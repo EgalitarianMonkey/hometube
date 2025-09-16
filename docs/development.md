@@ -389,24 +389,23 @@ git commit -m "feat: add awesome new feature
 - Fixes issue #123"
 ```
 
-#### 8. Tag the New Version
-```bash
-git tag v1.2.0
-```
-
-#### 9. Push feature branch
+#### 8. Push feature branch
 ```bash
 git push origin feature/awesome-feature
 ```
 
-#### 10. Open a Pull Request
+#### 9. Open a Pull Request
 _Open a PR from your feature branch to `main` on GitHub._
 
-#### 11. Verify GitHub Actions
-_Check CI results for validation before merging._
 
-#### 12. Push Branch
+#### 10. Squash and merge
+_Once the  GitHub Actions workflow is passed, squash and merge all the feature branch commits in one._
+
+#### 11. Pull main commit and push tag on it
 ```bash
+git pull origin main
+git checkout main
+git tag v1.2.0
 git push origin v1.2.0
 ```
 
