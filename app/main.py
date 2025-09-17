@@ -2523,14 +2523,20 @@ if submitted:
                     keyframes, start_sec, end_sec
                 )
                 # Log the actual timestamps used for both video and subtitles
-                push_log(f"🎯 Keyframes timestamps: {actual_start:.3f}s → {actual_end:.3f}s")
+                push_log(
+                    f"🎯 Keyframes timestamps: {actual_start:.3f}s → {actual_end:.3f}s"
+                )
                 push_log(f"📝 Original request: {start_sec}s → {end_sec}s")
-                push_log(f"⚖️ Offset: start={abs(actual_start - start_sec):.3f}s, end={abs(actual_end - end_sec):.3f}s")
+                push_log(
+                    f"⚖️ Offset: start={abs(actual_start - start_sec):.3f}s, end={abs(actual_end - end_sec):.3f}s"
+                )
             else:
                 # Fallback to exact timestamps if keyframe extraction fails
                 actual_start, actual_end = float(start_sec), float(end_sec)
                 push_log(t("log_keyframes_fallback"))
-                push_log(f"🎯 Using exact timestamps: {actual_start:.3f}s → {actual_end:.3f}s")
+                push_log(
+                    f"🎯 Using exact timestamps: {actual_start:.3f}s → {actual_end:.3f}s"
+                )
 
             # Build keyframes ffmpeg command (similar to your example)
             cmd_cut = [
@@ -2560,8 +2566,8 @@ if submitted:
                             [
                                 "-ss",
                                 str(actual_start),  # Same timestamp as video
-                                "-to", 
-                                str(actual_end),    # Same timestamp as video
+                                "-to",
+                                str(actual_end),  # Same timestamp as video
                                 "-f",
                                 "srt",
                                 "-i",
@@ -2645,7 +2651,7 @@ if submitted:
                                 "-ss",
                                 str(actual_start),  # Same timestamp as video
                                 "-to",
-                                str(actual_end),    # Same timestamp as video
+                                str(actual_end),  # Same timestamp as video
                                 "-f",
                                 "srt",
                                 "-i",

@@ -1,7 +1,19 @@
+[browser]
+gatherUsageStats = false           # disable telemetry collection
+
+[server]
+enableCORS = true                  # keep true unless you explicitly need wide CORS
+enableXsrfProtection = true        # CSRF protection (default: true)
+headless = true                    # do not auto-open a browser on the server side
+maxUploadSize = 200                # prevent very large uploads (in MB)
+
+[client]
+showErrorDetails = false           # hide detailed error traces from end-users
+
 [theme]
-base="dark"
-primaryColor="#7c4dff"
-backgroundColor="#0f1117"
-secondaryBackgroundColor="#161a23"
-textColor="#e6e6e6"
-font="sans serif"
+base = "dark"
+primaryColor = "#7c4dff"
+backgroundColor = "#0f1117"
+secondaryBackgroundColor = "#161a23"
+textColor = "#e6e6e6"
+font = "sans serif"
