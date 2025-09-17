@@ -157,7 +157,7 @@ make debug-test
 make test-failed
 ```
 
-## � Quick Development Commands
+## 🚀 Quick Development Commands
 
 ### Launch Application
 ```bash

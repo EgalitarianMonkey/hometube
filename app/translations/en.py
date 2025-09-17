@@ -1,7 +1,7 @@
 # English translations
 TRANSLATIONS = {
     # === PAGE & INTERFACE ===
-    "page_title": "Video Downloader",
+    "page_title": "HomeTube",
     "page_header": "🎬 &nbsp; HomeTube",
     "video_url": "Video URL",
     "video_name": "Video name",

@@ -72,6 +72,19 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 
 ## 🛠️ HomeTube Options
 
+### 🏠 HomeLab Integration
+
+**Automatic integration with self-hosted setup**:
+
+- **🐳 Docker Ready**: One-command deployment with Docker Compose
+- **🎬 Media Server Integration**: Direct integration with media server thanks to well named video files automatically moved to chosen locations watched by media server such as Plex, Jellyfin, or Emby.
+- **🆕 Create new folder from the UI**: Create organized new folder structures when necessary from the "🆕 Create New Folder" option at the bottom of the "Destination folder" field listing menu (e.g., `Tech/Python/Advanced`)
+- **�📱 Network Access**: Web interface accessible from any device on your network
+- **🔐 Secure**: No cloud dependencies, everything runs locally
+- **⚙️ Configurable**: Extensive customization through environment variables
+
+[Setup your HomeLab integration](docs/deployment.md).
+
 ### 🚫 SponsorBlock Integration
 
 **Automatically skip sponsors, ads, and promotional content** with built-in SponsorBlock support. Just download your video and sponsors segments are automatically detected and marked.
@@ -82,18 +95,6 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 - ✅ **Zero configuration**: Works out of the box for YouTube videos
 
 [Learn more about SponsorBlock features](docs/usage.md#-sponsorblock-integration).
-
-### 🏠 HomeLab Integration
-
-**Perfect integration with self-hosted setup**:
-
-- **🐳 Docker Ready**: One-command deployment with Docker Compose
-- **🎬 Media Server Integration**: Direct integration with media server thanks to well named video files automatically moved to chosen locations watched by media server such as Plex, Jellyfin, or Emby.
-- **📱 Network Access**: Web interface accessible from any device on your network
-- **🔐 Secure**: No cloud dependencies, everything runs locally
-- **⚙️ Configurable**: Extensive customization through environment variables
-
-[Setup your HomeLab integration](docs/deployment.md).
 
 ### 🍪 Unlock restricted videos (Cookies)
 
@@ -343,6 +344,12 @@ Expected output:
 - 🧪 **Test Coverage**: 84% on testable modules ([details](docs/testing.md))
 - 📦 **Production Ready**: Docker images available on GHCR
 - 🏠 **HomeLab Optimized**: Designed for self-hosted environments
+
+## 📆 Coming Features
+
+Check out the roadmap for upcoming features and enhancements:
+
+**📋 See the complete roadmap**: [todo.md](todo.md)
 
 ---
 
