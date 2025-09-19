@@ -8,7 +8,7 @@ services:
       - TZ=${TZ:-Europe/Paris}
     ports:
       - "${PORT:-8510}:8501"
-    # chemins "génériques" — valeurs par défaut utiles en dev
+    # Generic paths — useful default values for development
     volumes:
       - "${VIDEOS_FOLDER_DOCKER_HOST:-./downloads}:/data/Videos"
       - "${TMP_DOWNLOAD_FOLDER_DOCKER_HOST:-./tmp}:/data/tmp"

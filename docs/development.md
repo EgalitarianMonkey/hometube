@@ -333,27 +333,27 @@ hometube/
 
 ### 2. Development Process
 
-#### 1. Fork and Clone
+#### Fork and Clone
 ```bash
 git clone https://github.com/EgalitarianMonkey/hometube.git
 cd hometube
 ```
 
-#### 2. Create a Feature Branch
+#### Create a Feature Branch
 ```bash
 git checkout -b feature/awesome-feature
 ```
 
-#### 3. Make Changes
+#### Make Changes
 _Edit your code here_
 
-#### 4. Run Tests and Lint
+#### Run Tests and Lint
 ```bash
 make test-all
 make lint
 ```
 
-#### 5. Update Version (if needed)
+#### Update Version (if needed)
 
 **In `__init__.py`:**
 ```python
@@ -375,12 +375,12 @@ uv lock
 uv pip compile pyproject.toml -o requirements/requirements.txt
 ```
 
-#### 6. Stage Changes
+#### Stage Changes
 ```bash
 git add .
 ```
 
-#### 7. Commit (Conventional Commit Format)
+#### Commit (Conventional Commit Format)
 ```bash
 git commit -m "feat: add awesome new feature
 
@@ -389,27 +389,27 @@ git commit -m "feat: add awesome new feature
 - Fixes issue #123"
 ```
 
-#### 8. Push feature branch
+#### Push feature branch
 ```bash
 git push origin feature/awesome-feature
 ```
 
-#### 9. Open a Pull Request
+#### Open a Pull Request
 _Open a PR from your feature branch to `main` on GitHub._
 
 
-#### 10. Squash and merge
+#### Squash and merge
 _Once the  GitHub Actions workflow is passed, squash and merge all the feature branch commits in one._
 
-#### 11. Pull main commit and push tag on it
+#### Pull main commit and push tag on it
 ```bash
-git pull origin main
 git checkout main
-git tag v1.2.0
-git push origin v1.2.0
+git pull origin main
+git tag v0.1.5
+git push origin v0.1.5
 ```
 
-#### 13. Verify GitHub Actions
+#### Verify GitHub Actions
 _Check CI results for validation before merging._
 
 
