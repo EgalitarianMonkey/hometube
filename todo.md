@@ -2,27 +2,7 @@
 
 This document outlines planned improvements and enhancements for HomeTube.
 
-
-### 1. Browser Cookies Default Selection
-**Status:** To Do  
-**Priority:** Medium
-
-**Issue:** When selecting "cookies from browser" in the dropdown menu, the browser selection shows Chrome as default even if `COOKIES_FROM_BROWSER` environment variable is set.
-
-**Expected Behavior:** If `COOKIES_FROM_BROWSER` is defined in the environment, use its value as the default browser selection.
-
-**Implementation Details:**
-- Modify the browser selectbox in the cookies section
-- Current code already partially implements this (lines 1949-1954 in main.py)
-- Need to verify the logic works correctly for all supported browsers
-- Ensure fallback to "chrome" if invalid browser is specified
-
-**Files to modify:**
-- `app/main.py` (browser selection logic around line 1957)
-
----
-
-### 2. General user experience and interface refinements
+## General user experience and interface refinements
 **Status:** Planned  
 **Priority:** Medium
 **Ideas for future development:**
@@ -31,14 +11,7 @@ This document outlines planned improvements and enhancements for HomeTube.
 
 ---
 
-### 3. Check data statistics from Streamlit
-**Status:** To Do  
-**Priority:** Low
-**Issue:** Streamlit might use data statistics being a concerned for privacy-focused users.
-
----
-
-### 4. Download Progress Enhancements
+## Download Progress Enhancements
 **Status:** Planned  
 **Priority:** Medium
 
@@ -51,7 +24,7 @@ This document outlines planned improvements and enhancements for HomeTube.
 
 ---
 
-### 5. Video Processing Optimizations
+## Video Processing Optimizations
 **Status:** Idea  
 **Priority:** Low
 
@@ -63,21 +36,21 @@ This document outlines planned improvements and enhancements for HomeTube.
 
 ---
 
-### 6. Auto-Generated subtitles
+## Auto-Generated subtitles
 **Status:** Idea
-**Priority:** Low
+**Priority:** Very Low
 
 **Description:**
 Auto-generated subtitles are often very bad in any video player. Using or developing a robust process to generate clean sub directly from an audio from a video would be nice.
 
 ---
 
-### 7. Integration Enhancements
+## Integration Enhancements
 **Status:** Idea
 **Priority:** Low
 
 **Potential integrations:**
-- Webhook notifications for completed downloads
+- Webhook actions for notifications, scans for completed downloads
 - API endpoints for automation
 - Plugin system for custom processing
 - Integration with more media servers
@@ -94,5 +67,5 @@ Auto-generated subtitles are often very bad in any video player. Using or develo
 
 ---
 
-**Last Updated:** September 17, 2025  
+**Last Updated:** September 19, 2025  
 **Version:** Based on current main branch

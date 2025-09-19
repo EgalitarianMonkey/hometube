@@ -1,23 +1,23 @@
 #!/bin/bash
-# Script pour mettre à jour tous les fichiers requirements
+# Script to update all requirements files
 
-echo "🔄 Mise à jour des dépendances avec UV..."
+echo "🔄 Updating dependencies with UV..."
 
-# Mettre à jour le lockfile
-echo "📦 Mise à jour du lockfile..."
+# Update the lockfile
+echo "📦 Updating lockfile..."
 uv lock --upgrade
 
-# Regénérer requirements.txt de production
-echo "📝 Génération de requirements.txt..."
+# Regenerate production requirements.txt
+echo "📝 Generating requirements.txt..."
 uv pip compile pyproject.toml -o requirements/requirements.txt
 
-# Regénérer requirements-dev.txt
-echo "🛠️ Génération de requirements-dev.txt..."
+# Regenerate requirements-dev.txt
+echo "🛠️ Generating requirements-dev.txt..."
 uv pip compile pyproject.toml --extra dev -o requirements/requirements-dev.txt
 
-echo "✅ Fichiers requirements mis à jour !"
+echo "✅ Requirements files updated!"
 echo ""
-echo "📋 Fichiers générés :"
+echo "📋 Generated files:"
 echo "  - requirements/requirements.txt (production)"
-echo "  - requirements/requirements-dev.txt (développement)"
+echo "  - requirements/requirements-dev.txt (development)"
 echo "  - uv.lock (lockfile)"

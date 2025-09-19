@@ -1,29 +1,29 @@
 # Docker Usage
 
-Ce guide explique comment utiliser l'image Docker du hometube.
+This guide explains how to use the HomeTube Docker image.
 
-## Images disponibles
+## Available Images
 
-L'image est disponible sur GitHub Container Registry :
-- `ghcr.io/EgalitarianMonkey/hometube:latest` - Version stable (branche main)
-- `ghcr.io/EgalitarianMonkey/hometube:v1.0.0` - Version taguée spécifique
-- `ghcr.io/EgalitarianMonkey/hometube:main` - Version de développement
+The image is available on GitHub Container Registry:
+- `ghcr.io/EgalitarianMonkey/hometube:latest` - Stable version (main branch)
+- `ghcr.io/EgalitarianMonkey/hometube:v1.0.0` - Specific tagged version
+- `ghcr.io/EgalitarianMonkey/hometube:main` - Development version
 
-## Usage rapide
+## Quick Usage
 
-### Avec docker run
+### With docker run
 
 ```bash
-# Utilisation basique
+# Basic usage
 docker run -p 8501:8501 ghcr.io/EgalitarianMonkey/hometube:latest
 
-# Avec volumes pour persistance des téléchargements
+# With volumes for download persistence
 docker run -p 8501:8501 \
   -v ./downloads:/data/Videos \
   -v ./cookies:/config \
   ghcr.io/EgalitarianMonkey/hometube:latest
 
-# Avec configuration complète
+# With complete configuration
 docker run -p 8501:8501 \
   -v ./downloads:/data/Videos \
   -v ./tmp:/data/tmp \
@@ -32,7 +32,7 @@ docker run -p 8501:8501 \
   ghcr.io/EgalitarianMonkey/hometube:latest
 ```
 
-### Avec docker-compose
+### With docker-compose
 
 ```yaml
 version: '3.8'
@@ -54,30 +54,30 @@ services:
 
 ## Volumes
 
-| Volume | Description | Obligatoire |
-|--------|-------------|-------------|
-| `/data/Videos` | Dossier de sortie des vidéos téléchargées | Recommandé |
-| `/data/tmp` | Fichiers temporaires de traitement | Optionnel |
-| `/config` | Fichiers de cookies et configuration | Optionnel |
+| Volume | Description | Required |
+|--------|-------------|----------|
+| `/data/Videos` | Output folder for downloaded videos | Recommended |
+| `/data/tmp` | Temporary processing files | Optional |
+| `/config` | Cookie files and configuration | Optional |
 
-## Variables d'environnement
+## Environment Variables
 
-| Variable | Valeur par défaut | Description |
-|----------|------------------|-------------|
-| `STREAMLIT_SERVER_PORT` | `8501` | Port d'écoute de l'application |
-| `STREAMLIT_SERVER_ADDRESS` | `0.0.0.0` | Adresse d'écoute |
+| Variable | Default Value | Description |
+|----------|---------------|-------------|
+| `STREAMLIT_SERVER_PORT` | `8501` | Application listening port |
+| `STREAMLIT_SERVER_ADDRESS` | `0.0.0.0` | Listening address |
 
-## Accès
+## Access
 
-Une fois le conteneur démarré, accédez à l'application via :
+Once the container is started, access the application via:
 - http://localhost:8501
 
-## Sécurité
+## Security
 
-### Pour un usage en production
+### For production usage
 
 ```bash
-# Avec authentification basique (à configurer dans un reverse proxy)
+# With basic authentication (to be configured in a reverse proxy)
 docker run -p 127.0.0.1:8501:8501 \
   -v ./downloads:/data/Videos \
   -v ./cookies:/config \
@@ -106,19 +106,19 @@ server {
 }
 ```
 
-## Mise à jour
+## Updates
 
 ```bash
-# Arrêter le conteneur
+# Stop the container
 docker stop hometube
 
-# Supprimer l'ancien conteneur
+# Remove the old container
 docker rm hometube
 
-# Télécharger la nouvelle image
+# Download the new image
 docker pull ghcr.io/EgalitarianMonkey/hometube:latest
 
-# Redémarrer avec la nouvelle image
+# Restart with the new image
 docker run -p 8501:8501 \
   -v ./downloads:/data/Videos \
   -v ./cookies:/config \
@@ -128,37 +128,37 @@ docker run -p 8501:8501 \
 
 ## Troubleshooting
 
-### Logs du conteneur
+### Container logs
 ```bash
 docker logs hometube
 ```
 
-### Accès au conteneur
+### Access the container
 ```bash
 docker exec -it hometube /bin/bash
 ```
 
-### Vérifier les volumes
+### Check volumes
 ```bash
-# Vérifier l'espace disque
+# Check disk space
 docker exec hometube df -h
 
-# Lister les fichiers téléchargés
+# List downloaded files
 docker exec hometube ls -la /data/Videos
 ```
 
-## Construction locale
+## Local Build
 
-Pour construire l'image localement :
+To build the image locally:
 
 ```bash
-# Cloner le repository
+# Clone the repository
 git clone https://github.com/EgalitarianMonkey/hometube.git
 cd hometube
 
-# Construire l'image
+# Build the image
 docker build -t hometube:local .
 
-# Lancer l'image locale
+# Run the local image
 docker run -p 8501:8501 hometube:local
 ```
