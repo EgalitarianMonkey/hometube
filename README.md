@@ -349,7 +349,7 @@ Expected output:
 
 Check out the roadmap for upcoming features and enhancements:
 
-**📋 See the complete roadmap**: [todo.md](todo.md)
+**📋 See the complete roadmap**: [docs/todo.md](docs/todo.md)
 
 ---
 

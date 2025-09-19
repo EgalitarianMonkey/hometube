@@ -32,6 +32,7 @@ Welcome to the Universal Video Downloader documentation! This index will guide y
 - **[Testing Documentation](testing.md)** - Complete testing framework and guidelines
 - **[Testing Framework](development.md#testing-framework)** - Run and write tests
 - **[CI/CD Pipeline](development.md#ci-cd-pipeline)** - Automated workflows
+- **[Project Roadmap](todo.md)** - Planned features and improvements
 
 ### For DevOps Engineers
 - **[Deployment Guide](deployment.md)** - Production deployment and monitoring
