@@ -29,14 +29,21 @@ docker run -p 8501:8501 \
 
 ### Docker Compose Setup
 
-1. **Create project directory**:
+1. **Clone or download the repository**:
    ```bash
-   mkdir hometube && cd hometube
+   git clone https://github.com/EgalitarianMonkey/hometube.git
+   cd hometube
    ```
 
-2. **Download docker-compose.yml**:
+2. **Set up configuration**:
    ```bash
-   curl -O https://raw.githubusercontent.com/EgalitarianMonkey/hometube/main/docker-compose.yml
+   # Copy sample files
+   cp docker-compose.yml.sample docker-compose.yml
+   cp .env.sample .env
+   
+   # Edit configurations as needed
+   nano docker-compose.yml  # Optional: customize ports, volumes
+   nano .env               # Optional: customize paths, settings
    ```
 
 3. **Start the application**:

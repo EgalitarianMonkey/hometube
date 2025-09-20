@@ -16,6 +16,9 @@ env/
 .env
 .envrc
 
+# Docker configuration (personal)
+docker-compose.yml
+
 # Testing and coverage files
 .pytest_cache/
 .coverage

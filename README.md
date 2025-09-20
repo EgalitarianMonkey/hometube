@@ -187,9 +187,19 @@ docker run -p 8501:8501 \
 
 ### 🐳 Docker Compose
 
+```bash
+# 1. Copy the sample configuration
+cp docker-compose.yml.sample docker-compose.yml
+
+# 2. Edit docker-compose.yml to customize your setup
+# 3. Deploy
+docker-compose up -d
+
+# Access at http://localhost:8501
+```
+
+**Sample configuration** (`docker-compose.yml.sample`):
 ```yaml
-# docker-compose.yml
-version: '3.8'
 services:
   hometube:
     image: ghcr.io/egalitarianmonkey/hometube:latest
@@ -197,18 +207,10 @@ services:
       - "8501:8501"
     environment:
       - TZ=Europe/Paris      # Configure timezone
-      - PORT=8501            # Web interface port
     volumes:
       - ./downloads:/data/Videos    # Downloads folder
       - ./cookies:/config           # Cookies folder
     restart: unless-stopped
-```
-
-```bash
-# Deploy
-docker-compose up -d
-
-# Access at http://localhost:8501
 ```
 
 ### 🏠 Local Installation
@@ -349,7 +351,7 @@ Expected output:
 
 Check out the roadmap for upcoming features and enhancements:
 
-**📋 See the complete roadmap**: [todo.md](todo.md)
+**📋 See the complete roadmap**: [docs/todo.md](docs/todo.md)
 
 ---
 

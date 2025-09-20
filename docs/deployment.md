@@ -2,6 +2,24 @@
 
 Production deployment strategies for the Universal Video Downloader.
 
+## 📋 Prerequisites
+
+### Configuration Setup
+
+Before deploying, you need to set up your configuration files:
+
+```bash
+# 1. Copy sample configurations
+cp docker-compose.yml.sample docker-compose.yml
+cp .env.sample .env
+
+# 2. Customize for your environment
+nano docker-compose.yml  # Configure volumes, ports, etc.
+nano .env                # Configure paths, cookies, etc.
+```
+
+💡 **Note**: Both `docker-compose.yml` and `.env` are excluded from Git tracking, so you can safely customize them.
+
 ## 🏠 HomeLab Deployment
 
 ### Docker Compose (Recommended)
