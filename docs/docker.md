@@ -34,9 +34,22 @@ docker run -p 8501:8501 \
 
 ### With docker-compose
 
-```yaml
-version: '3.8'
+**Step 1: Create your configuration**
+```bash
+# Copy the sample configuration
+cp docker-compose.yml.sample docker-compose.yml
 
+# Edit the file to customize your setup
+nano docker-compose.yml  # or use your preferred editor
+```
+
+**Step 2: Deploy**
+```bash
+docker-compose up -d
+```
+
+**Sample configuration** (`docker-compose.yml.sample`):
+```yaml
 services:
   hometube:
     image: ghcr.io/EgalitarianMonkey/hometube:latest
@@ -71,6 +84,30 @@ services:
 
 Once the container is started, access the application via:
 - http://localhost:8501
+
+## Configuration
+
+### Personal Configuration
+
+The repository includes a sample Docker Compose configuration that you should copy and customize:
+
+```bash
+# Copy the sample configuration
+cp docker-compose.yml.sample docker-compose.yml
+
+# Edit to match your setup
+nano docker-compose.yml
+```
+
+💡 **Note**: `docker-compose.yml` is ignored by Git, so you can safely customize it without affecting the repository.
+
+### Configuration Options
+
+You can customize the following in your `docker-compose.yml`:
+- **Ports**: Change the exposed port
+- **Volumes**: Modify mount paths for your system
+- **Environment variables**: Set timezone, server options, etc.
+- **Resource limits**: Add CPU/memory constraints
 
 ## Security
 
