@@ -405,8 +405,18 @@ _Once the  GitHub Actions workflow is passed, squash and merge all the feature b
 ```bash
 git checkout main
 git pull origin main
+```
+
+#### Create new tag and Docker image
+```bash
 git tag v0.1.5
 git push origin v0.1.5
+```
+
+#### Delete feature branch
+```bash
+git branch -d feature/awesome-feature
+git push origin --delete feature/awesome-feature
 ```
 
 #### Verify GitHub Actions
