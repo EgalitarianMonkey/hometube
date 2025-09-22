@@ -1,6 +1,6 @@
 """
-Fonctions utilitaires extraites de main.py pour les tests.
-Ces fonctions n'ont pas de dépendances Streamlit.
+Utility functions extracted from main.py for testing.
+These functions have no Streamlit dependencies.
 """
 
 import re

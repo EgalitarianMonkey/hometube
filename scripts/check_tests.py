@@ -74,7 +74,7 @@ def check_test_files():
 
 
 def main():
-    """Fonction principale."""
+    """Main function."""
     print("🧪 HomeTube - Refactored test suite verification")
     print("=" * 80)
 
@@ -102,7 +102,7 @@ def main():
         # Fast global test
         (
             "python -m pytest tests/ -v -m 'not slow and not external'",
-            "Tests complets (sans tests lents)",
+            "Complete tests (without slow tests)",
         ),
     ]
 
@@ -112,9 +112,9 @@ def main():
         success = run_command(cmd, description)
         results.append((description, success))
 
-    # Résumé final
+    # Final summary
     print("\n" + "=" * 80)
-    print("📊 RÉSUMÉ DES TESTS")
+    print("📊 TEST SUMMARY")
     print("=" * 80)
 
     success_count = 0

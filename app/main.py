@@ -782,7 +782,7 @@ def video_id_from_url(url: str) -> str:
         return ""
 
 
-# --- 2) Récupération bruts SponsorBlock ---
+# --- 2) Retrieve raw SponsorBlock data ---
 def fetch_sponsorblock_segments(
     url_or_id: str,
     categories=("sponsor", "selfpromo", "interaction", "intro", "outro", "preview"),
@@ -909,7 +909,7 @@ def invert_segments(segments, total_duration):
 
 def build_time_remap(segments, total_duration):
     """
-    Construit un mapping temps_original -> temps_après_coupe.
+    Builds a mapping original_time -> time_after_cut.
     Returns a `remap(t)` function + a list of cumulative jumps.
     """
     keep = invert_segments(segments, total_duration)
@@ -948,8 +948,8 @@ def get_sponsorblock_segments(
     url: str, cookies_part: List[str], categories: List[str] = None
 ) -> List[Dict]:
     """
-    Récupère les segments SponsorBlock d'une vidéo via l'API directe.
-    Retourne une liste de segments avec 'start' et 'end' en secondes.
+    Retrieves SponsorBlock segments from a video via direct API.
+    Returns a list of segments with 'start' and 'end' in seconds.
 
     Args:
         url: Video URL
@@ -1042,15 +1042,15 @@ def calculate_sponsor_overlap(
     start_sec: int, end_sec: int, sponsor_segments: List[Dict]
 ) -> Tuple[int, int]:
     """
-    Calcule le temps total de sponsors dans la section demandée et ajuste la fin.
+    Calculates total sponsor time in the requested section and adjusts the end.
 
     Args:
-        start_sec: Début de section souhaité (secondes)
-        end_sec: Fin de section souhaité (secondes)
-        sponsor_segments: Liste des segments sponsors
+        start_sec: Desired section start (seconds)
+        end_sec: Desired section end (seconds)
+        sponsor_segments: List of sponsor segments
 
     Returns:
-        tuple: (temps_sponsors_supprimé, nouvelle_fin_ajustée_pour_vidéo_raccourcie)
+        tuple: (sponsor_time_removed, new_end_adjusted_for_shortened_video)
     """
     if not sponsor_segments:
         return 0, end_sec
@@ -1123,8 +1123,8 @@ def get_sponsorblock_config(sb_choice: str) -> Tuple[List[str], List[str]]:
         sb_choice: User choice for SponsorBlock
 
     Returns:
-        tuple: (remove_categories, mark_categories) - listes des catégories à
-            retirer/marquer
+        tuple: (remove_categories, mark_categories) - lists of categories to
+            remove/mark
     """
     # Check if we have dynamic sponsor detection results
     if (
@@ -1141,14 +1141,14 @@ def get_sponsorblock_config(sb_choice: str) -> Tuple[List[str], List[str]]:
         return remove_cats, mark_cats
 
     # Fallback to preset configurations
-    # Option 1: Par défaut - Retirer: sponsor,interaction,selfpromo | Marquer:
+    # Option 1: Default - Remove: sponsor,interaction,selfpromo | Mark:
     # intro,preview,"outro"
-    if "Par défaut" in sb_choice or "Default" in sb_choice:
+    if "Default" in sb_choice or "Par défaut" in sb_choice:
         return ["sponsor", "interaction", "selfpromo"], ["intro", "preview", "outro"]
 
-    # Option 2: Modéré - Retirer: sponsor,interaction,outro | Marquer:
+    # Option 2: Moderate - Remove: sponsor,interaction,outro | Mark:
     # selfpromo,intro,preview
-    elif "Modéré" in sb_choice or "Moderate" in sb_choice:
+    elif "Moderate" in sb_choice or "Modéré" in sb_choice:
         return ["sponsor", "interaction", "outro"], ["selfpromo", "intro", "preview"]
 
     # Option 3: Agressif - Retirer: TOUT
@@ -1164,8 +1164,8 @@ def get_sponsorblock_config(sb_choice: str) -> Tuple[List[str], List[str]]:
     elif "Minimal" in sb_choice:
         return ["sponsor"], ["selfpromo", "interaction", "intro", "outro", "preview"]
 
-    # Option 6: Désactivé - Aucune gestion
-    elif "Désactivé" in sb_choice or "Disabled" in sb_choice:
+    # Option 6: Disabled - No management
+    elif "Disabled" in sb_choice or "Désactivé" in sb_choice:
         return [], []
 
     # Fallback (should not happen)
@@ -1202,7 +1202,7 @@ def build_sponsorblock_params(sb_choice: str) -> List[str]:
         )
         safe_push_log(f"SponsorBlock Remove: {cats_str}")
 
-    # Ajouter les catégories à marquer
+    # Add categories to mark
     if mark_cats:
         cats_str = ",".join(mark_cats)
         params.extend(["--sponsorblock-mark", cats_str])
@@ -1376,7 +1376,7 @@ def parse_generic_percentage(line: str) -> Optional[float]:
 # url = st.text_input(
 #     t("video_url"),
 #     value="",
-#     help="Entrez l'URL de la vidéo YouTube",
+#     help="Enter the YouTube video URL",
 #     key="main_url",
 # )
 
@@ -1723,7 +1723,7 @@ with st.expander(f"{t('cutting_title')}", expanded=False):
     else:
         st.warning(t("cutting_mode_precise_info"))
 
-        # Options de réencodage pour le mode précis (DYNAMIC!)
+        # Re-encoding options for precise mode (DYNAMIC!)
         st.markdown(f"**{t('advanced_encoding_options')}**")
 
         # Codec selection
@@ -1813,7 +1813,7 @@ with st.expander(f"{t('quality_title')}", expanded=False):
                 else:
                     st.warning(t("no_formats_detected"))
                     # Provide helpful suggestions about cookies
-                    # with st.expander("💡 Troubleshooting / Dépannage", expanded=True):
+                    # with st.expander("💡 Troubleshooting", expanded=True):
                     #     st.markdown(
                     #         """
                     #     **🇬🇧 English:**
@@ -1831,7 +1831,7 @@ with st.expander(f"{t('quality_title')}", expanded=False):
                     #     )
 
                     # Quick link to cookies section
-                    if st.button("🔧 Configure Cookies / Configurer les cookies"):
+                    if st.button("🔧 Configure Cookies"):
                         st.rerun()
 
     # Format selection dropdown (DYNAMIC!)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script de lancement simple pour l'application hometube
+Simple launcher script for the hometube application
 Usage: python run.py
 """
 
@@ -23,19 +23,19 @@ def main():
     try:
         import streamlit
 
-        print("✅ Streamlit trouvé!")
+        print("✅ Streamlit found!")
     except ImportError:
-        print("❌ Streamlit n'est pas installé!")
-        print("   Installez-le avec: pip install streamlit")
+        print("❌ Streamlit is not installed!")
+        print("   Install it with: pip install streamlit")
         sys.exit(1)
 
     # Check if yt-dlp is installed
     try:
         subprocess.run(["yt-dlp", "--version"], capture_output=True, check=True)
-        print("✅ yt-dlp trouvé!")
+        print("✅ yt-dlp found!")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print("❌ yt-dlp n'est pas installé ou n'est pas dans le PATH!")
-        print("   Installez-le avec: pip install yt-dlp")
+        print("❌ yt-dlp is not installed or not in PATH!")
+        print("   Install it with: pip install yt-dlp")
         sys.exit(1)
 
     # Load port from .env if available
@@ -43,18 +43,18 @@ def main():
     port = "8502"  # default port
 
     if env_file.exists():
-        print(f"✅ Fichier .env trouvé: {env_file}")
+        print(f"✅ .env file found: {env_file}")
         with open(env_file, "r") as f:
             for line in f:
                 if line.strip().startswith("STREAMLIT_PORT="):
                     port = line.split("=")[1].strip()
                     break
     else:
-        print("⚠️  Fichier .env non trouvé, utilisation des valeurs par défaut")
+        print("⚠️  .env file not found, using default values")
 
-    print(f"🚀 Lancement de l'application sur le port {port}")
-    print(f"🌐 Ouvrez votre navigateur sur: http://localhost:{port}")
-    print("   Appuyez sur Ctrl+C pour arrêter l'application")
+    print(f"🚀 Starting application on port {port}")
+    print(f"🌐 Open your browser at: http://localhost:{port}")
+    print("   Press Ctrl+C to stop the application")
 
     # Launch streamlit
     try:
@@ -74,7 +74,7 @@ def main():
             ]
         )
     except KeyboardInterrupt:
-        print("\n👋 Application arrêtée")
+        print("\n👋 Application stopped")
 
 
 if __name__ == "__main__":
