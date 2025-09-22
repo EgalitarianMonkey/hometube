@@ -1,7 +1,6 @@
 services:
   hometube:
     image: ghcr.io/egalitarianmonkey/hometube:latest
-    # build: .
     container_name: hometube
     env_file: .env
     environment:

@@ -11,6 +11,24 @@ This document outlines planned improvements and enhancements for HomeTube.
 
 ---
 
+## Add yt-dlp extra args
+**Status:** Planned
+**Priority:** Medium
+
+**Description:**
+Have an advanced settings section to add extra yt-dlp args for power users directly from the UI.
+
+---
+
+## Multiple audio tracks selection
+**Status:** Idea
+**Priority:** Low
+
+**Description:**
+Download and embed the default audio track along all available audio tracks matching the AUDIO_LANGUAGES environment variables.
+
+---
+
 ## Download Progress Enhancements
 **Status:** Planned  
 **Priority:** Medium

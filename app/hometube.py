@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Module principal de l'application hometube
-Peut être importé comme module Python pour une utilisation programmatique
+Main module for the hometube application
+Can be imported as a Python module for programmatic usage
 """
 
 import os
@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def setup_environment():
-    """Configure l'environnement pour l'application"""
+    """Configure the environment for the application"""
     # Get the directory where this script is located
     script_dir = Path(__file__).parent
 
@@ -59,7 +59,7 @@ def run_app(port=8502, debug=False):
     try:
         subprocess.run(cmd)
     except KeyboardInterrupt:
-        print("\n👋 Application arrêtée")
+        print("\n👋 Application stopped")
 
 
 def download_video(url, filename, **options):
