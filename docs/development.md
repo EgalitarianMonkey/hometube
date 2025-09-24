@@ -357,12 +357,12 @@ make lint
 
 **In `__init__.py`:**
 ```python
-__version__ = "1.2.0"
+__version__ = "0.2.0"
 ```
 
 **In `pyproject.toml`:**
 ```toml
-version = "1.2.0"
+version = "0.2.0"
 ```
 
 **Update lock file:**

@@ -4,11 +4,15 @@ services:
     container_name: hometube
     env_file: .env
     environment:
-      - TZ=${TZ:-Europe/Paris}
+      - TZ=${TZ:-America/New_York}
     ports:
-      - "${PORT:-8510}:8501"
+      - "${PORT:-8501}:8501"
     volumes:
-      - "${VIDEOS_FOLDER_DOCKER_HOST:-./downloads}:/data/Videos"
-      - "${TMP_DOWNLOAD_FOLDER_DOCKER_HOST:-./tmp}:/data/tmp"
-      - "${YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST:-./cookies/youtube_cookies.txt}:/config/youtube_cookies.txt"
+      - type: bind
+        source: ${VIDEOS_FOLDER_DOCKER_HOST:?set VIDEOS_FOLDER_DOCKER_HOST}
+        target: /data/videos
+      - type: bind
+        source: ${TMP_DOWNLOAD_FOLDER_DOCKER_HOST:?set TMP_DOWNLOAD_FOLDER_DOCKER_HOST}
+        target: /data/tmp
+      - "${YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST}:/config/youtube_cookies.txt"
     restart: unless-stopped

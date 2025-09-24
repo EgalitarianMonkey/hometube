@@ -21,7 +21,7 @@ docker run -p 8501:8501 ghcr.io/EgalitarianMonkey/hometube:latest
 
 # Persistent storage (recommended)
 docker run -p 8501:8501 \
-  -v ./downloads:/data/Videos \
+  -v ./downloads:/data/videos \
   -v ./cookies:/config \
   --name hometube \
   ghcr.io/EgalitarianMonkey/hometube:latest
@@ -312,7 +312,7 @@ docker run -p 8502:8501 ghcr.io/EgalitarianMonkey/hometube:latest
 ```
 
 **Downloads not persistent**:
-- Ensure you're using volume mounts: `-v ./downloads:/data/Videos`
+- Ensure you're using volume mounts: `-v ./downloads:/data/videos`
 - Check directory permissions: `chmod 755 ./downloads`
 
 ### Performance Optimization

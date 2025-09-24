@@ -2,7 +2,7 @@ FROM jauderho/yt-dlp:latest
 
 # Add metadata
 LABEL org.opencontainers.image.title="HomeTube"
-LABEL org.opencontainers.image.description="Modern YouTube downloader with web interface for HomeLab and media servers"
+LABEL org.opencontainers.image.description="🎬 HomeTube is a simple web UI for downloading single videos from the internet with the highest quality available and moving them to specific local locations automatically managed and integrated by media server such as Plex or Jellyfin."
 LABEL org.opencontainers.image.url="https://github.com/EgalitarianMonkey/hometube"
 LABEL org.opencontainers.image.source="https://github.com/EgalitarianMonkey/hometube"
 LABEL org.opencontainers.image.licenses="AGPL-3.0-or-later"
@@ -30,7 +30,7 @@ RUN pip install --no-cache-dir ".[docker]" --break-system-packages
 # Copy Streamlit configuration for consistent UI theme
 COPY .streamlit/ /app/.streamlit/
 
-RUN mkdir -p /data/Videos /data/tmp /config
+RUN mkdir -p /data/videos /data/tmp /config
 
 # Create non-root user for security (Alpine style)
 RUN addgroup -g 1000 streamlit && \

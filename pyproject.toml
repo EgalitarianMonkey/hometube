@@ -1,6 +1,6 @@
 [project]
 name = "hometube"
-version = "0.1.4"
+version = "0.2.0"
 description = "HomeTube development workspace"
 requires-python = ">=3.10"
 dependencies = [
@@ -8,6 +8,7 @@ dependencies = [
     "ruff>=0.13.0",
     "streamlit>=1.49.1",
     "requests>=2.32.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +20,7 @@ docker = [
     "ruff>=0.13.0", 
     "streamlit>=1.49.1",
     "requests>=2.32.0",
+    "python-dotenv>=1.0.0",
 ]
 test = [
     "pytest>=8.4.2",

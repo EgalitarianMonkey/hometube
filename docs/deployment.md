@@ -37,7 +37,7 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - /data/videos:/data/Videos
+      - /data/videos:/data/videos
       - /data/temp:/data/tmp
       - /config/cookies:/config
     environment:
@@ -65,7 +65,7 @@ services:
     image: ghcr.io/EgalitarianMonkey/hometube:latest
     restart: unless-stopped
     volumes:
-      - /data/videos:/data/Videos
+      - /data/videos:/data/videos
       - /config/cookies:/config
     environment:
       - TZ=Europe/Paris
@@ -174,7 +174,7 @@ cd hometube
       "mountPoints": [
         {
           "sourceVolume": "videos-storage",
-          "containerPath": "/data/Videos"
+          "containerPath": "/data/videos"
         }
       ]
     }
@@ -367,7 +367,7 @@ cadvisor:
 ### Data Backup Strategy
 
 **Critical Data**:
-- Downloaded videos: `/data/Videos`
+- Downloaded videos: `/data/videos`
 - Configuration: `/config`
 - Application data: Database/settings
 - SSL certificates: `/etc/letsencrypt`
@@ -381,7 +381,7 @@ BACKUP_DIR="/backup/$(date +%Y%m%d)"
 mkdir -p "$BACKUP_DIR"
 
 # Backup videos (if manageable size)
-if [ $(du -s /data/Videos | cut -f1) -lt 10000000 ]; then
+if [ $(du -s /data/videos | cut -f1) -lt 10000000 ]; then
     tar -czf "$BACKUP_DIR/videos.tar.gz" -C /data Videos/
 fi
 
@@ -469,7 +469,7 @@ sudo apt update && sudo apt upgrade
 
 # Check disk space
 df -h
-du -sh /data/Videos
+du -sh /data/videos
 ```
 
 **Performance Optimization**:
@@ -478,8 +478,8 @@ du -sh /data/Videos
 docker stats
 
 # Optimize video storage
-find /data/Videos -name "*.tmp" -delete
-find /data/Videos -empty -type d -delete
+find /data/videos -name "*.tmp" -delete
+find /data/videos -empty -type d -delete
 
 # Check for errors in logs
 docker logs hometube --tail 100
