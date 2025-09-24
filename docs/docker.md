@@ -19,13 +19,13 @@ docker run -p 8501:8501 ghcr.io/EgalitarianMonkey/hometube:latest
 
 # With volumes for download persistence
 docker run -p 8501:8501 \
-  -v ./downloads:/data/Videos \
+  -v ./downloads:/data/videos \
   -v ./cookies:/config \
   ghcr.io/EgalitarianMonkey/hometube:latest
 
 # With complete configuration
 docker run -p 8501:8501 \
-  -v ./downloads:/data/Videos \
+  -v ./downloads:/data/videos \
   -v ./tmp:/data/tmp \
   -v ./cookies:/config \
   -e STREAMLIT_SERVER_PORT=8501 \
@@ -56,7 +56,7 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - ./downloads:/data/Videos
+      - ./downloads:/data/videos
       - ./tmp:/data/tmp
       - ./cookies:/config
     environment:
@@ -69,7 +69,7 @@ services:
 
 | Volume | Description | Required |
 |--------|-------------|----------|
-| `/data/Videos` | Output folder for downloaded videos | Recommended |
+| `/data/videos` | Output folder for downloaded videos | Recommended |
 | `/data/tmp` | Temporary processing files | Optional |
 | `/config` | Cookie files and configuration | Optional |
 
@@ -116,7 +116,7 @@ You can customize the following in your `docker-compose.yml`:
 ```bash
 # With basic authentication (to be configured in a reverse proxy)
 docker run -p 127.0.0.1:8501:8501 \
-  -v ./downloads:/data/Videos \
+  -v ./downloads:/data/videos \
   -v ./cookies:/config \
   ghcr.io/EgalitarianMonkey/hometube:latest
 ```
@@ -157,7 +157,7 @@ docker pull ghcr.io/EgalitarianMonkey/hometube:latest
 
 # Restart with the new image
 docker run -p 8501:8501 \
-  -v ./downloads:/data/Videos \
+  -v ./downloads:/data/videos \
   -v ./cookies:/config \
   --name hometube \
   ghcr.io/EgalitarianMonkey/hometube:latest
@@ -181,7 +181,7 @@ docker exec -it hometube /bin/bash
 docker exec hometube df -h
 
 # List downloaded files
-docker exec hometube ls -la /data/Videos
+docker exec hometube ls -la /data/videos
 ```
 
 ## Local Build

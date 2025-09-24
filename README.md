@@ -34,11 +34,13 @@
 
 A simple friendly solution for easily integrating preferred videos from Youtube and others platforms to local media server.
 
-### 🏠 **HomeLab Integration**
+## 🏠 **HomeLab Integration**
+
 - **🎬 Media server Ready**: Download best quality videos with explicit name and location directly in your HomeLab media server structure and get automatic watch experience on Plex, Jellyfin, Emby or even on your PC
 - **📱 Network Access**: Web interface videos download accessible from any device on your network
 
-### ⚡ **Features**
+## ⚡ **Features**
+
 - **🎯 One-Click Downloads**: Paste URL → Get perfectly organized video
 - **🚫 Ad-Free Content**: Block videos' sponsors and ads
 - **🎬 Advanced Processing**: Cut clips, embed subtitles, convert formats
@@ -98,6 +100,8 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 
 ### 🍪 Unlock restricted videos (Cookies)
 
+**Cookies authentication must be setup** to unlock restricted videos and get the best experience downloading videos.
+
 Private content, age-restricted, or member-only videos are restricted without authentication on platforms like YouTube. We can unlock restricted content thanks to **cookies** authentication.
 
 We can use **Browser cookies** if on a machine sharing a browser, otherwise **Cookies File** in HomeLab setup.
@@ -140,84 +144,193 @@ Transform your downloads with **powerful built-in video processing tools**:
 
 [See complete platform list](docs/supported-platforms.md).
 
-
-<br/>
-<br/>
-
+<br/><br/>
 ![Application Demo](./docs/images/options_ui_demo.gif)
-
-<br/>
-<br/>
-
+<br/><br/>
 
 ## 🚀 Quick Start
 
 ### ⚙️ Essential Configuration
 
-**📋 HomeTube uses a `.env` file for all configuration**. This file controls download paths, authentication, subtitles, and more.
+**📋 HomeTube uses environment variables for all configuration**: videos download paths, temporary download folder, authentication, languages, subtitles, and more.
+
+Depending of the setup, Docker, Docker compose, Portainer, local run, environment variables can be passed to the application in different ways.
+
+**`.env` file from `.env.sample` can be practical for rapid setup:**
 
 ```bash
 # 1. Clone repository (if not already done)
 git clone https://github.com/EgalitarianMonkey/hometube.git
 cd hometube
 
-# 2. Create your configuration file
+# 2. Create your own configuration file from the sample
 cp .env.sample .env
-
-# 3. Edit .env to customize your setup
-# - Set VIDEOS_FOLDER for download location
-# - Configure YOUTUBE_COOKIES_FILE_PATH for authentication
-# - Customize SUBTITLES_CHOICES for your languages
 ```
 
-💡 **The `.env` file will be automatically created from `.env.sample` on first run if missing!**
+### 🐳 Docker
 
-### 🐳 Docker (Recommended)
+With Docker, environment variables can be passed either with `-e VARIABLE=` arguments or `--env-file .env`.
+
+**`-e VARIABLE=`**
 
 ```bash
-# Simple deployment
 docker run -p 8501:8501 \
-  -e TZ=Europe/Paris \
-  -v ./downloads:/data/Videos \
-  -v ./cookies:/config \
+  -e TZ=America/New_York \
+  -e VIDEOS_FOLDER=/data/videos \
+  -e TMP_DOWNLOAD_FOLDER=/data/tmp \
+  -e YOUTUBE_COOKIES_FILE_PATH=/config/youtube_cookies.txt \
+  -v <VIDEOS_FOLDER_DOCKER_HOST>:/data/videos \
+  -v <TMP_DOWNLOAD_FOLDER_DOCKER_HOST>:/data/tmp \
+  -v <YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST>:/config \
   ghcr.io/egalitarianmonkey/hometube:latest
-
-# Access at http://localhost:8501
 ```
+
+**`--env-file .env`**
+
+```bash
+docker run -p 8501:8501 \
+  --env-file .env \
+  -v <VIDEOS_FOLDER_DOCKER_HOST>:/data/videos \
+  -v <TMP_DOWNLOAD_FOLDER_DOCKER_HOST>:/data/tmp \
+  -v <YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST>:/config \
+  ghcr.io/egalitarianmonkey/hometube:latest
+```
+
+**Access at <http://localhost:8501>**
 
 ### 🐳 Docker Compose
 
+With Docker compose, environment variables can be passed either with the `environment:` entry or from the convenient `.env` file with `env_file: .env`.
+
+#### Configuration with `.env` file
+
+**`.env`**
+
 ```bash
-# 1. Copy the sample configuration
-cp docker-compose.yml.sample docker-compose.yml
+# --- PORT ---
+PORT=8510
 
-# 2. Edit docker-compose.yml to customize your setup
-# 3. Deploy
-docker-compose up -d
+# --- Timezone ---
+TZ=America/New_York
 
-# Access at http://localhost:8501
+# --- Languages ---
+UI_LANGUAGE=en
+SUBTITLES_CHOICES=en
+
+# --- Docker host paths ---
+# Docker environment variables to specify depending on your homelab setup.
+VIDEOS_FOLDER_DOCKER_HOST=/mnt/data/videos
+TMP_DOWNLOAD_FOLDER_DOCKER_HOST=/mnt/data/hometube/tmp
+YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST=/opt/cookies/youtube.txt
+
+# --- Paths ---
+# Internal Docker container paths (do not change)
+VIDEOS_FOLDER=/data/videos
+TMP_DOWNLOAD_FOLDER=/data/tmp
+YOUTUBE_COOKIES_FILE_PATH=/config/youtube_cookies.txt
+#COOKIES_FROM_BROWSER=brave # Not working natively in Docker
 ```
 
-**Sample configuration** (`docker-compose.yml.sample`):
+**docker-compose.yml**
+
 ```yaml
 services:
   hometube:
     image: ghcr.io/egalitarianmonkey/hometube:latest
-    ports:
-      - "8501:8501"
-    environment:
-      - TZ=Europe/Paris      # Configure timezone
+    env_file: .env
     volumes:
-      - ./downloads:/data/Videos    # Downloads folder
-      - ./cookies:/config           # Cookies folder
-    restart: unless-stopped
+      - type: bind
+        source: ${VIDEOS_FOLDER_DOCKER_HOST:?set VIDEOS_FOLDER_DOCKER_HOST}
+        target: /data/videos
+      - type: bind
+        source: ${TMP_DOWNLOAD_FOLDER_DOCKER_HOST:?set TMP_DOWNLOAD_FOLDER_DOCKER_HOST}
+        target: /data/tmp
+      - "${YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST}:/config/youtube_cookies.txt"
+```
+
+This **long volume structure** with `type:`, `source:`, and `target:` entries forces the environment variables to be set, otherwise the Docker deployment fails. This avoids silent failures and confusions when environment variables are missing.
+
+#### Configuration with `environment:`:
+
+**docker-compose.yml**
+
+```yaml
+services:
+  hometube:
+    image: ghcr.io/egalitarianmonkey/hometube:latest
+    environment:
+      UI_LANGUAGE: en
+      SUBTITLES_CHOICES: en
+      VIDEOS_FOLDER: /data/videos
+      TMP_DOWNLOAD_FOLDER: /data/tmp
+      YOUTUBE_COOKIES_FILE_PATH: /config/youtube_cookies.txt
+    volumes:
+      - type: bind
+        source: ${VIDEOS_FOLDER_DOCKER_HOST:?set VIDEOS_FOLDER_DOCKER_HOST}
+        target: /data/videos
+      - type: bind
+        source: ${TMP_DOWNLOAD_FOLDER_DOCKER_HOST:?set TMP_DOWNLOAD_FOLDER_DOCKER_HOST}
+        target: /data/tmp
+      - "${YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST}:/config/youtube_cookies.txt"
+```
+
+This **long volume structure** with `type:`, `source:`, and `target:` entries forces the environment variables to be set, otherwise the Docker deployment fails. This avoids silent failures and confusions when environment variables are missing.
+
+**Access at <http://localhost:8501>**
+
+### 🐳 Portainer
+
+With Portainer, environment variables must be explicitly written in the `environment:` section of the container setup to get those environment variables in the app.
+
+**Portainer environment variables management is different than Docker Compose as:**
+
+- It does not support `env_file:` entry for passing environment variables **in the container** from a `.env` file involving that the environment variables must be explicitly written in the `environment:` section of the container setup to get those environment variables in the app.
+- It does not retrieve any Docker environment variables from a `.env` file as the stack isn't linked to any location. Environment variables for the Portainer docker-compose.yml stack must be **manually** entered from the UI either one by one or with a convenient `.env` upload.
+
+**docker-compose.yml**
+
+```yaml
+services:
+  hometube:
+    image: ghcr.io/egalitarianmonkey/hometube:latest
+    environment:
+      UI_LANGUAGE: en
+      SUBTITLES_CHOICES: en
+      VIDEOS_FOLDER: /data/videos
+      TMP_DOWNLOAD_FOLDER: /data/tmp
+      YOUTUBE_COOKIES_FILE_PATH: /config/youtube_cookies.txt
+    volumes:
+      - type: bind
+        source: ${VIDEOS_FOLDER_DOCKER_HOST:?set VIDEOS_FOLDER_DOCKER_HOST}
+        target: /data/videos
+      - type: bind
+        source: ${TMP_DOWNLOAD_FOLDER_DOCKER_HOST:?set TMP_DOWNLOAD_FOLDER_DOCKER_HOST}
+        target: /data/tmp
+      - "${YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST}:/config/youtube_cookies.txt"
+```
+
+This **long volume structure** with `type:`, `source:`, and `target:` entries forces the environment variables to be set, otherwise the Docker deployment fails. This avoids silent failures and confusions when environment variables are missing.
+
+**Portainer environment variables in the UI**
+
+```bash
+VIDEOS_FOLDER_DOCKER_HOST: /mnt/data/videos  
+TMP_DOWNLOAD_FOLDER_DOCKER_HOST: /mnt/data/hometube/tmp  
+YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST: /opt/cookies/youtube.txt
 ```
 
 ### 🏠 Local Installation
 
-**Prerequisites**: Python 3.10+, FFmpeg
+**Environment variables for local run are setup following a specific order:**
+
+- First, defined and **exported** environment variables from the current shell will be taken (`export VIDEOS_DIR=/data/videos`, `set -a && source .env && set +a`, etc.)
+- Then, if a `.env` file exists, not defined environment variables from exported shell will be taken from local `.env` file
+- At last, default values will be used for not defined environment variables from **shell** and `.env` file
+
+**Prerequisites** are installed through python environment setup. Below are setups for `venv`, `conda`, or `uv`.
 
 **Option 1: Using pip (Recommended)**
+
 ```bash
 # Create virtual environment
 python -m venv hometube-env
@@ -233,6 +346,7 @@ python run.py
 ```
 
 **Option 2: Using conda**
+
 ```bash
 # Create conda environment
 conda create -n hometube python=3.10
@@ -246,6 +360,7 @@ streamlit run app/main.py
 ```
 
 **Option 3: Using uv (Fastest)**
+
 ```bash
 # Install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -257,8 +372,7 @@ uv pip install ".[local]"
 uv run streamlit run app/main.py
 ```
 
-**Access at**: http://localhost:8501
-
+**Access at**: <http://localhost:8501>
 
 ## ⚙️ Configuration Guide
 
@@ -266,21 +380,20 @@ uv run streamlit run app/main.py
 
 HomeTube configuration is managed through the `.env` file:
 
-| Variable | Purpose | Example |
-|---------|---------|---------|
-| `VIDEOS_FOLDER` | Where videos will be moved at the end of download | `./downloads` |
-| `TMP_DOWNLOAD_FOLDER` | Temporary download location | `./tmp` |
-| `YOUTUBE_COOKIES_FILE_PATH` | Authentication for private videos | `./cookies/youtube_cookies.txt` |
-| `COOKIES_FROM_BROWSER` | Alternative browser auth | `chrome,firefox,brave` |
-| `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` |
-| `SUBTITLES_CHOICES` | Default subtitle languages | `en,fr,es` |
-| `PORT` | Web interface port | `8501` |
-| `TZ` | Timezone for Docker | `Europe/Paris` |
-| `VIDEOS_FOLDER_DOCKER_HOST` | Videos folder in Docker context | `/downloads` |
-| `TMP_DOWNLOAD_FOLDER_DOCKER_HOST` | Tmp download Videos folder in Docker context | `./tmp` |
-| `YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST` | Youtube cookies file path in Docker context | `./cookies/youtube_cookies.txt` |
-
-
+| Variable | Purpose | Defaults | Examples |
+|---------|---------|---------|---------|
+| `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` | `en,fr` |
+| `SUBTITLES_CHOICES` | Subtitles' languages proposals | `en` | `en,fr,es` |
+| `VIDEOS_FOLDER` | Where videos will be moved at the end of download | `/data/videos` if in Docker container else `./downloads` | `/data/videos` |
+| `TMP_DOWNLOAD_FOLDER` | Temporary download location | `/data/tmp` if in Docker container else `./tmp` | `/data/tmp` |
+| `YOUTUBE_COOKIES_FILE_PATH` | Authentication for private videos | **Must be defined** (or `COOKIES_FROM_BROWSER`) | `/config/youtube_cookies.txt` |
+| `COOKIES_FROM_BROWSER` | Cookies auth directly from active local browser |  | `chrome,firefox,brave,chromium,edge,opera,safari,vivaldi,whale` |
+| `PORT` | Web interface port | `8501` | `8501` |
+| `TZ` | Timezone for Docker | `America/New_York` | `Europe/Paris` |
+| `VIDEOS_FOLDER_DOCKER_HOST` | Host videos folder in Docker context | **Must be defined** | `/mnt/data/videos` if in Docker container else `/downloads` |
+| `TMP_DOWNLOAD_FOLDER_DOCKER_HOST` | Host tmp download videos folder in Docker context | **Must be defined** | `/mnt/data/hometube/tmp` if in Docker container else `./tmp` |
+| `YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST` | Youtube cookies file path in Docker context | **Must be defined** | `/opt/cookies/youtube.txt` if in Docker container else `./cookies/youtube_cookies.txt` |
+| `DEBUG` | Debug logging mode | `false` | `true` |
 
 ### 🔄 Configuration Validation
 
@@ -290,7 +403,7 @@ Check your setup with this command:
 DEBUG=1 python -c "import app.main" 2>/dev/null
 ```
 
-Expected output:
+**Expected output:**
 ```
 🔧 HomeTube Configuration Summary:
 📁 Videos folder: downloads

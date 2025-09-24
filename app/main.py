@@ -12,15 +12,13 @@ import requests
 import streamlit as st
 
 try:
-    from translations import t
+    from translations import t, configure_language
 except ImportError:
     # Fallback for when running from app directory
-    from .translations import t
-
+    from .translations import t, configure_language
 
 # === CONSTANTS ===
 SPONSORBLOCK_API = "https://sponsor.ajay.app"
-DEFAULT_SUBTITLE_LANGUAGES = ["en", "fr"]
 MIN_COOKIE_FILE_SIZE = 100  # bytes
 
 # Supported browsers for cookie extraction
@@ -47,6 +45,8 @@ AUTH_ERROR_KEYWORDS = [
     "requires",
     "authentication",
     "cookies",
+    "requested format is not available",  # Often indicates auth/cookie issues
+    "format is not available",
 ]
 
 # CSS Styles
@@ -65,73 +65,118 @@ LOGS_CONTAINER_STYLE = """
 """
 
 
-# === LOAD .env FILE ===
-def load_env_file():
-    """Load .env file from project root, create from sample if missing"""
-    # Get the directory where main.py is located
+# === ENVIRONMENT CONFIGURATION ===
+def in_container() -> bool:
+    """Detect if we are running inside a container (Docker/Podman)"""
+    return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
+
+
+# Calculate once to avoid repeated filesystem checks
+IN_CONTAINER = in_container()
+
+
+# === DEFAULT CONFIGURATION ===
+# Exhaustive dictionary defining all configurable variables with default values
+DEFAULT_CONFIG = {
+    "VIDEOS_FOLDER": "/data/videos" if IN_CONTAINER else "./downloads",
+    "TMP_DOWNLOAD_FOLDER": "/data/tmp" if IN_CONTAINER else "./tmp",
+    "YOUTUBE_COOKIES_FILE_PATH": "",
+    "UI_LANGUAGE": "en",
+    "COOKIES_FROM_BROWSER": "",
+    "SUBTITLES_CHOICES": "en",
+    "DEBUG": "false",
+}
+
+
+def load_environment_config() -> Dict[str, str]:
+    """
+    Load environment configuration with proper priority:
+    1. Default values from DEFAULT_CONFIG
+    2. Environment variables (os.getenv)
+    3. .env file (only in local/non-container mode if python-dotenv available)
+
+    Returns:
+        Dictionary with all configuration values
+    """
+    config = DEFAULT_CONFIG.copy()
+
+    # Get the directory where main.py is located for relative paths
     app_dir = Path(__file__).parent
     project_root = app_dir.parent
-    env_file = project_root / ".env"
-    env_sample_file = project_root / ".env.sample"
 
-    # Create .env from .env.sample if .env doesn't exist
-    if not env_file.exists() and env_sample_file.exists():
-        try:
-            print("📝 Creating .env file from .env.sample...")
-            env_file.write_text(
-                env_sample_file.read_text(encoding="utf-8"), encoding="utf-8"
+    # Step 1: Start with default values (already in config)
+
+    # Step 2: Override with environment variables if they exist
+    for key in config:
+        env_value = os.getenv(key)
+        if env_value is not None:
+            config[key] = env_value
+
+    # Step 3: Load from .env file only if not in container
+    if not IN_CONTAINER:
+        env_file = project_root / ".env"
+        if env_file.exists():
+            try:
+                # Try to import and use python-dotenv if available
+                from dotenv import load_dotenv
+
+                # Load .env file values (don't override existing env vars)
+                load_dotenv(env_file, override=False)
+
+                # Update config with .env values that weren't already set by env vars
+                for key in config:
+                    new_env_value = os.getenv(key)
+                    if new_env_value is not None:
+                        config[key] = new_env_value
+
+            except ImportError:
+                # python-dotenv not available, skip .env file loading
+                pass
+            except Exception as e:
+                print(f"⚠️ Error reading .env file: {e}")
+
+    # Post-process configuration values
+
+    # Handle relative paths
+    if config["VIDEOS_FOLDER"] and not Path(config["VIDEOS_FOLDER"]).is_absolute():
+        config["VIDEOS_FOLDER"] = str(project_root / config["VIDEOS_FOLDER"])
+
+    if config["TMP_DOWNLOAD_FOLDER"]:
+        if not Path(config["TMP_DOWNLOAD_FOLDER"]).is_absolute():
+            config["TMP_DOWNLOAD_FOLDER"] = str(
+                project_root / config["TMP_DOWNLOAD_FOLDER"]
             )
-            print(f"✅ Created {env_file}")
-            print("💡 Please review and customize the .env file for your setup")
-        except Exception as e:
-            print(f"⚠️ Could not create .env file: {e}")
-            print("💡 Please manually copy .env.sample to .env")
-
-    if env_file.exists():
-        try:
-            with open(env_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    # Skip empty lines and comments
-                    if line and not line.startswith("#"):
-                        if "=" in line:
-                            key, value = line.split("=", 1)
-                            key = key.strip()
-                            value = value.strip()
-                            # Remove quotes if present
-                            if value.startswith('"') and value.endswith('"'):
-                                value = value[1:-1]
-                            elif value.startswith("'") and value.endswith("'"):
-                                value = value[1:-1]
-                            # Set environment variable only if not already set
-                            if key not in os.environ:
-                                os.environ[key] = value
-        except Exception as e:
-            print(f"⚠️ Error reading .env file: {e}")
     else:
-        print("⚠️ No .env file found and .env.sample is missing")
-        print("💡 Consider creating a .env file for better configuration")
+        # Default to VIDEOS_FOLDER/tmp if not specified
+        config["TMP_DOWNLOAD_FOLDER"] = str(Path(config["VIDEOS_FOLDER"]) / "tmp")
+
+    if (
+        config["YOUTUBE_COOKIES_FILE_PATH"]
+        and not Path(config["YOUTUBE_COOKIES_FILE_PATH"]).is_absolute()
+    ):
+        config["YOUTUBE_COOKIES_FILE_PATH"] = str(
+            project_root / config["YOUTUBE_COOKIES_FILE_PATH"]
+        )
+
+    return config
 
 
-# Load .env file before using environment variables
-load_env_file()
+# Load configuration
+CONFIG = load_environment_config()
 
-# === ENV ===
+# Configure translations with the loaded UI language
+configure_language(CONFIG["UI_LANGUAGE"])
+
+# === ENV VARIABLES ===
 # Determine the project root for robust default paths
 app_dir = Path(__file__).parent
 project_root = app_dir.parent
 
-# Default downloads folder relative to project root (more robust than cwd)
-default_videos_folder = project_root / "downloads"
+# Set up main configuration variables
+VIDEOS_FOLDER = Path(CONFIG["VIDEOS_FOLDER"])
+TMP_DOWNLOAD_FOLDER = Path(CONFIG["TMP_DOWNLOAD_FOLDER"])
 
-VIDEOS_FOLDER = Path(
-    os.getenv(
-        "VIDEOS_FOLDER",
-        str(default_videos_folder),
-    )
-)
-
-# Ensure the videos folder exists
+# Ensure the folders exist with proper error handling
 try:
     VIDEOS_FOLDER.mkdir(parents=True, exist_ok=True)
 except Exception as e:
@@ -147,41 +192,28 @@ except Exception as e:
         # Last resort: use current directory
         VIDEOS_FOLDER = Path.cwd() / "downloads"
 
-TMP_DOWNLOAD_FOLDER = Path(os.getenv("TMP_DOWNLOAD_FOLDER", str(VIDEOS_FOLDER / "tmp")))
-
 # Ensure temp folder exists
 try:
     TMP_DOWNLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
 except Exception as e:
     print(f"⚠️ Could not create temp folder {TMP_DOWNLOAD_FOLDER}: {e}")
 
-# Cookies configuration with better defaults
-YOUTUBE_COOKIES_FILE_PATH = os.getenv("YOUTUBE_COOKIES_FILE_PATH")
-if YOUTUBE_COOKIES_FILE_PATH and not Path(YOUTUBE_COOKIES_FILE_PATH).is_absolute():
-    # Make relative paths relative to project root
-    YOUTUBE_COOKIES_FILE_PATH = str(project_root / YOUTUBE_COOKIES_FILE_PATH)
+# Cookies configuration
+YOUTUBE_COOKIES_FILE_PATH = CONFIG["YOUTUBE_COOKIES_FILE_PATH"] or None
+COOKIES_FROM_BROWSER = CONFIG["COOKIES_FROM_BROWSER"].strip().lower()
 
-COOKIES_FROM_BROWSER = os.getenv("COOKIES_FROM_BROWSER", "").strip().lower()
-
-# Validate and provide helpful feedback for subtitle choices
+# Parse subtitle choices from configuration
 SUBTITLES_CHOICES = [
-    x.strip().lower()
-    for x in os.getenv("SUBTITLES_CHOICES", ",".join(DEFAULT_SUBTITLE_LANGUAGES)).split(
-        ","
-    )
-    if x.strip()
+    x.strip().lower() for x in CONFIG["SUBTITLES_CHOICES"].split(",") if x.strip()
 ]
-
-# Ensure we have at least some default subtitle languages
-if not SUBTITLES_CHOICES:
-    SUBTITLES_CHOICES = DEFAULT_SUBTITLE_LANGUAGES
-    print("⚠️ No valid subtitle languages found, using defaults:", SUBTITLES_CHOICES)
 
 
 # === CONFIGURATION SUMMARY ===
 def print_config_summary():
     """Print a summary of the current configuration for debugging"""
     print("\n🔧 HomeTube Configuration Summary:")
+    print(f"🏃 Running mode: {'Container' if IN_CONTAINER else 'Local'}")
+    print(f"🌐 UI Language: {CONFIG['UI_LANGUAGE']}")
     print(f"📁 Videos folder: {VIDEOS_FOLDER}")
     print(f"📁 Temp folder: {TMP_DOWNLOAD_FOLDER}")
 
@@ -203,18 +235,29 @@ def print_config_summary():
 
     print(f"🔤 Subtitle languages: {', '.join(SUBTITLES_CHOICES)}")
 
-    # Environment file status
-    env_file = Path(__file__).parent.parent / ".env"
-    if env_file.exists():
-        print(f"✅ Configuration file: {env_file}")
+    # Environment file status (only relevant in local mode)
+    if not IN_CONTAINER:
+        # Check if python-dotenv is available
+        import importlib.util
+
+        if importlib.util.find_spec("dotenv") is not None:
+            print("✅ python-dotenv available: .env files supported")
+        else:
+            print("⚠️ python-dotenv not available - .env files will be ignored")
+
+        env_file = Path(__file__).parent.parent / ".env"
+        if env_file.exists():
+            print(f"✅ Configuration file: {env_file}")
+        else:
+            print("⚠️ No .env file found - using defaults")
     else:
-        print("⚠️ No .env file found - using defaults")
+        print("📦 Container mode - using environment variables only")
 
     print()
 
 
 # Print configuration summary in development mode
-if __name__ == "__main__" or os.getenv("DEBUG"):
+if __name__ == "__main__" or CONFIG["DEBUG"].lower() in ("true", "1", "yes"):
     print_config_summary()
 
 
@@ -343,9 +386,38 @@ def is_authentication_error(error_message: str) -> bool:
 
 
 def log_authentication_error_hint():
-    """Log standard authentication error messages"""
-    safe_push_log("🍪 This might be a cookies/authentication issue")
-    safe_push_log("💡 Try using browser cookies or check your cookies file")
+    """Log context-aware authentication error messages"""
+    safe_push_log("🍪 This appears to be a cookies/authentication issue")
+
+    # Check current cookie configuration and provide specific guidance
+    cookies_method = st.session_state.get("cookies_method", "none")
+
+    if cookies_method == "none":
+        safe_push_log("❌ No cookies configured - video likely requires authentication")
+        safe_push_log(
+            "💡 SOLUTION: Configure cookies in the 'Cookies & Authentication' section below"
+        )
+        safe_push_log("   • Use browser cookies (recommended) or")
+        safe_push_log("   • Export cookies from browser to file")
+    elif cookies_method == "file":
+        if is_valid_cookie_file(YOUTUBE_COOKIES_FILE_PATH):
+            safe_push_log("⏰ Cookies file configured but may be expired")
+            safe_push_log("💡 SOLUTION: Update your cookies file")
+            safe_push_log("   • Re-export cookies from your browser")
+            safe_push_log("   • Make sure you're logged into YouTube in your browser")
+        else:
+            safe_push_log("❌ Cookies file configured but invalid/missing")
+            safe_push_log("💡 SOLUTION: Fix your cookies file configuration")
+    elif cookies_method == "browser":
+        browser = st.session_state.get("browser_select", "chrome")
+        safe_push_log(f"⏰ Browser cookies configured ({browser}) but may be expired")
+        safe_push_log("💡 SOLUTION: Refresh your browser authentication")
+        safe_push_log(f"   • Make sure you're logged into YouTube in {browser}")
+        safe_push_log("   • Try signing out and back in to YouTube")
+
+    safe_push_log(
+        "📺 Note: Age-restricted and private videos always require authentication"
+    )
 
 
 def cleanup_temp_files(base_filename: str, tmp_dir: Path = None) -> None:
