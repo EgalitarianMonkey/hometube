@@ -36,6 +36,9 @@ Makefile.old
 # Streamlit configuration (keeping config.toml for consistent UI theme)
 # .streamlit/
 
+# Ruff linter cache
+.ruff_cache/
+
 # Local download and temporary folders
 cookies/*
 downloads/*

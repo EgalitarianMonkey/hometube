@@ -97,6 +97,12 @@ TRANSLATIONS = {
     "cookies_method_file": "📁 Cookies from file",
     "cookies_method_browser": "🌐 Cookies from browser",
     "cookies_method_none": "🚫 No cookies",
+    # === ADVANCED OPTIONS ===
+    "advanced_options": "⚙️ &nbsp; Advanced Options",
+    "advanced_options_presentation": "Configure advanced yt-dlp parameters for specialized use cases.",
+    "ytdlp_custom_args": "Custom yt-dlp arguments",
+    "ytdlp_custom_args_help": "Additional command-line arguments to pass to yt-dlp (e.g., --proxy socks5://127.0.0.1:1080, --max-filesize 500M)",
+    "ytdlp_custom_args_placeholder": "e.g., --proxy socks5://127.0.0.1:1080 --max-filesize 500M",
     # === STATUS MESSAGES ===
     "status_preparation": "Preparation…",
     "status_downloading": "Downloading…",

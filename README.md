@@ -44,6 +44,7 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 - **🎯 One-Click Downloads**: Paste URL → Get perfectly organized video
 - **🚫 Ad-Free Content**: Block videos' sponsors and ads
 - **🎬 Advanced Processing**: Cut clips, embed subtitles, convert formats
+- **⚙️ Advanced configurations**: Set any custom yt-dlp arguments (proxy, max-filesize, etc.)
 - **🔐 Unlock restricted videos**: Cookies support for member-only videos, restricted age, etc.
 - **📊 Quality Control**: Auto-select best quality or manual override
 - **🎥 Video Sources**: **YouTube**, Reddit, Vimeo, Dailymotion, TikTok, Twitch, Facebook, Instagra, etc. [See complete list (1800+)](docs/supported-platforms.md)
@@ -81,13 +82,13 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 - **🐳 Docker Ready**: One-command deployment with Docker Compose
 - **🎬 Media Server Integration**: Direct integration with media server thanks to well named video files automatically moved to chosen locations watched by media server such as Plex, Jellyfin, or Emby.
 - **🆕 Create new folder from the UI**: Create organized new folder structures when necessary from the "🆕 Create New Folder" option at the bottom of the "Destination folder" field listing menu (e.g., `Tech/Python/Advanced`)
-- **�📱 Network Access**: Web interface accessible from any device on your network
+- **📱 Network Access**: Web interface accessible from any device on your network
 - **🔐 Secure**: No cloud dependencies, everything runs locally
 - **⚙️ Configurable**: Extensive customization through environment variables
 
 [Setup your HomeLab integration](docs/deployment.md).
 
-### 🚫 SponsorBlock Integration
+### 🚫 Block all ads and sponsors
 
 **Automatically skip sponsors, ads, and promotional content** with built-in SponsorBlock support. Just download your video and sponsors segments are automatically detected and marked.
 
@@ -120,13 +121,22 @@ Transform your downloads with **powerful built-in video processing tools**:
 
 [Explore all processing options](docs/usage.md#-video-processing).
 
+### 🔧 Advanced configurations
+
+Custom yt-dlp arguments support offers **full flexibility** for advanced users to tailor downloads to specific needs.
+
+- **📱 Network configuration**: `--proxy http://proxy.company.com:8080 --retries 5`
+- **📂 File size limits**: `--max-filesize 500M --min-filesize 100M`
+- **📋 Enhanced metadata**: `--write-info-json --write-description --write-thumbnail`
+- **🛜 Bandwidth control**: `--limit-rate 1M --fragment-retries 10`
+- **➕ More options**: `yt-dlp --options variable`
+
 ### 🎯 Smart Download Management
 
 **Intelligent download system** that adapts to your needs:
 
 - **🏆 Quality Selection**: Auto-select best quality or manual override
 - **📁 Auto-Organization**: Videos organized by channel/creator automatically
-- **🎵 Playlist Downloads**: YouTube playlists and channels supported automatically
 - **⚡ Resume Support**: Interrupted downloads automatically resume
 - **💾 Storage Optimization**: Duplicate detection and space management
 
@@ -152,7 +162,7 @@ Transform your downloads with **powerful built-in video processing tools**:
 
 ### ⚙️ Essential Configuration
 
-**📋 HomeTube uses environment variables for all configuration**: videos download paths, temporary download folder, authentication, languages, subtitles, and more.
+**📋 HomeTube uses environment variables for all configurations**: videos download paths, temporary download folder, authentication, languages, subtitles, and more.
 
 Depending of the setup, Docker, Docker compose, Portainer, local run, environment variables can be passed to the application in different ways.
 
@@ -314,8 +324,8 @@ This **long volume structure** with `type:`, `source:`, and `target:` entries fo
 **Portainer environment variables in the UI**
 
 ```bash
-VIDEOS_FOLDER_DOCKER_HOST: /mnt/data/videos  
-TMP_DOWNLOAD_FOLDER_DOCKER_HOST: /mnt/data/hometube/tmp  
+VIDEOS_FOLDER_DOCKER_HOST: /mnt/data/videos
+TMP_DOWNLOAD_FOLDER_DOCKER_HOST: /mnt/data/hometube/tmp
 YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST: /opt/cookies/youtube.txt
 ```
 
@@ -393,6 +403,7 @@ HomeTube configuration is managed through the `.env` file:
 | `VIDEOS_FOLDER_DOCKER_HOST` | Host videos folder in Docker context | **Must be defined** | `/mnt/data/videos` if in Docker container else `/downloads` |
 | `TMP_DOWNLOAD_FOLDER_DOCKER_HOST` | Host tmp download videos folder in Docker context | **Must be defined** | `/mnt/data/hometube/tmp` if in Docker container else `./tmp` |
 | `YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST` | Youtube cookies file path in Docker context | **Must be defined** | `/opt/cookies/youtube.txt` if in Docker container else `./cookies/youtube_cookies.txt` |
+| `YTDLP_CUSTOM_ARGS` | Custom yt-dlp arguments |  | `--max-filesize 5M --write-info-json` |
 | `DEBUG` | Debug logging mode | `false` | `true` |
 
 ### 🔄 Configuration Validation

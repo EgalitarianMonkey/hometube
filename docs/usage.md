@@ -7,9 +7,9 @@ Complete guide to using the Universal Video Downloader application.
 This application supports **1800+ video platforms** through yt-dlp integration:
 
 ### 🎥 **Major Video Platforms**
-- **YouTube** - All video types, playlists, channels (with SponsorBlock)
+- **YouTube** - Individual videos (with SponsorBlock)
 - **Vimeo** - Standard and premium videos
-- **Dailymotion** - Videos, playlists, user channels
+- **Dailymotion** - Individual videos
 - **Twitch** - VODs, clips, live streams
 - **TikTok** - Individual videos, user profiles
 - **Facebook** - Videos, reels (authentication required)
@@ -23,7 +23,7 @@ This application supports **1800+ video platforms** through yt-dlp integration:
 - **RAI** - Italian public television
 
 ### 🎵 **Audio Platforms**
-- **SoundCloud** - Tracks, playlists, user profiles
+- **SoundCloud** - Individual tracks
 - **Bandcamp** - Albums and individual tracks
 - **Mixcloud** - DJ sets and radio shows
 
@@ -76,7 +76,7 @@ downloads/
 │   ├── Python Tutorial.mp4
 │   └── Docker Guide.mp4
 ├── Music/                   # Manual organization
-│   └── My Playlist/
+│   └── My Downloads/
 └── Documentaries/           # Custom folders
     └── Nature Series/
 ```
@@ -270,19 +270,6 @@ Auto-generated subtitles have significant limitations that users should be aware
 
 ## 📁 Advanced Features
 
-### Playlist Support
-
-**YouTube Playlists**:
-- Entire playlist download automatically supported
-- Maintains playlist order
-- Individual video quality selection applies to all videos
-- Automatic folder organization by playlist name
-
-**Channel Downloads**:
-- Channel URLs automatically download all available videos
-- Organized by channel/creator name
-- Respects upload order
-
 ### Custom Output Settings
 
 **File Naming**:
@@ -346,7 +333,6 @@ Auto-generated subtitles have significant limitations that users should be aware
 ### YouTube
 - **SponsorBlock**: Full integration for ad/sponsor removal
 - **Cookies**: Required for age-restricted and private content
-- **Playlists**: Supported with individual video selection
 - **Live Streams**: Can download ongoing streams
 
 ### Vimeo
@@ -375,6 +361,103 @@ Auto-generated subtitles have significant limitations that users should be aware
 - **Geo-restrictions**: Some content may be region-locked
 
 > **💡 Testing New Sites**: Try any video URL! The application will automatically detect if the platform is supported.
+
+## ⚙️ Advanced Options
+
+### Custom yt-dlp Arguments
+
+For power users who need specific functionality, HomeTube supports custom yt-dlp arguments through the **Advanced Options** section.
+
+#### 🔧 How to Use
+
+1. **Expand Advanced Options**: Click the expander in the main interface
+2. **Enter Arguments**: Add custom yt-dlp arguments in the text field
+3. **Apply**: Arguments are automatically applied to all downloads
+
+#### 📝 Common Use Cases
+
+**Network Configuration**:
+```bash
+--proxy http://your-proxy-server:8080
+--proxy socks5://127.0.0.1:1080
+```
+
+**File Size Management**:
+```bash
+--max-filesize 500M
+--min-filesize 10M
+```
+
+**Download Control**:
+```bash
+--retries 10
+--fragment-retries 10
+--retry-sleep 5
+```
+
+**Authentication**:
+```bash
+--cookies /path/to/cookies.txt
+--username your_username --password your_password
+```
+
+**Output Control**:
+```bash
+--write-info-json
+--write-description
+--write-thumbnail
+```
+
+**Quality Override**:
+```bash
+--format-sort "res:720,fps:30"
+--max-downloads 5
+```
+
+#### 🌍 Environment Variables
+
+You can also set default custom arguments using environment variables:
+
+```bash
+# In your .env file
+YTDLP_CUSTOM_ARGS=--max-filesize 100M --write-info-json
+```
+
+#### ⚠️ Important Notes
+
+- **Format Arguments**: Don't override `--format` as it's managed by the quality selector
+- **Output Arguments**: Don't override output path arguments 
+- **Safety**: Invalid arguments will be ignored with error messages
+- **Priority**: UI arguments override environment variables
+
+#### 🔄 Argument Parsing
+
+Arguments are parsed safely using shell-style parsing:
+- **Quoted Strings**: Use quotes for arguments with spaces: `--user-agent "Custom Agent 1.0"`
+- **Multiple Arguments**: Separate with spaces: `--retries 3 --max-filesize 100M`
+- **Complex Paths**: Quote paths with spaces: `--cookies "/path with spaces/cookies.txt"`
+
+#### 📚 Examples
+
+**Corporate Network**:
+```bash
+--proxy http://proxy.company.com:8080 --retries 5
+```
+
+**Bandwidth Limited**:
+```bash
+--limit-rate 1M --max-filesize 50M
+```
+
+**Archival Download**:
+```bash
+--write-info-json --write-description --write-thumbnail --write-sub
+```
+
+**Development/Testing**:
+```bash
+--verbose --print-json --simulate
+```
 
 ## 🔧 Troubleshooting
 
