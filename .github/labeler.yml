@@ -1,10 +1,14 @@
 feature:
   - changed-files:
-    - any-glob-to-any-file: ['app/**', 'hometube/**']
+    - any-glob-to-any-file: 'app/**'
+  - changed-files:
+    - any-glob-to-any-file: 'hometube/**'
 
 docs:
   - changed-files:
-    - any-glob-to-any-file: ['README.md', 'docs/**']
+    - any-glob-to-any-file: 'README.md'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**'
 
 test:
   - changed-files:
@@ -16,24 +20,46 @@ perf:
 
 chore:
   - changed-files:
-    - any-glob-to-any-file: ['.github/**', '.devcontainer/**']
+    - any-glob-to-any-file: '.github/**'
+  - changed-files:
+    - any-glob-to-any-file: '.devcontainer/**'
 
 deps:
   - changed-files:
-    - any-glob-to-any-file: ['pyproject.toml', 'uv.lock', 'requirements/**']
+    - any-glob-to-any-file: 'pyproject.toml'
+  - changed-files:
+    - any-glob-to-any-file: 'uv.lock'
+  - changed-files:
+    - any-glob-to-any-file: 'requirements/**'
 
 docker:
   - changed-files:
-    - any-glob-to-any-file: ['Dockerfile', 'docker-compose*.yml', '.dockerignore']
+    - any-glob-to-any-file: 'Dockerfile'
+  - changed-files:
+    - any-glob-to-any-file: 'docker-compose*.yml'
+  - changed-files:
+    - any-glob-to-any-file: '.dockerignore'
 
 config:
   - changed-files:
-    - any-glob-to-any-file: ['*.env*', '*.ini', '*.toml', '*.yaml', '*.yml']
+    - any-glob-to-any-file: '*.env*'
+  - changed-files:
+    - any-glob-to-any-file: '*.ini'
+  - changed-files:
+    - any-glob-to-any-file: '*.toml'
+  - changed-files:
+    - any-glob-to-any-file: '*.yaml'
+  - changed-files:
+    - any-glob-to-any-file: '*.yml'
 
 ui:
   - changed-files:
-    - any-glob-to-any-file: ['app/translations/**', 'app/main.py']
+    - any-glob-to-any-file: 'app/translations/**'
+  - changed-files:
+    - any-glob-to-any-file: 'app/main.py'
 
 scripts:
   - changed-files:
-    - any-glob-to-any-file: ['scripts/**', '*.sh']
+    - any-glob-to-any-file: 'scripts/**'
+  - changed-files:
+    - any-glob-to-any-file: '*.sh'
