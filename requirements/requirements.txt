@@ -6,8 +6,6 @@ attrs==25.3.0
     # via
     #   jsonschema
     #   referencing
-black==25.1.0
-    # via hometube (pyproject.toml)
 blinker==1.9.0
     # via streamlit
 cachetools==6.2.0
@@ -17,9 +15,7 @@ certifi==2025.8.3
 charset-normalizer==3.4.3
     # via requests
 click==8.2.1
-    # via
-    #   black
-    #   streamlit
+    # via streamlit
 gitdb==4.0.12
     # via gitpython
 gitpython==3.1.45
@@ -36,8 +32,6 @@ jsonschema-specifications==2025.4.1
     # via jsonschema
 markupsafe==3.0.2
     # via jinja2
-mypy-extensions==1.1.0
-    # via black
 narwhals==2.3.0
     # via altair
 numpy==2.3.2
@@ -48,16 +42,11 @@ numpy==2.3.2
 packaging==25.0
     # via
     #   altair
-    #   black
     #   streamlit
 pandas==2.3.2
     # via streamlit
-pathspec==0.12.1
-    # via black
 pillow==11.3.0
     # via streamlit
-platformdirs==4.4.0
-    # via black
 protobuf==6.32.0
     # via streamlit
 pyarrow==21.0.0
@@ -66,6 +55,8 @@ pydeck==0.9.1
     # via streamlit
 python-dateutil==2.9.0.post0
     # via pandas
+python-dotenv==1.1.1
+    # via hometube (pyproject.toml)
 pytz==2025.2
     # via pandas
 referencing==0.36.2
@@ -80,8 +71,6 @@ rpds-py==0.27.1
     # via
     #   jsonschema
     #   referencing
-ruff==0.13.0
-    # via hometube (pyproject.toml)
 six==1.17.0
     # via python-dateutil
 smmap==5.0.2

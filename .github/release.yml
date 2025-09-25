@@ -1,0 +1,16 @@
+changelog:
+  categories:
+    - title: "🚀 Features"
+      labels: [feature, enhancement, feat]
+    - title: "🐛 Fixes"
+      labels: [bug, fix]
+    - title: "📚 Docs"
+      labels: [docs]
+    - title: "⚙️ Performance"
+      labels: [perf]
+    - title: "🧹 Maintenance"
+      labels: [chore, deps, maintenance]
+    - title: "💥 Breaking changes"
+      labels: [breaking]
+    - title: "Other changes"
+      labels: ["*"]

@@ -320,12 +320,14 @@ hometube/
 ### 1. Issue Creation
 
 **Bug Reports**:
+
 - Use bug report template
 - Include reproduction steps
 - Provide system information
 - Add relevant logs
 
 **Feature Requests**:
+
 - Use feature request template
 - Explain use case and benefits
 - Consider backward compatibility
@@ -334,20 +336,24 @@ hometube/
 ### 2. Development Process
 
 #### Fork and Clone
+
 ```bash
 git clone https://github.com/EgalitarianMonkey/hometube.git
 cd hometube
 ```
 
 #### Create a Feature Branch
+
 ```bash
 git checkout -b feature/awesome-feature
 ```
 
 #### Make Changes
+
 _Edit your code here_
 
 #### Run Tests and Lint
+
 ```bash
 make test-all
 make lint
@@ -356,31 +362,37 @@ make lint
 #### Update Version (if needed)
 
 **In `__init__.py`:**
+
 ```python
 __version__ = "0.2.0"
 ```
 
 **In `pyproject.toml`:**
+
 ```toml
 version = "0.2.0"
 ```
 
 **Update lock file:**
+
 ```bash
 uv lock
 ```
 
 **Update requirements files for python:**
+
 ```bash
 uv pip compile pyproject.toml -o requirements/requirements.txt
 ```
 
 #### Stage Changes
+
 ```bash
 git add .
 ```
 
 #### Commit (Conventional Commit Format)
+
 ```bash
 git commit -m "feat: add awesome new feature
 
@@ -390,38 +402,43 @@ git commit -m "feat: add awesome new feature
 ```
 
 #### Push feature branch
+
 ```bash
 git push origin feature/awesome-feature
 ```
 
 #### Open a Pull Request
+
 _Open a PR from your feature branch to `main` on GitHub._
 
-
 #### Squash and merge
+
 _Once the  GitHub Actions workflow is passed, squash and merge all the feature branch commits in one._
 
 #### Pull main commit and push tag on it
+
 ```bash
 git checkout main
 git pull origin main
 ```
 
 #### Create new tag and Docker image
+
 ```bash
-git tag v0.1.5
-git push origin v0.1.5
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 #### Delete feature branch
+
 ```bash
 git branch -d feature/awesome-feature
 git push origin --delete feature/awesome-feature
 ```
 
 #### Verify GitHub Actions
-_Check CI results for validation before merging._
 
+_Check CI results for validation before merging._
 
 ### 3. Pull Request Guidelines
 

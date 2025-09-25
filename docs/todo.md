@@ -2,6 +2,51 @@
 
 This document outlines planned improvements and enhancements for HomeTube.
 
+## Add yt-dlp extra args
+
+**Status:** ✅ Completed
+**Priority:** High
+
+**Description:**
+Have an advanced settings section to add extra yt-dlp args for power users directly from the UI.
+Then, proxy, --max-filesize SIZE, etc., can be added easily.
+
+**Implementation:** Advanced Options section added with custom yt-dlp arguments support, environment variable configuration, and full translation support.
+
+---
+
+## Playlist Support & Batch Operations
+
+**Status:** Planned
+**Priority:** High
+
+**Description:**
+Add comprehensive playlist support for YouTube, SoundCloud, and other platforms with advanced batch processing capabilities.
+
+**Features to implement:**
+- **Playlist Detection**: Automatic detection of playlist URLs from supported platforms
+- **Batch Download**: Download entire playlists with progress tracking per video
+- **Individual Selection**: Allow users to select specific videos from playlists
+- **Folder Organization**: Automatic folder creation by playlist name/creator
+- **Bulk Renaming**: Advanced renaming patterns for batch operations
+  - Pattern templates: `{playlist_title}/{index:02d} - {title}.{ext}`
+  - Variable substitution: `{uploader}`, `{upload_date}`, `{duration}`, `{view_count}`
+  - Custom numbering: Zero-padded indices, custom start numbers
+  - Sanitization: Automatic filename cleaning for different filesystems
+- **Quality Control**: Apply same quality settings to all playlist videos
+- **Resume Support**: Resume interrupted playlist downloads
+- **Progress Tracking**: Individual video progress within playlist context
+- **Filtering Options**: Skip videos by duration, size, or upload date
+
+**Technical considerations:**
+- Extend UI with playlist-specific controls
+- Add playlist metadata extraction
+- Implement batch processing queue system
+- Add pattern validation and preview
+- Support for nested folder structures
+
+---
+
 ## General user experience and interface refinements
 **Status:** Planned  
 **Priority:** Medium
@@ -10,16 +55,6 @@ This document outlines planned improvements and enhancements for HomeTube.
 - Refine color scheme and visual hierarchy
 
 ---
-
-## Add yt-dlp extra args
-**Status:** Planned
-**Priority:** Medium
-
-**Description:**
-Have an advanced settings section to add extra yt-dlp args for power users directly from the UI.
-
----
-
 ## Multiple audio tracks selection
 **Status:** Idea
 **Priority:** Low

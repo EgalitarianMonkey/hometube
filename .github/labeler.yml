@@ -1,0 +1,16 @@
+feature:
+  - 'app/**'
+  - 'hometube/**'
+docs:
+  - 'README.md'
+  - 'docs/**'
+test:
+  - 'tests/**'
+perf:
+  - '**/*.py'  # ajuste si tu veux cibler des dossiers spécifiques
+chore:
+  - '.github/**'
+  - '.devcontainer/**'
+deps:
+  - 'pyproject.toml'
+  - 'uv.lock'

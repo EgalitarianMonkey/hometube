@@ -84,6 +84,7 @@ DEFAULT_CONFIG = {
     "UI_LANGUAGE": "en",
     "COOKIES_FROM_BROWSER": "",
     "SUBTITLES_CHOICES": "en",
+    "YTDLP_CUSTOM_ARGS": "",
     "DEBUG": "false",
 }
 
@@ -1323,6 +1324,7 @@ def build_base_ytdlp_command(
     embed_chapters: bool,
     embed_subs: bool,
     force_mp4: bool = False,
+    custom_args: str = "",
 ) -> List[str]:
     """Build base yt-dlp command with common options"""
     output_format = "mp4" if force_mp4 else "mkv"
@@ -1362,6 +1364,18 @@ def build_base_ytdlp_command(
         cmd.append("--embed-chapters")
     else:
         cmd.append("--no-embed-chapters")
+
+    # Add custom yt-dlp arguments if provided
+    if custom_args and custom_args.strip():
+        import shlex
+
+        try:
+            # Parse custom arguments safely using shlex
+            parsed_args = shlex.split(custom_args.strip())
+            cmd.extend(parsed_args)
+            safe_push_log(f"[INFO] Adding custom yt-dlp arguments: {custom_args}")
+        except ValueError as e:
+            safe_push_log(f"[WARN] Invalid custom arguments format: {e}")
 
     return cmd
 
@@ -2072,6 +2086,21 @@ with st.expander(t("cookies_title"), expanded=False):
         )
         st.info("✅ Public videos will work normally")
 
+
+# === ADVANCED OPTIONS ===
+with st.expander(t("advanced_options"), expanded=False):
+    st.info(t("advanced_options_presentation"))
+
+    # Custom yt-dlp arguments
+    ytdlp_custom_args = st.text_input(
+        t("ytdlp_custom_args"),
+        value=CONFIG.get("YTDLP_CUSTOM_ARGS", ""),
+        placeholder=t("ytdlp_custom_args_placeholder"),
+        help=t("ytdlp_custom_args_help"),
+        key="ytdlp_custom_args",
+    )
+
+
 # === DOWNLOAD BUTTON ===
 st.markdown("\n")
 st.markdown("\n")
@@ -2431,6 +2460,7 @@ if submitted:
 
     # --- yt-dlp base command construction
     force_mp4 = do_cut and subs_selected  # Force MP4 for sections with subtitles
+    ytdlp_custom_args = st.session_state.get("ytdlp_custom_args", "")
     common_base = build_base_ytdlp_command(
         base_output,
         tmp_subfolder_dir,
@@ -2438,6 +2468,7 @@ if submitted:
         embed_chapters,
         embed_subs,
         force_mp4,
+        ytdlp_custom_args,
     )
 
     # subtitles - different handling based on whether we'll cut or not
