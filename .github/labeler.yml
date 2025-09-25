@@ -1,16 +1,62 @@
 feature:
-  - 'app/**'
-  - 'hometube/**'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/**'
+          - 'hometube/**'
+
 docs:
-  - 'README.md'
-  - 'docs/**'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'README.md'
+          - 'docs/**'
+
 test:
-  - 'tests/**'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tests/**'
+
 perf:
-  - '**/*.py'  # ajuste si tu veux cibler des dossiers spécifiques
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.py'
+
 chore:
-  - '.github/**'
-  - '.devcontainer/**'
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - '.devcontainer/**'
+
 deps:
-  - 'pyproject.toml'
-  - 'uv.lock'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'pyproject.toml'
+          - 'uv.lock'
+          - 'requirements/**'
+
+docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Dockerfile'
+          - 'docker-compose*.yml'
+          - '.dockerignore'
+
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.env*'
+          - '*.ini'
+          - '*.toml'
+          - '*.yaml'
+          - '*.yml'
+
+ui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/translations/**'
+          - 'app/main.py'
+
+scripts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'scripts/**'
+          - '*.sh'

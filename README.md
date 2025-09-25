@@ -131,6 +131,10 @@ Custom yt-dlp arguments support offers **full flexibility** for advanced users t
 - **🛜 Bandwidth control**: `--limit-rate 1M --fragment-retries 10`
 - **➕ More options**: `yt-dlp --options variable`
 
+Custom yt-dlp arguments can be added directly from the UI or set by default for any download with the `YTDLP_CUSTOM_ARGS` environment variable.
+
+**🔀 Smart Conflict Resolution**: HomeTube automatically detects and resolves conflicts between base settings and custom arguments, giving priority to your custom preferences while maintaining system stability.
+
 ### 🎯 Smart Download Management
 
 **Intelligent download system** that adapts to your needs:

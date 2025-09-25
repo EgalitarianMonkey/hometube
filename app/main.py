@@ -1317,6 +1317,143 @@ def build_cookies_params() -> List[str]:
         return ["--no-cookies"]
 
 
+def resolve_ytdlp_argument_conflicts(
+    base_args: List[str], custom_args: List[str]
+) -> List[str]:
+    """
+    Resolve conflicts between base yt-dlp arguments and custom arguments.
+    Custom arguments take precedence over base arguments.
+
+    Args:
+        base_args: Base yt-dlp command arguments
+        custom_args: Custom arguments from user input
+
+    Returns:
+        List of resolved arguments with conflicts removed
+    """
+    if not custom_args:
+        return base_args
+
+    # Arguments that can have values
+    ARGS_WITH_VALUES = {
+        "--format",
+        "-f",
+        "--output",
+        "-o",
+        "--paths",
+        "--merge-output-format",
+        "--format-sort",
+        "--convert-thumbnails",
+        "--concurrent-fragments",
+        "--sleep-requests",
+        "--retries",
+        "--retry-sleep",
+        "--proxy",
+        "--max-filesize",
+        "--min-filesize",
+        "--limit-rate",
+        "--user-agent",
+        "--cookies",
+        "--fragment-retries",
+        "--socket-timeout",
+        "--geo-bypass-country",
+        "--output-template",
+        "--batch-file",
+        "--load-info-json",
+        "--write-info-json",
+    }
+
+    # Boolean/flag arguments that can conflict
+    BOOLEAN_ARGS = {
+        "--embed-metadata",
+        "--no-embed-metadata",
+        "--embed-thumbnail",
+        "--no-embed-thumbnail",
+        "--write-thumbnail",
+        "--no-write-thumbnail",
+        "--embed-chapters",
+        "--no-embed-chapters",
+        "--ignore-errors",
+        "--no-ignore-errors",
+        "--force-overwrites",
+        "--no-force-overwrites",
+        "--newline",
+        "--no-newline",
+    }
+
+    # Extract custom argument names (with and without values)
+    custom_arg_names = set()
+    i = 0
+    while i < len(custom_args):
+        arg = custom_args[i]
+        if arg.startswith("--") or arg.startswith("-"):
+            custom_arg_names.add(arg)
+            # If this argument typically takes a value, skip the next item
+            if arg in ARGS_WITH_VALUES and i + 1 < len(custom_args):
+                i += 1
+        i += 1
+
+    # Build resolved command, filtering out conflicting base arguments
+    resolved_args = []
+    i = 0
+    conflicts_found = []
+
+    while i < len(base_args):
+        arg = base_args[i]
+
+        # Check if this base argument conflicts with a custom argument
+        if arg in custom_arg_names:
+            conflicts_found.append(arg)
+            # Skip this argument and its value if it has one
+            if arg in ARGS_WITH_VALUES and i + 1 < len(base_args):
+                conflicts_found.append(base_args[i + 1])
+                i += 1  # Skip the value too
+        else:
+            # Check for boolean argument conflicts (e.g., --embed-thumbnail vs --no-embed-thumbnail)
+            conflict_found = False
+            for custom_arg in custom_arg_names:
+                if arg in BOOLEAN_ARGS and custom_arg in BOOLEAN_ARGS:
+                    # Check if they are opposite boolean flags
+                    base_name = (
+                        arg[5:] if arg.startswith("--no-") else arg[2:]
+                    )  # Remove --no- or --
+                    custom_name = (
+                        custom_arg[5:]
+                        if custom_arg.startswith("--no-")
+                        else custom_arg[2:]
+                    )  # Remove --no- or --
+
+                    # If they control the same feature but with opposite values
+                    if base_name == custom_name and (
+                        (arg.startswith("--no-") and not custom_arg.startswith("--no-"))
+                        or (
+                            not arg.startswith("--no-")
+                            and custom_arg.startswith("--no-")
+                        )
+                    ):
+                        conflicts_found.append(arg)
+                        conflict_found = True
+                        break
+
+            if not conflict_found:
+                resolved_args.append(arg)
+
+        i += 1
+
+    # Add custom arguments at the end
+    resolved_args.extend(custom_args)
+
+    # Log conflicts if any were found
+    if conflicts_found:
+        unique_conflicts = list(set(conflicts_found))
+        safe_push_log(
+            f"[INFO] Argument conflicts resolved - Overridden: {', '.join(unique_conflicts)}"
+        )
+        safe_push_log("[INFO] Custom arguments take precedence over base settings")
+
+    return resolved_args
+
+
 def build_base_ytdlp_command(
     base_filename: str,
     temp_dir: Path,
@@ -1329,7 +1466,7 @@ def build_base_ytdlp_command(
     """Build base yt-dlp command with common options"""
     output_format = "mp4" if force_mp4 else "mkv"
 
-    cmd = [
+    base_cmd = [
         "yt-dlp",
         "--newline",
         "-o",
@@ -1361,23 +1498,33 @@ def build_base_ytdlp_command(
 
     # Add chapters option
     if embed_chapters:
-        cmd.append("--embed-chapters")
+        base_cmd.append("--embed-chapters")
     else:
-        cmd.append("--no-embed-chapters")
+        base_cmd.append("--no-embed-chapters")
 
-    # Add custom yt-dlp arguments if provided
+    # Parse and resolve custom arguments if provided
     if custom_args and custom_args.strip():
         import shlex
 
         try:
             # Parse custom arguments safely using shlex
-            parsed_args = shlex.split(custom_args.strip())
-            cmd.extend(parsed_args)
-            safe_push_log(f"[INFO] Adding custom yt-dlp arguments: {custom_args}")
+            parsed_custom_args = shlex.split(custom_args.strip())
+
+            # Resolve conflicts between base and custom arguments
+            final_cmd = resolve_ytdlp_argument_conflicts(base_cmd, parsed_custom_args)
+
+            safe_push_log(f"[INFO] Applied custom yt-dlp arguments: {custom_args}")
+            if len(final_cmd) != len(base_cmd):
+                safe_push_log(
+                    f"[INFO] Final command has {len(final_cmd)} arguments (base: {len(base_cmd)})"
+                )
+            return final_cmd
+
         except ValueError as e:
             safe_push_log(f"[WARN] Invalid custom arguments format: {e}")
+            return base_cmd
 
-    return cmd
+    return base_cmd
 
 
 class DownloadMetrics:
