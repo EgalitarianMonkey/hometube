@@ -18,6 +18,9 @@ except ImportError:
     from .translations import t, configure_language
 
 # === CONSTANTS ===
+
+# Compiled regex for cleaning ANSI escape sequences (used in logs)
+ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 SPONSORBLOCK_API = "https://sponsor.ajay.app"
 MIN_COOKIE_FILE_SIZE = 100  # bytes
 
@@ -34,20 +37,79 @@ SUPPORTED_BROWSERS = [
     "whale",
 ]
 
-# Common authentication error keywords
+# YouTube client fallback strategies
+YOUTUBE_CLIENT_FALLBACKS = [
+    {"name": "default", "args": []},
+    {"name": "android", "args": ["--extractor-args", "youtube:player_client=android"]},
+    {"name": "ios", "args": ["--extractor-args", "youtube:player_client=ios"]},
+    {"name": "web", "args": ["--extractor-args", "youtube:player_client=web"]},
+]
+
+# Premium quality strategies - ordered by strictness
+PREMIUM_QUALITY_STRATEGIES = [
+    {
+        "name": "av1_opus_strict",
+        "label": "🏆 AV1 + Opus (Strict) - Ultimate Quality",
+        "format": "bv*[vcodec^=av01][ext=webm]+ba*[acodec^=opus][ext=webm]/bv*[vcodec^=av01]+ba*[acodec^=opus]",
+        "format_sort": "res:8640,fps,codec:av01,+size,br,acodec:opus",
+        "extra_args": ["--prefer-free-formats", "--remux-video", "mkv"],
+        "require_cookies": True,
+        "description": "Requires AV1 + Opus, fails if unavailable",
+    },
+    {
+        "name": "av1_any_audio",
+        "label": "🥇 AV1 + Premium Audio",
+        "format": "bv*[vcodec^=av01][ext=webm]+ba*[acodec^=opus]/bv*[vcodec^=av01]+ba*",
+        "format_sort": "res:8640,fps,codec:av01,+size,br,acodec:opus,acodec:aac",
+        "extra_args": ["--prefer-free-formats", "--remux-video", "mkv"],
+        "require_cookies": True,
+        "description": "AV1 mandatory, best available audio",
+    },
+    {
+        "name": "premium_codecs",
+        "label": "🥈 Premium Codecs (AV1/VP9 + Opus)",
+        "format": "bv*[vcodec^=av01][ext=webm]+ba*[acodec^=opus]/bv*[vcodec^=vp9.2]+ba*[acodec^=opus]/bv*[vcodec^=vp9]+ba*[acodec^=opus]",
+        "format_sort": "res:8640,fps,codec:av01,codec:vp9.2,codec:vp9,+size,br,acodec:opus",
+        "extra_args": ["--prefer-free-formats", "--remux-video", "mkv"],
+        "require_cookies": True,
+        "description": "AV1 > VP9.2 > VP9, all with Opus",
+    },
+    {
+        "name": "best_available",
+        "label": "🥉 Best Available (with retry)",
+        "format": "bv*+ba*[acodec^=opus]/bv*+ba*/b",
+        "format_sort": "res:8640,fps,codec:av01,codec:vp9.2,codec:vp9,codec:h264,+size,br,acodec:opus,acodec:aac",
+        "extra_args": ["--remux-video", "mkv"],
+        "require_cookies": False,
+        "description": "Best available quality with retry",
+    },
+]
+
+# Common authentication error keywords - more precise patterns
 AUTH_ERROR_KEYWORDS = [
-    "sign in",
-    "login",
-    "private",
-    "unavailable",
-    "restricted",
-    "age",
-    "requires",
-    "authentication",
-    "cookies",
+    "sign in to confirm",
+    "please log in",
+    "login required",
+    "video is private",
+    "video is unavailable",  # Full phrase, not just "unavailable"
+    "age restricted",
+    "requires authentication",
+    "authentication required",
     "requested format is not available",  # Often indicates auth/cookie issues
     "format is not available",
+    "http error 403",  # Forbidden - often signature/cookie related
+    "403: forbidden",
+    "unable to download video data",  # Common with signature issues
+    "signature extraction failed",  # More specific than just "signature"
+    "n parameter extraction failed",  # More specific than "n-sig"
+    "cipher not found",  # More specific than just "cipher"
+    "youtube said: unable to extract",
+    "this video is not available",
+    "members-only content",
 ]
+
+# Constants
+LOG_SEPARATOR = "=" * 60
 
 # CSS Styles
 LOGS_CONTAINER_STYLE = """
@@ -373,9 +435,25 @@ def sanitize_filename(name: str) -> str:
     return sanitized
 
 
+def is_sabr_warning(message: str) -> bool:
+    """Check if message is a normal SABR/streaming warning that doesn't need auth hints"""
+    message_lower = message.lower()
+    sabr_patterns = [
+        "sabr streaming",
+        "sabr-only",
+        "server-side ad placement",
+        "formats have been skipped as they are missing a url",
+        "youtube is forcing sabr",
+        "youtube may have enabled",
+    ]
+    return any(pattern in message_lower for pattern in sabr_patterns)
+
+
 def is_authentication_error(error_message: str) -> bool:
     """
     Check if an error message indicates an authentication/cookies issue.
+
+    Excludes normal warnings like SABR streaming issues.
 
     Args:
         error_message: The error message to check
@@ -383,11 +461,59 @@ def is_authentication_error(error_message: str) -> bool:
     Returns:
         True if it's likely an authentication issue
     """
+    # Skip SABR warnings - these are normal technical warnings, not auth issues
+    if is_sabr_warning(error_message):
+        return False
+
     return any(keyword in error_message.lower() for keyword in AUTH_ERROR_KEYWORDS)
 
 
-def log_authentication_error_hint():
+def is_http_403_error(error_message: str) -> bool:
+    """Check if error is specifically HTTP 403 Forbidden"""
+    error_lower = error_message.lower()
+    return (
+        "403" in error_lower and "forbidden" in error_lower
+    ) or "unable to download video data" in error_lower
+
+
+def log_http_403_error_hint(error_message: str = ""):
+    """Log specific guidance for HTTP 403 errors - often signature/cookie related"""
+    safe_push_log("🚫 HTTP 403 Forbidden Error Detected")
+    safe_push_log("🔐 This is typically a signature verification or cookie issue")
+    safe_push_log("")
+
+    # Check for signature-specific issues
+    if any(
+        keyword in error_message.lower() for keyword in ["signature", "n-sig", "cipher"]
+    ):
+        safe_push_log("🔑 SIGNATURE ISSUE DETECTED:")
+        safe_push_log("   • YouTube uses encrypted signatures to protect video streams")
+        safe_push_log("   • These signatures expire quickly and require fresh cookies")
+        safe_push_log("")
+
+    cookies_method = _get_current_cookies_method()
+
+    safe_push_log("💡 IMMEDIATE SOLUTIONS:")
+    _log_authentication_solutions(cookies_method)
+    if cookies_method == "browser":
+        browser = st.session_state.get("browser_select", "chrome")
+        safe_push_log(
+            f"   4. 📋 Make sure you're actively logged into YouTube in {browser}"
+        )
+
+    safe_push_log("")
+    safe_push_log(
+        "🎯 KEY POINT: Even public videos need cookies for signature verification!"
+    )
+
+
+def log_authentication_error_hint(error_message: str = ""):
     """Log context-aware authentication error messages"""
+    # Check if this is specifically an HTTP 403 error
+    if is_http_403_error(error_message):
+        log_http_403_error_hint(error_message)
+        return
+
     safe_push_log("🍪 This appears to be a cookies/authentication issue")
 
     # Check current cookie configuration and provide specific guidance
@@ -418,6 +544,415 @@ def log_authentication_error_hint():
 
     safe_push_log(
         "📺 Note: Age-restricted and private videos always require authentication"
+    )
+
+
+def smart_download_with_fallback(
+    base_cmd: List[str],
+    url: str,
+    progress_placeholder=None,
+    status_placeholder=None,
+    info_placeholder=None,
+) -> Tuple[int, str]:
+    """
+    Intelligent download with progressive fallback strategies
+
+    Returns:
+        Tuple[int, str]: (return_code, error_message)
+    """
+    cookies_available = False
+    cookies_part = []
+
+    # Check if cookies are configured
+    cookies_method = st.session_state.get("cookies_method", "none")
+    if cookies_method != "none":
+        cookies_part = build_cookies_params()
+        cookies_available = len(cookies_part) > 0
+
+    # Strategy 1: Try without cookies first (fastest)
+    if status_placeholder:
+        status_placeholder.info(t("status_trying_no_auth"))
+    safe_push_log("🚀 Strategy 1: Trying without cookies (fastest)")
+
+    cmd = base_cmd + [url]
+    ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
+
+    if ret == 0:
+        safe_push_log("✅ Success without authentication!")
+        return ret, ""
+
+    # Check if we got an authentication-related error
+    last_error = st.session_state.get("last_error", "").lower()
+    if not any(
+        error in last_error
+        for error in ["403", "forbidden", "signature", "unavailable"]
+    ):
+        return ret, "Non-authentication error"
+
+    safe_push_log("⚠️ Authentication error detected, trying fallback strategies...")
+
+    # Strategy 2: Try different YouTube clients
+    for i, client in enumerate(
+        YOUTUBE_CLIENT_FALLBACKS[1:], 2
+    ):  # Skip default (already tried)
+        client_name = client["name"]
+        if status_placeholder:
+            if client_name == "android":
+                status_placeholder.info(t("status_retry_android"))
+            elif client_name == "ios":
+                status_placeholder.info(t("status_retry_ios"))
+            elif client_name == "web":
+                status_placeholder.info(t("status_retry_web"))
+            else:
+                status_placeholder.info(f"🔄 Retry {i}: Using {client_name} client...")
+
+        safe_push_log(f"🔄 Strategy {i}: Trying with {client_name} client")
+
+        cmd = base_cmd + client["args"] + [url]
+        ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
+
+        if ret == 0:
+            safe_push_log(f"✅ Success with {client_name} client!")
+            return ret, ""
+
+    # Strategy 3: Try with cookies if available
+    if cookies_available:
+        if status_placeholder:
+            status_placeholder.info(t("status_retry_cookies"))
+        safe_push_log("🍪 Strategy: Trying with authentication cookies")
+
+        # Try each client with cookies
+        for client in YOUTUBE_CLIENT_FALLBACKS:
+            client_name = client["name"]
+            safe_push_log(f"🔄 Trying {client_name} client + cookies")
+
+            cmd = base_cmd + client["args"] + cookies_part + [url]
+            ret = run_cmd(
+                cmd, progress_placeholder, status_placeholder, info_placeholder
+            )
+
+            if ret == 0:
+                safe_push_log(f"✅ Success with {client_name} client + cookies!")
+                return ret, ""
+
+    # All strategies failed - show comprehensive error message
+    if status_placeholder:
+        status_placeholder.error("❌ Download failed after all retry attempts")
+
+    safe_push_log("❌ All fallback strategies failed")
+    safe_push_log("")
+    safe_push_log("🚫 DOWNLOAD FAILED - COMPREHENSIVE TROUBLESHOOTING:")
+    safe_push_log(LOG_SEPARATOR)
+
+    # Show specific error based on what was tried
+    if not cookies_available:
+        safe_push_log("🔑 PRIMARY ISSUE: No authentication configured")
+        safe_push_log("💡 IMMEDIATE SOLUTION:")
+        safe_push_log("   1. ⚠️  CONFIGURE COOKIES below")
+        safe_push_log("   2. 🌐 Use 'Browser Cookies' (easiest)")
+        safe_push_log("   3. 📁 Or export cookies from browser to file")
+        safe_push_log("")
+        safe_push_log(
+            "🎯 KEY INSIGHT: Even public videos need cookies for signature verification!"
+        )
+    else:
+        safe_push_log("🔑 AUTHENTICATION ISSUE: Cookies configured but not working")
+        safe_push_log("💡 SOLUTIONS TO TRY:")
+        safe_push_log("   1. 🔄 Update your cookies (they may be expired)")
+        safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
+        safe_push_log("   3. 🔁 Try different browser or re-export cookies")
+        safe_push_log(f"   4. 📋 Current method: {cookies_method}")
+
+    safe_push_log("")
+    safe_push_log(
+        "📺 Technical context: YouTube uses encrypted signatures that require"
+    )
+    safe_push_log("    fresh authentication tokens to decrypt video URLs.")
+    safe_push_log(LOG_SEPARATOR)
+
+    return ret, "Authentication failed after all strategies"
+
+
+def _build_strategy_command(
+    base_cmd: List[str],
+    client_args: List[str],
+    cookies_part: List[str],
+    url: str,
+    use_cookies: bool = False,
+) -> List[str]:
+    """Build complete yt-dlp command with client args and optional cookies"""
+    cmd = base_cmd + client_args
+    if use_cookies and cookies_part:
+        cmd.extend(cookies_part)
+    cmd.append(url)
+    return cmd
+
+
+def _get_current_cookies_method() -> str:
+    """Get current cookies method from session state"""
+    return st.session_state.get("cookies_method", "none")
+
+
+def _log_cookies_method_status(cookies_method: str) -> None:
+    """Log current cookies method status"""
+    safe_push_log(f"   4. 📋 Current method: {cookies_method}")
+
+
+def _log_authentication_solutions(cookies_method: str) -> None:
+    """Log common authentication error solutions based on current cookies method"""
+    if cookies_method == "none":
+        safe_push_log("   1. ⚠️  ENABLE COOKIES - This is likely the main issue")
+        safe_push_log("   2. 🌐 Use Browser Cookies (easiest solution)")
+        safe_push_log("   3. 📁 Or export cookies from your browser to a file")
+    elif cookies_method == "browser":
+        safe_push_log("   1. 🔄 UPDATE YOUR COOKIES - They may be expired")
+        safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
+        safe_push_log("   3. 🔁 Try refreshing/re-extracting cookies")
+    else:  # file method
+        safe_push_log("   1. 🔄 UPDATE YOUR COOKIES - They may be expired")
+        safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
+        safe_push_log("   3. 🔁 Try different browser or re-export cookies")
+
+
+def _log_strategy_header(
+    strategy_name: str, strategy_num: int, total_strategies: int
+) -> None:
+    """Log strategy attempt header with consistent formatting"""
+    safe_push_log("")
+    safe_push_log(f"🎯 Strategy {strategy_num}/{total_strategies}: {strategy_name}")
+    safe_push_log("─" * 50)
+
+
+def smart_download_with_quality_fallback(
+    base_output: str,
+    tmp_subfolder_dir: Path,
+    embed_chapters: bool,
+    embed_subs: bool,
+    force_mp4: bool,
+    ytdlp_custom_args: str,
+    url: str,
+    premium_strategies: List[Dict],
+    do_cut: bool,
+    subs_selected: List[str],
+    sb_choice: str,
+    progress_placeholder=None,
+    status_placeholder=None,
+    info_placeholder=None,
+) -> Tuple[int, str]:
+    """
+    Intelligent download with premium quality strategies AND progressive client fallback
+
+    This function combines both quality strategy fallback AND client fallback:
+    1. Try each premium quality strategy (AV1+Opus → AV1+Any → Premium Codecs → Best Available)
+    2. For each strategy, try all client fallbacks (default → android → ios → web → cookies)
+
+    Returns:
+        Tuple[int, str]: (return_code, error_message)
+    """
+    safe_push_log("🎯 Starting PREMIUM QUALITY MULTI-STRATEGY DOWNLOAD")
+    safe_push_log(LOG_SEPARATOR)
+
+    cookies_available = False
+    cookies_part = []
+
+    # Check if cookies are configured
+    cookies_method = st.session_state.get("cookies_method", "none")
+    if cookies_method != "none":
+        cookies_part = build_cookies_params()
+        cookies_available = len(cookies_part) > 0
+
+    strategy_count = len(premium_strategies)
+
+    # Try each premium quality strategy
+    for strategy_idx, strategy in enumerate(premium_strategies, 1):
+        safe_push_log(f"")
+        safe_push_log(
+            f"🏆 QUALITY STRATEGY {strategy_idx}/{strategy_count}: {strategy['label']}"
+        )
+        safe_push_log(f"📋 {strategy['description']}")
+        safe_push_log(f"🎯 Format: {strategy['format']}")
+        safe_push_log(f"📊 Sort: {strategy['format_sort']}")
+
+        if status_placeholder:
+            status_placeholder.info(
+                f"🏆 Strategy {strategy_idx}/{strategy_count}: {strategy['label']}"
+            )
+
+        # Build base command for this quality strategy
+        cmd_base = build_base_ytdlp_command(
+            base_output,
+            tmp_subfolder_dir,
+            strategy["format"],
+            embed_chapters,
+            embed_subs,
+            force_mp4,
+            ytdlp_custom_args,
+            strategy,  # Pass the strategy for extra args
+        )
+
+        # Add subtitles and sponsorblock if configured
+        # subs_selected is passed as parameter
+        # Add subtitles configuration if selected
+        if subs_selected:
+            langs_csv = ",".join(subs_selected)
+            safe_push_log(
+                f"🔍 Subtitles: {langs_csv} | embed={embed_subs} | cut={do_cut}"
+            )
+
+            cmd_base.extend(
+                [
+                    "--write-subs",
+                    "--write-auto-subs",
+                    "--sub-langs",
+                    langs_csv,
+                    "--convert-subs",
+                    "srt",
+                ]
+            )
+
+            # Embed preference: separate for cutting, respect user choice otherwise
+            embed_flag = (
+                "--no-embed-subs"
+                if do_cut
+                else ("--embed-subs" if embed_subs else "--no-embed-subs")
+            )
+            cmd_base.append(embed_flag)
+
+        # Add SponsorBlock configuration
+        sb_params = build_sponsorblock_params(sb_choice)
+        if sb_params:
+            cmd_base.extend(sb_params)
+
+        # CLIENT FALLBACK 1: Try without cookies first (fastest)
+        safe_push_log(f"   🚀 Client 1/8: Default (no auth)")
+        if status_placeholder:
+            status_placeholder.info(
+                f"🚀 Strategy {strategy_idx}: Trying default client..."
+            )
+
+        cmd = _build_strategy_command(cmd_base, [], [], url)
+        ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
+
+        if ret == 0:
+            safe_push_log(f"   ✅ SUCCESS with {strategy['label']} + Default client!")
+            return ret, ""
+
+        # Check if we got an authentication-related error
+        last_error = st.session_state.get("last_error", "")
+        if not is_authentication_error(last_error):
+            safe_push_log(
+                f"   ⚠️ Non-auth error with {strategy['label']}, trying next strategy..."
+            )
+            continue
+
+        safe_push_log(f"   ⚠️ Auth error detected, trying cookies first...")
+
+        # CLIENT FALLBACK 2: Try default client WITH cookies immediately
+        if cookies_available:
+            safe_push_log(f"   🍪 Client 2/8: Default + cookies (priority)")
+
+            if status_placeholder:
+                status_placeholder.info(
+                    f"🍪 Strategy {strategy_idx}: Trying default + cookies..."
+                )
+
+            cmd = cmd_base + cookies_part + [url]
+            ret = run_cmd(
+                cmd, progress_placeholder, status_placeholder, info_placeholder
+            )
+
+            if ret == 0:
+                safe_push_log(
+                    f"   ✅ SUCCESS with {strategy['label']} + Default + cookies!"
+                )
+                return ret, ""
+
+        # CLIENT FALLBACK 3-4: Try different YouTube clients (without cookies)
+        for client_idx, client in enumerate(
+            YOUTUBE_CLIENT_FALLBACKS[1:3], 3
+        ):  # Only Android and iOS without cookies
+            client_name = client["name"]
+            safe_push_log(f"   🔄 Client {client_idx}/8: {client_name}")
+
+            if status_placeholder:
+                status_placeholder.info(
+                    f"🔄 Strategy {strategy_idx}: Trying {client_name} client..."
+                )
+
+            cmd = cmd_base + client["args"] + [url]
+            ret = run_cmd(
+                cmd, progress_placeholder, status_placeholder, info_placeholder
+            )
+
+            if ret == 0:
+                safe_push_log(
+                    f"   ✅ SUCCESS with {strategy['label']} + {client_name} client!"
+                )
+                return ret, ""
+
+        # CLIENT FALLBACK 5-8: Try remaining clients WITH cookies if available
+        if cookies_available:
+            safe_push_log(f"   🍪 Trying remaining clients WITH cookies...")
+
+            for client_idx, client in enumerate(YOUTUBE_CLIENT_FALLBACKS[1:], 5):
+                client_name = client["name"]
+                safe_push_log(f"   🍪 Client {client_idx}/8: {client_name} + cookies")
+
+                if status_placeholder:
+                    status_placeholder.info(
+                        f"🍪 Strategy {strategy_idx}: Trying {client_name} + cookies..."
+                    )
+
+                cmd = cmd_base + client["args"] + cookies_part + [url]
+                ret = run_cmd(
+                    cmd, progress_placeholder, status_placeholder, info_placeholder
+                )
+
+                if ret == 0:
+                    safe_push_log(
+                        f"   ✅ SUCCESS with {strategy['label']} + {client_name} + cookies!"
+                    )
+                    return ret, ""
+        else:
+            safe_push_log(
+                f"   ❌ No cookies available, skipping authenticated attempts"
+            )
+
+        safe_push_log(f"   ❌ All clients failed for {strategy['label']}")
+
+    # All quality strategies and client fallbacks failed
+    safe_push_log("")
+    safe_push_log("❌ ALL PREMIUM STRATEGIES FAILED")
+    safe_push_log(LOG_SEPARATOR)
+
+    if status_placeholder:
+        status_placeholder.error("❌ All premium quality strategies failed")
+
+    # Show comprehensive error message
+    if not cookies_available:
+        safe_push_log("🔑 PRIMARY ISSUE: No authentication configured")
+        safe_push_log("💡 IMMEDIATE SOLUTION:")
+        safe_push_log("   1. ⚠️  CONFIGURE COOKIES below")
+        safe_push_log("   2. 🌐 Use 'Browser Cookies' (easiest)")
+        safe_push_log("   3. 📁 Or export cookies from browser to file")
+        safe_push_log("")
+        safe_push_log("🎯 KEY INSIGHT: Premium quality often requires authentication!")
+    else:
+        safe_push_log("🔑 AUTHENTICATION ISSUE: Cookies configured but not working")
+        safe_push_log("💡 SOLUTIONS TO TRY:")
+        safe_push_log("   1. 🔄 Update your cookies (they may be expired)")
+        safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
+        safe_push_log("   3. 🔁 Try different browser or re-export cookies")
+        safe_push_log(f"   4. 📋 Current method: {cookies_method}")
+
+    safe_push_log("")
+    safe_push_log("📺 Technical context: Premium codecs (AV1, Opus) often require")
+    safe_push_log("    fresh authentication tokens and specific client configurations.")
+    safe_push_log(LOG_SEPARATOR)
+
+    return (
+        ret,
+        f"All {strategy_count} premium strategies failed after full client fallback",
     )
 
 
@@ -809,7 +1344,7 @@ def get_video_title(url: str, cookies_part: List[str]) -> str:
 
             # Check if this might be a cookies/authentication issue
             if is_authentication_error(error_msg):
-                log_authentication_error_hint()
+                log_authentication_error_hint(error_msg)
 
             return "video"
 
@@ -845,7 +1380,7 @@ def get_video_formats(url: str, cookies_part: List[str]) -> List[Dict]:
 
             # Check if this might be a cookies/authentication issue
             if is_authentication_error(error_msg):
-                log_authentication_error_hint()
+                log_authentication_error_hint(error_msg)
 
             return []
 
@@ -1530,9 +2065,20 @@ def build_base_ytdlp_command(
     embed_subs: bool,
     force_mp4: bool = False,
     custom_args: str = "",
+    quality_strategy: Optional[Dict] = None,
 ) -> List[str]:
-    """Build base yt-dlp command with common options"""
-    output_format = "mp4" if force_mp4 else "mkv"
+    """Build base yt-dlp command with common options and premium quality strategies"""
+
+    # Use premium strategy if provided
+    if quality_strategy:
+        output_format = "mkv"  # Premium strategies always use MKV unless forced
+        if force_mp4:
+            output_format = "mp4"
+        format_spec = quality_strategy["format"]
+        format_sort = quality_strategy["format_sort"]
+    else:
+        output_format = "mp4" if force_mp4 else "mkv"
+        format_sort = "res:4320,fps,codec:av01,codec:vp9.2,codec:vp9,codec:h264"
 
     base_cmd = [
         "yt-dlp",
@@ -1546,7 +2092,7 @@ def build_base_ytdlp_command(
         "-f",
         format_spec,
         "--format-sort",
-        "res:4320,fps,codec:av01,codec:vp9.2,codec:vp9,codec:h264",
+        format_sort,
         "--embed-metadata",
         "--embed-thumbnail",
         "--no-write-thumbnail",
@@ -1559,10 +2105,14 @@ def build_base_ytdlp_command(
         "--sleep-requests",
         "1",
         "--retries",
-        "10",
+        "15" if quality_strategy else "10",  # More retries for premium
         "--retry-sleep",
-        "2",
+        "3" if quality_strategy else "2",  # Longer retry sleep for premium
     ]
+
+    # Add premium strategy extra arguments
+    if quality_strategy and quality_strategy.get("extra_args"):
+        base_cmd.extend(quality_strategy["extra_args"])
 
     # Add chapters option
     if embed_chapters:
@@ -2135,32 +2685,57 @@ with st.expander(f"{t('quality_title')}", expanded=False):
                     if st.button("🔧 Configure Cookies"):
                         st.rerun()
 
-    # Format selection dropdown (DYNAMIC!)
-    if st.session_state.available_formats:
-        format_options = [t("quality_auto_option")] + [
-            f"{fmt['resolution']} - {fmt['ext']} ({fmt['id']})"
-            for fmt in st.session_state.available_formats
-        ]
+    # Premium Quality Strategy Selection
+    st.subheader("🏆 Premium Quality Strategies")
 
-        selected_format_display = st.selectbox(
-            t("quality_select_prompt"),
-            options=format_options,
-            index=0,
-            help=t("quality_select_help"),
-            key="format_selector",
-        )
+    quality_strategy = st.selectbox(
+        "Select quality strategy:",
+        options=[strategy["name"] for strategy in PREMIUM_QUALITY_STRATEGIES],
+        format_func=lambda x: next(
+            s["label"] for s in PREMIUM_QUALITY_STRATEGIES if s["name"] == x
+        ),
+        index=0,
+        help="Choose your quality strategy. Stricter strategies are more demanding on codecs.",
+        key="quality_strategy",
+    )
 
-        # Store the actual format ID for yt-dlp
-        if selected_format_display == t("quality_auto_option"):
-            st.session_state.selected_format = "auto"
+    # Show strategy description
+    selected_strategy = next(
+        s for s in PREMIUM_QUALITY_STRATEGIES if s["name"] == quality_strategy
+    )
+    st.info(f"📋 **{selected_strategy['label']}** : {selected_strategy['description']}")
+
+    if selected_strategy["require_cookies"]:
+        st.warning("🍪 **This strategy requires cookies** to access premium formats.")
+
+    # Format selection dropdown (DYNAMIC!) - now supplementary
+    with st.expander("🔧 Manual format selection (optional)", expanded=False):
+        if st.session_state.available_formats:
+            format_options = [t("quality_auto_option")] + [
+                f"{fmt['resolution']} - {fmt['ext']} ({fmt['id']})"
+                for fmt in st.session_state.available_formats
+            ]
+
+            selected_format_display = st.selectbox(
+                t("quality_select_prompt"),
+                options=format_options,
+                index=0,
+                help=t("quality_select_help")
+                + " (Overrides premium strategy if selected)",
+                key="format_selector",
+            )
+
+            # Store the actual format ID for yt-dlp
+            if selected_format_display == t("quality_auto_option"):
+                st.session_state.selected_format = "auto"
+            else:
+                # Extract format ID from the display string
+                for fmt in st.session_state.available_formats:
+                    if f"({fmt['id']})" in selected_format_display:
+                        st.session_state.selected_format = fmt["id"]
+                        break
         else:
-            # Extract format ID from the display string
-            for fmt in st.session_state.available_formats:
-                if f"({fmt['id']})" in selected_format_display:
-                    st.session_state.selected_format = fmt["id"]
-                    break
-    # else:
-    # st.info(t("quality_auto_info"))
+            st.info("Click 'Detect formats' to see available options")
 
 
 # Optional embedding section for chapter and subs
@@ -2378,13 +2953,29 @@ def render_download_button():
 
 
 def push_log(line: str):
-    ALL_LOGS.append(line.rstrip("\n"))
+    # Clean the line of ANSI escape sequences and control characters
+    clean_line = line.rstrip("\n")
+
+    # Remove ANSI escape sequences (colors, cursor movements, etc.)
+    clean_line = ANSI_ESCAPE_PATTERN.sub("", clean_line)
+
+    # Remove other control characters except newlines and tabs
+    clean_line = "".join(
+        char for char in clean_line if ord(char) >= 32 or char in "\t\n"
+    )
+
+    ALL_LOGS.append(clean_line)
 
     # Update logs display
     with logs_placeholder.container():
-        # Scrollable logs container
+        # Scrollable logs container - additional HTML escaping for safety
         logs_content = (
-            "\n".join(ALL_LOGS[-400:]).replace("<", "&lt;").replace(">", "&gt;")
+            "\n".join(ALL_LOGS[-400:])
+            .replace("&", "&amp;")  # Escape & first
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&#x27;")
         )
         st.markdown(
             f'<div style="{LOGS_CONTAINER_STYLE}">{logs_content}</div>',
@@ -2440,7 +3031,27 @@ def run_cmd(cmd: List[str], progress=None, status=None, info=None) -> int:
                     return -1  # Cancelled return code
 
                 line = line.rstrip("\n")
-                push_log(line)
+
+                # Clean ANSI escape sequences before logging (FFmpeg can output colors)
+                clean_line = ANSI_ESCAPE_PATTERN.sub("", line)
+
+                push_log(clean_line)
+
+                # Capture error messages for fallback strategies - use cleaned line
+                line_lower = clean_line.lower()
+                if any(
+                    keyword in line_lower for keyword in ["error", "failed", "unable"]
+                ):
+                    st.session_state["last_error"] = clean_line
+
+                # Check for HTTP 403 and authentication errors
+                if is_authentication_error(clean_line):
+                    # Don't spam logs - only show hint once per download
+                    if not getattr(metrics, "_auth_hint_shown", False):
+                        push_log("")  # Empty line for readability
+                        log_authentication_error_hint(clean_line)
+                        push_log("")  # Empty line for readability
+                        metrics._auth_hint_shown = True
 
                 # Skip processing if no UI components provided
                 if not (progress and status):
@@ -2451,7 +3062,7 @@ def run_cmd(cmd: List[str], progress=None, status=None, info=None) -> int:
                 elapsed_str = fmt_hhmmss(int(elapsed))
 
                 # === DOWNLOAD PROGRESS WITH DETAILS ===
-                download_progress = parse_download_progress(line)
+                download_progress = parse_download_progress(clean_line)
                 if download_progress:
                     percent, size, speed, eta_time = download_progress
                     try:
@@ -2475,7 +3086,7 @@ def run_cmd(cmd: List[str], progress=None, status=None, info=None) -> int:
                         pass
 
                 # === FRAGMENT DOWNLOAD ===
-                fragment_progress = parse_fragment_progress(line)
+                fragment_progress = parse_fragment_progress(clean_line)
                 if fragment_progress:
                     current, total = fragment_progress
                     try:
@@ -2501,7 +3112,7 @@ def run_cmd(cmd: List[str], progress=None, status=None, info=None) -> int:
                         pass
 
                 # === GENERIC PERCENTAGE PROGRESS ===
-                generic_percent = parse_generic_percentage(line)
+                generic_percent = parse_generic_percentage(clean_line)
                 if generic_percent is not None:
                     try:
                         pct_int = int(generic_percent)
@@ -2516,7 +3127,7 @@ def run_cmd(cmd: List[str], progress=None, status=None, info=None) -> int:
                         pass
 
                 # === STATUS DETECTION ===
-                line_lower = line.lower()
+                # line_lower already set above from clean_line
 
                 # Detect specific statuses with more precise matching
                 if any(
@@ -2663,15 +3274,39 @@ if submitted:
     except Exception as e:
         push_log(f"⚠️ Could not analyze sponsor segments: {e}")
 
-    # Determine format based on user selection
+    # Determine format based on premium strategy or user selection
+    quality_strategy_name = st.session_state.get("quality_strategy", "best_available")
+    selected_strategy = next(
+        s for s in PREMIUM_QUALITY_STRATEGIES if s["name"] == quality_strategy_name
+    )
     selected_format = st.session_state.get("selected_format", "auto")
-    if selected_format == "auto":
-        format_spec = "bv*+ba/b"
-        push_log(t("log_quality_auto"))
-    else:
-        # Use specific format ID + best audio
+
+    # Check if cookies are required for the strategy
+    if selected_strategy["require_cookies"]:
+        cookies_method = st.session_state.get("cookies_method", "none")
+        if cookies_method == "none":
+            push_log("🍪 ERROR: This premium quality strategy requires cookies")
+            push_log(
+                "💡 Configure cookies in the 'Cookies & Authentication' section below"
+            )
+            push_log("🚫 Download cancelled - cookies required for premium quality")
+            st.session_state.download_finished = True
+            st.stop()
+
+    push_log(f"🏆 Quality strategy: {selected_strategy['label']}")
+    push_log(f"📋 Description: {selected_strategy['description']}")
+
+    if selected_format != "auto":
+        # Manual format override
         format_spec = f"{selected_format}+ba/b"
         push_log(t("log_quality_selected", format_id=selected_format))
+        quality_strategy_to_use = None  # Don't use premium strategy
+    else:
+        # Use premium strategy
+        format_spec = selected_strategy["format"]
+        push_log(f"🎯 Format: {format_spec}")
+        push_log(f"📊 Sort: {selected_strategy['format_sort']}")
+        quality_strategy_to_use = selected_strategy
 
     # --- yt-dlp base command construction
     force_mp4 = do_cut and subs_selected  # Force MP4 for sections with subtitles
@@ -2684,6 +3319,7 @@ if submitted:
         embed_subs,
         force_mp4,
         ytdlp_custom_args,
+        quality_strategy_to_use,
     )
 
     # subtitles - different handling based on whether we'll cut or not
@@ -2769,24 +3405,52 @@ if submitted:
     else:
         push_log(t("log_scenario_standard"))
 
-    # --- Final yt-dlp command (always full download)
+    # --- Final yt-dlp command with intelligent fallback
     push_log(t("log_download_with_sponsorblock"))
-    cmd_full = [
+
+    # Build base command without cookies (fallback handles auth)
+    cmd_base = [
         *common_base,
         *subs_part,
         *sb_part,
-        *cookies_part,
-        clean_url,
     ]
 
     progress_placeholder.progress(0, text=t("status_preparation"))
     status_placeholder.info(t("status_downloading_simple"))
-    ret_dl = run_cmd(
-        cmd_full,
-        progress=progress_placeholder,
-        status=status_placeholder,
-        info=info_placeholder,
-    )
+
+    # Use intelligent fallback with retry strategies
+    # Check if premium quality strategy is being used
+    if quality_strategy_to_use is not None:
+        # Premium quality mode: try all strategies with progressive fallback
+        push_log(
+            "🏆 PREMIUM QUALITY MODE: Testing all strategies with full client fallback"
+        )
+        ret_dl, error_msg = smart_download_with_quality_fallback(
+            base_output,
+            tmp_subfolder_dir,
+            embed_chapters,
+            embed_subs,
+            force_mp4,
+            ytdlp_custom_args,
+            clean_url,
+            PREMIUM_QUALITY_STRATEGIES,  # Try all premium strategies
+            do_cut,
+            subs_selected,
+            sb_choice,
+            progress_placeholder,
+            status_placeholder,
+            info_placeholder,
+        )
+    else:
+        # Standard quality mode: use existing fallback
+        push_log("📺 STANDARD QUALITY MODE: Using classic client fallback")
+        ret_dl, error_msg = smart_download_with_fallback(
+            cmd_base,
+            clean_url,
+            progress_placeholder,
+            status_placeholder,
+            info_placeholder,
+        )
 
     # Handle cancellation
     if ret_dl == -1:
@@ -2821,26 +3485,24 @@ if submitted:
 
         status_placeholder.info(t("status_cutting_video"))
 
-        # Create the final cut output file with a different name to avoid
-        # input/output conflict
-        cut_output = tmp_subfolder_dir / f"{base_output}_cut.mp4"
+        # Create the final cut output file - always use MKV to preserve AV1/Opus
+        cut_output = tmp_subfolder_dir / f"{base_output}_cut.mkv"
+
         if cut_output.exists():
             try:
                 cut_output.unlink()
             except Exception:
                 pass
 
-        # === KEYFRAMES MODE (FAST) ===
+        # === DETERMINE CUTTING TIMESTAMPS ===
         if cut_mode == "keyframes":
             push_log(t("log_mode_keyframes"))
-
             # Extract keyframes and find nearest ones
             keyframes = get_keyframes(final_tmp)
             if keyframes:
                 actual_start, actual_end = find_nearest_keyframes(
                     keyframes, start_sec, end_sec
                 )
-                # Log the actual timestamps used for both video and subtitles
                 push_log(
                     f"🎯 Keyframes timestamps: {actual_start:.3f}s → {actual_end:.3f}s"
                 )
@@ -2855,235 +3517,183 @@ if submitted:
                 push_log(
                     f"🎯 Using exact timestamps: {actual_start:.3f}s → {actual_end:.3f}s"
                 )
-
-            # Build keyframes ffmpeg command (similar to your example)
-            cmd_cut = [
-                "ffmpeg",
-                "-y",
-                "-ss",
-                str(actual_start),
-                "-to",
-                str(actual_end),
-                "-i",
-                str(final_tmp),
-            ]
-
-            # Add subtitle inputs if any
-            # IMPORTANT: Use the same actual_start/actual_end timestamps as the video
-            # to ensure perfect synchronization between video and subtitles
-            subtitle_files = []
-            if subs_selected:
-                push_log("📝 Cutting subtitles with same keyframe timestamps as video")
-                for lang in subs_selected:
-                    srt_file = tmp_subfolder_dir / f"{base_output}.{lang}.srt"
-                    if not srt_file.exists():
-                        srt_file = tmp_subfolder_dir / f"{base_output}.srt"
-
-                    if srt_file.exists():
-                        cmd_cut.extend(
-                            [
-                                "-ss",
-                                str(actual_start),  # Same timestamp as video
-                                "-to",
-                                str(actual_end),  # Same timestamp as video
-                                "-f",
-                                "srt",
-                                "-i",
-                                str(srt_file),
-                            ]
-                        )
-                        subtitle_files.append((lang, srt_file))
-                        push_log(f"📝 {lang}: {actual_start:.3f}s → {actual_end:.3f}s")
-                    else:
-                        push_log(t("log_srt_not_found", lang=lang))
-
-            # Mappings for keyframes mode
-            cmd_cut.extend(
-                [
-                    "-map",
-                    "0:v:0",
-                    "-map",
-                    "0:a?",
-                ]
-            )
-
-            # Add subtitle mappings
-            sub_idx = 1
-            for i, (lang, _) in enumerate(subtitle_files):
-                cmd_cut.extend(["-map", f"{sub_idx}:0"])
-                sub_idx += 1
-
-            cmd_cut.extend(["-map", "-0:v:m:attached_pic"])
-
-            # KEYFRAMES ENCODING: Stream copy (no re-encoding)
-            cmd_cut.extend(["-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text"])
-
-            # Subtitle metadata for keyframes
-            if subtitle_files:
-                first_lang = subtitle_files[0][0]
-                cmd_cut.extend(
-                    [
-                        "-disposition:s:0",
-                        "default",
-                        "-metadata:s:s:0",
-                        f"language={first_lang}",
-                    ]
-                )
-
-            cmd_cut.extend(["-movflags", "+faststart", str(cut_output)])
-
-        # === PRECISE MODE (SLOW) ===
-        else:
+        else:  # precise mode
             push_log(t("log_mode_precise"))
-
-            # Use exact timestamps for precise mode
             actual_start, actual_end = float(start_sec), float(end_sec)
             push_log(f"🎯 Precise timestamps: {actual_start:.3f}s → {actual_end:.3f}s")
 
-            # Build precise ffmpeg command (current behavior)
-            cmd_cut = [
-                "ffmpeg",
-                "-y",
-                "-ss",
-                str(actual_start),
-                "-to",
-                str(actual_end),
-                "-i",
-                str(final_tmp),
-            ]
+        duration = actual_end - actual_start
 
-            # Add subtitle inputs if any
-            # IMPORTANT: Use the same actual_start/actual_end timestamps as the video
-            # to ensure perfect synchronization between video and subtitles
-            subtitle_files = []
-            if subs_selected:
-                push_log("📝 Cutting subtitles with same precise timestamps as video")
-                for lang in subs_selected:
-                    srt_file = tmp_subfolder_dir / f"{base_output}.{lang}.srt"
-                    if not srt_file.exists():
-                        srt_file = tmp_subfolder_dir / f"{base_output}.srt"
+        # === NEW 3-STEP CUTTING PROCESS FOR PERFECT SUBTITLES ===
+        push_log("")
+        push_log("🎯 Using 3-step cutting process for perfect subtitle synchronization")
+        push_log("   1. TRIM: Cut subtitles with original timestamps")
+        push_log("   2. REBASE: Shift subtitle timestamps to start at 00:00")
+        push_log("   3. MUX: Cut video and add processed subtitles")
+        push_log("")
 
-                    if srt_file.exists():
-                        cmd_cut.extend(
-                            [
-                                "-ss",
-                                str(actual_start),  # Same timestamp as video
-                                "-to",
-                                str(actual_end),  # Same timestamp as video
-                                "-f",
-                                "srt",
-                                "-i",
-                                str(srt_file),
-                            ]
+        # Find subtitle files to process
+        processed_subtitle_files = []
+        if subs_selected:
+            for lang in subs_selected:
+                # Try multiple possible subtitle file patterns
+                possible_srt_files = [
+                    tmp_subfolder_dir / f"{base_output}.{lang}.srt",
+                    tmp_subfolder_dir / f"{base_output}.srt",
+                    tmp_subfolder_dir / f"{base_output}.{lang}.vtt",
+                    tmp_subfolder_dir / f"{base_output}.vtt",
+                ]
+
+                srt_file = None
+                for possible_file in possible_srt_files:
+                    if possible_file.exists():
+                        srt_file = possible_file
+                        break
+
+                if srt_file:
+                    push_log(f"📝 Processing subtitle file: {srt_file.name} ({lang})")
+
+                    # STEP 1: TRIM - Cut subtitle with original timestamps
+                    cut_srt_file = tmp_subfolder_dir / f"{base_output}-cut.{lang}.srt"
+                    cmd_trim = [
+                        "ffmpeg",
+                        "-y",
+                        "-loglevel",
+                        "warning",
+                        "-i",
+                        str(srt_file),
+                        "-ss",
+                        str(actual_start),
+                        "-t",
+                        str(duration),
+                        "-c:s",
+                        "srt",
+                        str(cut_srt_file),
+                    ]
+
+                    push_log(
+                        f"   📝 Step 1 - TRIM: Cutting {lang} subtitles ({actual_start:.3f}s + {duration:.3f}s)"
+                    )
+                    ret_trim = run_cmd(
+                        cmd_trim,
+                        progress_placeholder,
+                        status_placeholder,
+                        info_placeholder,
+                    )
+                    if ret_trim != 0 or not cut_srt_file.exists():
+                        push_log(f"   ⚠️ Failed to trim subtitles for {lang}, skipping")
+                        continue
+
+                    # STEP 2: REBASE - Shift timestamps to start at 00:00
+                    final_srt_file = (
+                        tmp_subfolder_dir / f"{base_output}-cut-final.{lang}.srt"
+                    )
+                    cmd_rebase = [
+                        "ffmpeg",
+                        "-y",
+                        "-loglevel",
+                        "warning",
+                        "-itsoffset",
+                        f"-{actual_start}",
+                        "-i",
+                        str(cut_srt_file),
+                        "-c:s",
+                        "srt",
+                        str(final_srt_file),
+                    ]
+
+                    push_log(
+                        f"   🔄 Step 2 - REBASE: Shifting {lang} timestamps by -{actual_start:.3f}s"
+                    )
+                    ret_rebase = run_cmd(
+                        cmd_rebase,
+                        progress_placeholder,
+                        status_placeholder,
+                        info_placeholder,
+                    )
+                    if ret_rebase != 0 or not final_srt_file.exists():
+                        push_log(
+                            f"   ⚠️ Failed to rebase subtitles for {lang}, skipping"
                         )
-                        subtitle_files.append((lang, srt_file))
-                        push_log(f"📝 {lang}: {actual_start:.3f}s → {actual_end:.3f}s")
-                    else:
-                        push_log(t("log_srt_not_found", lang=lang))
+                        continue
 
-            # Mappings for precise mode
+                    # Clean up intermediate file
+                    try:
+                        cut_srt_file.unlink()
+                    except Exception:
+                        pass
+
+                    processed_subtitle_files.append((lang, final_srt_file))
+                    push_log(f"   ✅ Successfully processed {lang} subtitles")
+                else:
+                    push_log(f"   ⚠️ Subtitle file not found for {lang}")
+
+        # STEP 3: MUX - Cut video and add processed subtitles
+        push_log(f"📹 Step 3 - MUX: Cutting video and adding processed subtitles")
+
+        # Build video cutting command
+        cmd_cut = [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "warning",
+            "-ss",
+            str(actual_start),
+            "-t",
+            str(duration),
+            "-i",
+            str(final_tmp),
+        ]
+
+        # Add processed subtitle inputs
+        for lang, srt_file in processed_subtitle_files:
+            cmd_cut.extend(["-i", str(srt_file)])
+
+        # Video and audio mappings
+        cmd_cut.extend(
+            [
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a?",
+            ]
+        )
+
+        # Subtitle mappings
+        for i, (lang, _) in enumerate(processed_subtitle_files):
+            cmd_cut.extend(["-map", f"{i+1}:0"])
+
+        # Exclude attached pictures
+        cmd_cut.extend(["-map", "-0:m:attached_pic"])
+
+        # Always use stream copy to preserve AV1/Opus in MKV
+        cmd_cut.extend(["-c:v", "copy", "-c:a", "copy", "-c:s", "srt"])
+
+        # Subtitle metadata
+        if processed_subtitle_files:
+            first_lang = processed_subtitle_files[0][0]
             cmd_cut.extend(
                 [
-                    "-map",
-                    "0:v:0",
-                    "-map",
-                    "0:a?",
+                    "-disposition:s:0",
+                    "default",
+                    "-metadata:s:s:0",
+                    f"language={first_lang}",
                 ]
             )
 
-            # Add subtitle mappings
-            sub_idx = 1
-            for i, (lang, _) in enumerate(subtitle_files):
-                cmd_cut.extend(["-map", f"{sub_idx}:0"])
-                sub_idx += 1
+        # Additional options for perfect sync
+        cmd_cut.extend(
+            [
+                "-shortest",
+                "-avoid_negative_ts",
+                "make_zero",
+                "-max_interleave_delta",
+                "0",
+                str(cut_output),
+            ]
+        )
 
-            cmd_cut.extend(["-map", "-0:v:m:attached_pic"])
-
-            # PRECISE ENCODING: Full re-encoding with quality settings
-            # Get user-selected encoding options
-            codec_choice = st.session_state.get("codec_choice", "h264")
-            quality_preset = st.session_state.get("quality_preset", "balanced")
-
-            # Determine CRF and preset values
-            if quality_preset == "balanced":
-                crf_value = "16"
-                preset_value = "slow"
-            else:  # high_quality
-                crf_value = "14"
-                preset_value = "slower"
-
-            if codec_choice == "h264":
-                # H.264 encoding
-                cmd_cut.extend(
-                    [
-                        "-c:v",
-                        "libx264",
-                        "-preset",
-                        preset_value,
-                        "-crf",
-                        crf_value,
-                        "-r",
-                        "24000/1001",
-                        "-pix_fmt",
-                        "yuv420p",
-                        "-fps_mode",
-                        "cfr",
-                        "-x264-params",
-                        "aq-mode=2:aq-strength=1.1:psy-rd=1.00:0.15:deblock=0,0",
-                    ]
-                )
-                push_log(t("log_h264_encoding", preset=preset_value, crf=crf_value))
-            else:
-                # H.265 encoding with 10-bit
-                cmd_cut.extend(
-                    [
-                        "-c:v",
-                        "libx265",
-                        "-pix_fmt",
-                        "yuv420p10le",
-                        "-preset",
-                        preset_value,
-                        "-crf",
-                        crf_value,
-                        "-x265-params",
-                        "aq-mode=2:aq-strength=1.1:psy-rd=2.0:deblock=0,0",
-                        "-tag:v",
-                        "hvc1",
-                        "-fps_mode",
-                        "cfr",
-                        "-r",
-                        "24000/1001",
-                    ]
-                )
-                push_log(t("log_h265_encoding", preset=preset_value, crf=crf_value))
-
-            # Common audio and subtitle settings
-            cmd_cut.extend(
-                [
-                    "-c:a",
-                    "aac",
-                    "-b:a",
-                    "192k",
-                    "-c:s",
-                    "mov_text",
-                ]
-            )
-
-            # Subtitle metadata for precise
-            if subtitle_files:
-                first_lang = subtitle_files[0][0]
-                cmd_cut.extend(
-                    [
-                        "-disposition:s:0",
-                        "default",
-                        "-metadata:s:s:0",
-                        f"language={first_lang}",
-                    ]
-                )
-
-            cmd_cut.extend(["-movflags", "+faststart", str(cut_output)])
-
-        # === COMMON EXECUTION FOR BOTH MODES ===
+        # === EXECUTE FINAL CUTTING COMMAND ===
         # Execute ffmpeg cut command
         try:
             push_log(t("log_ffmpeg_execution", mode=cut_mode))
@@ -3112,7 +3722,9 @@ if submitted:
             st.stop()
 
         # Rename the cut file to the final name (without _cut suffix)
-        final_cut_name = tmp_subfolder_dir / f"{base_output}.mp4"
+        # Keep the same extension as the cut output
+        final_extension = cut_output.suffix  # .mkv or .mp4
+        final_cut_name = tmp_subfolder_dir / f"{base_output}{final_extension}"
         if final_cut_name.exists():
             try:
                 final_cut_name.unlink()
@@ -3144,9 +3756,7 @@ if submitted:
             original_title = get_video_title(clean_url, cookies_part)
 
             # Apply custom metadata with user title
-            if customize_video_metadata(final_source, filename, original_title):
-                push_log(f"✅ Metadata customized - Title: {filename}")
-            else:
+            if not customize_video_metadata(final_source, filename, original_title):
                 push_log("⚠️ Metadata customization failed, using original metadata")
 
         except Exception as e:

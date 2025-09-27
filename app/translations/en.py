@@ -115,12 +115,23 @@ TRANSLATIONS = {
     "status_cutting_video": "Cutting video with ffmpeg...",
     "status_completed": "Completed ✅",
     "status_file_ready": "File ready: {subfolder}",
+    "status_retry_android": "🔄 Retry with Android client...",
+    "status_retry_ios": "🔄 Retry with iOS client...",
+    "status_retry_web": "🔄 Retry with Web client...",
+    "status_retry_cookies": "🍪 Retry with authentication cookies...",
+    "status_trying_no_auth": "🚀 Attempting download (no authentication)...",
     # === ERROR MESSAGES ===
     "error_provide_url_filename": "Please provide the URL and filename.",
     "error_provide_url": "Please provide the video URL.",
     "error_download_failed": "Download failed. See logs above.",
     "error_ffmpeg_cut_failed": "ffmpeg cutting failed. See logs.",
     "error_ffmpeg": "ffmpeg error: {error}",
+    "error_http_403_detected": "🚫 HTTP 403 Forbidden Error Detected",
+    "error_signature_issue": "🔑 SIGNATURE ISSUE DETECTED:",
+    "error_cookies_required": "⚠️ ENABLE COOKIES - This is likely the main issue",
+    "error_cookies_expired": "🔄 UPDATE YOUR COOKIES - They may be expired",
+    "hint_signature_protection": "YouTube uses encrypted signatures to protect video streams",
+    "hint_cookies_for_public": "Even public videos need cookies for signature verification!",
     # === SUCCESS/WARNING MESSAGES ===
     "formats_detected": "✅ Detected {count} available formats!",
     "no_formats_detected": """**⚠️ Issue retrieving video formats:**
@@ -181,7 +192,7 @@ Update your file cookies or try using **browser cookies** instead of file cookie
     "log_cutting_mode_selected": "[INFO] Selected cutting mode: {mode}",
     "log_h264_encoding": "[INFO] H.264 encoding: preset={preset}, crf={crf}",
     "log_h265_encoding": "[INFO] H.265 10-bit encoding: preset={preset}, crf={crf}",
-    "log_srt_not_found": "[warn] SRT not found for {lang} → ignored",
+    "log_srt_not_found": "⚠️ No subtitle file found for {lang} (checked SRT/VTT formats)",
     "log_srt_cut_failed": "[warn] Failed to cut SRT for {lang}",
     "log_runner_exception": "[runner-exception] {error}",
     "log_sponsorblock_metadata_failed": "[warn] Unable to retrieve SponsorBlock metadata: {error}",
@@ -233,4 +244,28 @@ Update your file cookies or try using **browser cookies** instead of file cookie
     # === SUCCESS & ERROR MESSAGES ===
     "success_download_complete": "✅ Download completed successfully!",
     "error_invalid_url": "❌ Invalid URL provided",
+    # === INTELLIGENT FALLBACK STATUS MESSAGES ===
+    "status_retry_android": "🔄 Trying Android client...",
+    "status_retry_ios": "🔄 Trying iOS client...",
+    "status_retry_web": "🔄 Trying Web client...",
+    "status_retry_cookies": "🍪 Trying with cookies...",
+    "status_trying_no_auth": "🚀 Trying without authentication...",
+    "error_auth_required": "🔐 Authentication required. Please check your cookies or try again.",
+    "error_fallback_failed": "❌ All download strategies failed. Please check your cookies and internet connection.",
+    # === PREMIUM QUALITY MESSAGES ===
+    "premium_quality_title": "🏆 Premium Quality Strategies",
+    "premium_strategy_select": "Select quality strategy:",
+    "premium_strategy_help": "Choose your quality strategy. Stricter options demand better codecs.",
+    "premium_cookies_required": "🍪 **This strategy requires cookies** to access premium formats.",
+    "premium_manual_format": "🔧 Manual format selection (optional)",
+    "premium_manual_help": "Overrides premium strategy if selected",
 }
+
+# Direct access to translation values (for backward compatibility)
+status_retry_android = TRANSLATIONS["status_retry_android"]
+status_retry_ios = TRANSLATIONS["status_retry_ios"]
+status_retry_web = TRANSLATIONS["status_retry_web"]
+status_retry_cookies = TRANSLATIONS["status_retry_cookies"]
+status_trying_no_auth = TRANSLATIONS["status_trying_no_auth"]
+error_auth_required = TRANSLATIONS["error_auth_required"]
+error_fallback_failed = TRANSLATIONS["error_fallback_failed"]
