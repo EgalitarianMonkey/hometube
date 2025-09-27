@@ -535,6 +535,74 @@ def fmt_hhmmss(seconds: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def customize_video_metadata(
+    video_path: Path, user_title: str, original_title: str = None
+) -> bool:
+    """
+    Customize video metadata using FFmpeg, replacing title with user-provided name
+    and preserving original title in album field
+
+    Args:
+        video_path: Path to the video file
+        user_title: Title provided by the user (from filename input)
+        original_title: Original video title from yt-dlp (optional)
+
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        safe_push_log("📝 Customizing video metadata...")
+
+        # Create temporary output file
+        temp_output = video_path.with_suffix(f".temp{video_path.suffix}")
+
+        # Build FFmpeg command
+        cmd_metadata = [
+            "ffmpeg",
+            "-y",  # Overwrite output file
+            "-i",
+            str(video_path),
+            "-c",
+            "copy",  # Copy streams without re-encoding (fast)
+            "-metadata",
+            f"title={user_title}",  # Use user-provided title
+        ]
+
+        # Add original title as album if available
+        if original_title and original_title != user_title:
+            cmd_metadata.extend(["-metadata", f"album={original_title}"])
+
+        # Add output path
+        cmd_metadata.append(str(temp_output))
+
+        # Execute FFmpeg command
+        result = run_subprocess_safe(
+            cmd_metadata, timeout=120, error_context="Metadata customization"
+        )
+
+        if result.returncode == 0 and temp_output.exists():
+            # Replace original file with metadata-customized version
+            video_path.unlink()  # Remove original
+            temp_output.rename(video_path)  # Rename temp to original
+            safe_push_log(f"✅ Metadata customized - Title: {user_title}")
+            return True
+        else:
+            error_msg = result.stderr.strip()
+            safe_push_log(f"⚠️ Failed to customize metadata: {error_msg}")
+            # Clean up temp file if it exists
+            if temp_output.exists():
+                temp_output.unlink()
+            return False
+
+    except Exception as e:
+        safe_push_log(f"⚠️ Error customizing metadata: {e}")
+        # Clean up temp file if it exists
+        temp_output = video_path.with_suffix(f".temp{video_path.suffix}")
+        if temp_output.exists():
+            temp_output.unlink()
+        return False
+
+
 def run_subprocess_safe(
     cmd: List[str], timeout: int = 60, error_context: str = ""
 ) -> subprocess.CompletedProcess:
@@ -3065,6 +3133,24 @@ if submitted:
         # No cutting, use the original downloaded file
         final_source = final_tmp  # === Cleanup + move
     cleanup_extras(tmp_subfolder_dir, base_output)
+
+    # === METADATA CUSTOMIZATION ===
+    # Customize metadata with user-provided title
+    if filename and filename.strip():
+        try:
+            status_placeholder.info("📝 Customizing video metadata...")
+
+            # Get original title for preservation in album field
+            original_title = get_video_title(clean_url, cookies_part)
+
+            # Apply custom metadata with user title
+            if customize_video_metadata(final_source, filename, original_title):
+                push_log(f"✅ Metadata customized - Title: {filename}")
+            else:
+                push_log("⚠️ Metadata customization failed, using original metadata")
+
+        except Exception as e:
+            push_log(f"⚠️ Error during metadata customization: {e}")
 
     try:
         final_moved = move_file(final_source, dest_dir)
