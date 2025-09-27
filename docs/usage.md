@@ -88,9 +88,25 @@ downloads/
 
 ## 🔒 Authentication & Private Content
 
-Cookies are essential to be authenticated and access restricted videos. Youtube expects updated cookies and will raise errors when cookies are expired.
+**🚨 Cookies are essential for reliable video downloads**, not just for restricted videos. Modern platforms like YouTube use sophisticated protection mechanisms:
 
-There are several methods to enjoy cookies, depending of your HomeTube service configuration.
+### Why Cookies Are Critical
+
+- **🔐 Encrypted Signatures**: Video streams use encrypted signatures (n-sig) requiring authentication
+- **🛡️ Anti-Bot Measures**: Platforms detect and block automated access without proper authentication
+- **📺 Stream Protection**: Even public videos may have signature-protected audio/video streams
+- **⚡ Error Prevention**: Prevents "signature extraction failed" and "format unavailable" errors
+
+### What You Can Access With Cookies
+
+- **✅ Public Videos**: Reliable access to all quality formats and streams
+- **🔓 Restricted Content**: Age-restricted, member-only, and region-locked videos
+- **🎵 High-Quality Audio**: Signature-protected audio formats
+- **🚀 Better Performance**: Reduced throttling and connection issues
+
+YouTube expects updated cookies and will raise errors when cookies are expired.
+
+There are several methods to setup cookies, depending on your HomeTube service configuration.
 
 ### Browser Cookie Method
 

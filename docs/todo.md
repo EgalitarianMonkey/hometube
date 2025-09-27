@@ -55,6 +55,7 @@ Add comprehensive playlist support for YouTube, SoundCloud, and other platforms 
 - Refine color scheme and visual hierarchy
 
 ---
+
 ## Multiple audio tracks selection
 **Status:** Idea
 **Priority:** Low

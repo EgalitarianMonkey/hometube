@@ -45,7 +45,7 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 - **🚫 Ad-Free Content**: Block videos' sponsors and ads
 - **🎬 Advanced Processing**: Cut clips, embed subtitles, convert formats
 - **⚙️ Advanced configurations**: Set any custom yt-dlp arguments (proxy, max-filesize, etc.)
-- **🔐 Unlock restricted videos**: Cookies support for member-only videos, restricted age, etc.
+- **🔐 Cookies Authentication**: Essential for reliable downloads - unlocks restricted content and prevents signature errors
 - **📊 Quality Control**: Auto-select best quality or manual override
 - **🎥 Video Sources**: **YouTube**, Reddit, Vimeo, Dailymotion, TikTok, Twitch, Facebook, Instagra, etc. [See complete list (1800+)](docs/supported-platforms.md)
 
@@ -99,11 +99,27 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 
 [Learn more about SponsorBlock features](docs/usage.md#-sponsorblock-integration).
 
-### 🍪 Unlock restricted videos (Cookies)
+### 🍪 Cookies Authentication (Highly Recommended)
 
-**Cookies authentication must be setup** to unlock restricted videos and get the best experience downloading videos.
+**Cookies authentication should be setup** for optimal video downloading experience and to avoid common download failures.
 
-Private content, age-restricted, or member-only videos are restricted without authentication on platforms like YouTube. We can unlock restricted content thanks to **cookies** authentication.
+#### 🚨 **Why Cookies Are Essential**
+
+**Even for public videos**, cookies are often required due to modern platform protections:
+
+- **🔐 Encrypted Signatures**: Video streams use encrypted signatures (n-sig) that require authentication
+- **🛡️ Anti-Bot Protection**: Platforms implement sophisticated anti-automation measures
+- **📺 Stream Access**: Audio/video streams may be signature-protected even for public content
+- **⚡ Download Reliability**: Prevents common "signature extraction" and "format unavailable" errors
+
+#### 🎯 **What Cookies Unlock**
+
+- **🔓 Private Content**: Age-restricted, member-only, and region-locked videos
+- **✅ Public Videos**: Reliable access to all quality formats and streams
+- **🎵 Audio Streams**: High-quality audio formats that may be signature-protected
+- **🚀 Better Performance**: Reduced throttling and connection issues
+
+#### 🛠️ **Setup Options**
 
 We can use **Browser cookies** if on a machine sharing a browser, otherwise **Cookies File** in HomeLab setup.
 
