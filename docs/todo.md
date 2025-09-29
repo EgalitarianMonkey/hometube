@@ -92,10 +92,10 @@ Download and embed the default audio track along all available audio tracks matc
 
 ## Auto-Generated subtitles
 **Status:** Idea
-**Priority:** Very Low
+**Priority:** Low
 
 **Description:**
-Auto-generated subtitles are often very bad in any video player. Using or developing a robust process to generate clean sub directly from an audio from a video would be nice.
+Auto-generated subtitles are often very bad in any video player except Youtube itself. Adding a better subtitles generator to HomeTube would permit good subtitles for any downloaded videos in any interested languages (Whisper?).
 
 ---
 

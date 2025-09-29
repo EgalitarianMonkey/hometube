@@ -112,12 +112,23 @@ TRANSLATIONS = {
     "status_cutting_video": "Découpe de la vidéo avec ffmpeg...",
     "status_completed": "Terminé ✅",
     "status_file_ready": "Fichier prêt : {subfolder}",
+    "status_retry_android": "🔄 Nouvel essai avec client Android...",
+    "status_retry_ios": "🔄 Nouvel essai avec client iOS...",
+    "status_retry_web": "🔄 Nouvel essai avec client Web...",
+    "status_retry_cookies": "🍪 Nouvel essai avec cookies d'authentification...",
+    "status_trying_no_auth": "🚀 Tentative de téléchargement (sans authentification)...",
     # === ERROR MESSAGES ===
     "error_provide_url_filename": "Veuillez fournir l'URL et le nom de fichier.",
     "error_provide_url": "Veuillez fournir l'URL de la vidéo.",
     "error_download_failed": "Échec du téléchargement. Voir logs ci-dessus.",
     "error_ffmpeg_cut_failed": "Échec de la découpe ffmpeg. Voir logs.",
     "error_ffmpeg": "Erreur ffmpeg: {error}",
+    "error_http_403_detected": "🚫 Erreur HTTP 403 Interdit Détectée",
+    "error_signature_issue": "🔑 PROBLÈME DE SIGNATURE DÉTECTÉ:",
+    "error_cookies_required": "⚠️ ACTIVEZ LES COOKIES - C'est probablement le problème principal",
+    "error_cookies_expired": "🔄 METTEZ À JOUR VOS COOKIES - Ils sont peut-être expirés",
+    "hint_signature_protection": "YouTube utilise des signatures chiffrées pour protéger les flux vidéo",
+    "hint_cookies_for_public": "Même les vidéos publiques nécessitent des cookies pour la vérification des signatures !",
     # === SUCCESS/WARNING MESSAGES ===
     "formats_detected": "✅ Détecté {count} formats disponibles!",
     "no_formats_detected": """**⚠️ Aucuns formats vidéo n'a pu être récupérés:**
@@ -179,7 +190,7 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
     "log_cutting_mode_selected": "[INFO] Mode de découpe sélectionné: {mode}",
     "log_h264_encoding": "[INFO] H.264 encoding: preset={preset}, crf={crf}",
     "log_h265_encoding": "[INFO] H.265 10-bit encoding: preset={preset}, crf={crf}",
-    "log_srt_not_found": "[warn] SRT introuvable pour {lang} → ignoré",
+    "log_srt_not_found": "⚠️ Aucun fichier de sous-titres trouvé pour {lang} (vérifié SRT/VTT)",
     "log_srt_cut_failed": "[warn] Échec découpe SRT pour {lang}",
     "log_runner_exception": "[runner-exception] {error}",
     "log_sponsorblock_metadata_failed": "[warn] Impossible de récupérer les métadonnées SponsorBlock: {error}",
@@ -231,4 +242,23 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
     # === MESSAGES DE SUCCÈS ET D'ERREUR ===
     "success_download_complete": "✅ Téléchargement terminé avec succès !",
     "error_invalid_url": "❌ URL invalide fournie",
+    # === MESSAGES D'ERREUR DE FALLBACK ===
+    "error_auth_required": "🔐 Authentification requise. Veuillez vérifier vos cookies ou réessayer.",
+    "error_fallback_failed": "❌ Toutes les stratégies de téléchargement ont échoué. Veuillez vérifier vos cookies et votre connexion internet.",
+    # === MESSAGES DE QUALITÉ PREMIUM ===
+    "premium_quality_title": "🏆 Stratégies de Qualité Premium",
+    "premium_strategy_select": "Sélectionner la stratégie de qualité :",
+    "premium_strategy_help": "Choisissez votre stratégie de qualité. Plus c'est strict, plus c'est exigeant sur les codecs.",
+    "premium_cookies_required": "🍪 **Cette stratégie exige des cookies** pour accéder aux formats premium.",
+    "premium_manual_format": "🔧 Sélection manuelle de format (optionnel)",
+    "premium_manual_help": "Remplace la stratégie premium si sélectionné",
 }
+
+# Accès direct aux valeurs de traduction (pour la compatibilité ascendante)
+status_retry_android = TRANSLATIONS["status_retry_android"]
+status_retry_ios = TRANSLATIONS["status_retry_ios"]
+status_retry_web = TRANSLATIONS["status_retry_web"]
+status_retry_cookies = TRANSLATIONS["status_retry_cookies"]
+status_trying_no_auth = TRANSLATIONS["status_trying_no_auth"]
+error_auth_required = TRANSLATIONS["error_auth_required"]
+error_fallback_failed = TRANSLATIONS["error_fallback_failed"]
