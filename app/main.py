@@ -765,7 +765,7 @@ def smart_download_with_quality_fallback(
 
     # Try each premium quality strategy
     for strategy_idx, strategy in enumerate(premium_strategies, 1):
-        safe_push_log(f"")
+        safe_push_log("")
         safe_push_log(
             f"🏆 QUALITY STRATEGY {strategy_idx}/{strategy_count}: {strategy['label']}"
         )
@@ -824,7 +824,7 @@ def smart_download_with_quality_fallback(
             cmd_base.extend(sb_params)
 
         # CLIENT FALLBACK 1: Try without cookies first (fastest)
-        safe_push_log(f"   🚀 Client 1/8: Default (no auth)")
+        safe_push_log("   🚀 Client 1/8: Default (no auth)")
         if status_placeholder:
             status_placeholder.info(
                 f"🚀 Strategy {strategy_idx}: Trying default client..."
@@ -845,11 +845,11 @@ def smart_download_with_quality_fallback(
             )
             continue
 
-        safe_push_log(f"   ⚠️ Auth error detected, trying cookies first...")
+        safe_push_log("   ⚠️ Auth error detected, trying cookies first...")
 
         # CLIENT FALLBACK 2: Try default client WITH cookies immediately
         if cookies_available:
-            safe_push_log(f"   🍪 Client 2/8: Default + cookies (priority)")
+            safe_push_log("   🍪 Client 2/8: Default + cookies (priority)")
 
             if status_placeholder:
                 status_placeholder.info(
@@ -892,7 +892,7 @@ def smart_download_with_quality_fallback(
 
         # CLIENT FALLBACK 5-8: Try remaining clients WITH cookies if available
         if cookies_available:
-            safe_push_log(f"   🍪 Trying remaining clients WITH cookies...")
+            safe_push_log("   🍪 Trying remaining clients WITH cookies...")
 
             for client_idx, client in enumerate(YOUTUBE_CLIENT_FALLBACKS[1:], 5):
                 client_name = client["name"]
@@ -914,9 +914,7 @@ def smart_download_with_quality_fallback(
                     )
                     return ret, ""
         else:
-            safe_push_log(
-                f"   ❌ No cookies available, skipping authenticated attempts"
-            )
+            safe_push_log("   ❌ No cookies available, skipping authenticated attempts")
 
         safe_push_log(f"   ❌ All clients failed for {strategy['label']}")
 
@@ -3629,7 +3627,7 @@ if submitted:
                     push_log(f"   ⚠️ Subtitle file not found for {lang}")
 
         # STEP 3: MUX - Cut video and add processed subtitles
-        push_log(f"📹 Step 3 - MUX: Cutting video and adding processed subtitles")
+        push_log("📹 Step 3 - MUX: Cutting video and adding processed subtitles")
 
         # Build video cutting command
         cmd_cut = [

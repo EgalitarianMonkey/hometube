@@ -242,12 +242,7 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
     # === MESSAGES DE SUCCÈS ET D'ERREUR ===
     "success_download_complete": "✅ Téléchargement terminé avec succès !",
     "error_invalid_url": "❌ URL invalide fournie",
-    # === MESSAGES DE STATUT POUR LE FALLBACK INTELLIGENT ===
-    "status_retry_android": "🔄 Essai avec le client Android...",
-    "status_retry_ios": "🔄 Essai avec le client iOS...",
-    "status_retry_web": "🔄 Essai avec le client Web...",
-    "status_retry_cookies": "🍪 Essai avec les cookies...",
-    "status_trying_no_auth": "🚀 Essai sans authentification...",
+    # === MESSAGES D'ERREUR DE FALLBACK ===
     "error_auth_required": "🔐 Authentification requise. Veuillez vérifier vos cookies ou réessayer.",
     "error_fallback_failed": "❌ Toutes les stratégies de téléchargement ont échoué. Veuillez vérifier vos cookies et votre connexion internet.",
     # === MESSAGES DE QUALITÉ PREMIUM ===

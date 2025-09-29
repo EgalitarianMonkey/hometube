@@ -244,12 +244,7 @@ Update your file cookies or try using **browser cookies** instead of file cookie
     # === SUCCESS & ERROR MESSAGES ===
     "success_download_complete": "✅ Download completed successfully!",
     "error_invalid_url": "❌ Invalid URL provided",
-    # === INTELLIGENT FALLBACK STATUS MESSAGES ===
-    "status_retry_android": "🔄 Trying Android client...",
-    "status_retry_ios": "🔄 Trying iOS client...",
-    "status_retry_web": "🔄 Trying Web client...",
-    "status_retry_cookies": "🍪 Trying with cookies...",
-    "status_trying_no_auth": "🚀 Trying without authentication...",
+    # === FALLBACK ERROR MESSAGES ===
     "error_auth_required": "🔐 Authentication required. Please check your cookies or try again.",
     "error_fallback_failed": "❌ All download strategies failed. Please check your cookies and internet connection.",
     # === PREMIUM QUALITY MESSAGES ===
