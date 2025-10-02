@@ -196,7 +196,7 @@ Custom yt-dlp arguments can be added directly from the UI or set by default for 
 
 ### ⚙️ Essential Configuration
 
-**📋 HomeTube uses environment variables for all configurations**: videos download paths, temporary download folder, authentication, languages, subtitles, and more.
+**📋 HomeTube uses environment variables for all configurations**: videos download paths, temporary download folder, authentication, languages, quality profiles, and more.
 
 Depending of the setup, Docker, Docker compose, Portainer, local run, environment variables can be passed to the application in different ways.
 
@@ -426,16 +426,29 @@ HomeTube configuration is managed through the `.env` file:
 
 | Variable | Purpose | Defaults | Examples |
 |---------|---------|---------|---------|
-| `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` | `en,fr` |
-| `SUBTITLES_CHOICES` | Subtitles' languages proposals | `en` | `en,fr,es` |
+| **Core Paths & System** | | | |
 | `VIDEOS_FOLDER` | Where videos will be moved at the end of download | `/data/videos` if in Docker container else `./downloads` | `/data/videos` |
 | `TMP_DOWNLOAD_FOLDER` | Temporary download location | `/data/tmp` if in Docker container else `./tmp` | `/data/tmp` |
+| `PORT` | Web interface port | `8501` | `8501` |
+| `TZ` | Timezone for Docker | `America/New_York` | `Europe/Paris` |
+| `DEBUG` | Debug logging mode | `false` | `true` |
+| **Authentication & Cookies** | | | |
 | `YOUTUBE_COOKIES_FILE_PATH` | Authentication for private videos | **Must be defined** (or `COOKIES_FROM_BROWSER`) | `/config/youtube_cookies.txt` |
 | `COOKIES_FROM_BROWSER` | Cookies auth directly from active local browser |  | `chrome,firefox,brave,chromium,edge,opera,safari,vivaldi,whale` |
+| `DEFAULT_BROWSER_SELECT` | Default browser for cookie extraction | `chrome` | `chrome,firefox,edge,safari` |
+| **Quality & Download Preferences** | | | |
+| `DEFAULT_DOWNLOAD_MODE` | Download strategy | `auto` | `auto,forced` |
+| `DEFAULT_QUALITY_PROFILE` | Default quality profile. Following best quality strategy by default | *auto-selection* | `mkv_av1_opus,mkv_vp9_opus,mp4_av1_aac,mp4_h264_aac` |
+| `DEFAULT_REFUSE_QUALITY_DOWNGRADE` | Stop at first failure vs fallback | `false` | `true,false` |
+| `DEFAULT_EMBED_CHAPTERS` | Embed chapters by default | `true` | `true,false` |
+| `DEFAULT_EMBED_SUBS` | Embed subtitles by default | `true` | `true,false` |
+| `DEFAULT_CUTTING_MODE` | Video cutting precision | `keyframes` | `keyframes,precise` |
+| **Localization** | | | |
+| `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` | `en,fr` |
+| `SUBTITLES_CHOICES` | Subtitles' languages proposals | `en` | `en,fr,es` |
+| **Advanced Options** | | | |
 | `YTDLP_CUSTOM_ARGS` | Custom yt-dlp arguments |  | `--max-filesize 5M --write-info-json` |
-| `TZ` | Timezone for Docker | `America/New_York` | `Europe/Paris` |
-| `PORT` | Web interface port | `8501` | `8501` |
-| `DEBUG` | Debug logging mode | `false` | `true` |
+| **Docker-specific Variables** | | | |
 | `VIDEOS_FOLDER_DOCKER_HOST` | Host videos folder in Docker context | **Must be defined** | `/mnt/data/videos` if in Docker container else `/downloads` |
 | `TMP_DOWNLOAD_FOLDER_DOCKER_HOST` | Host tmp download videos folder in Docker context | **Must be defined** | `/mnt/data/hometube/tmp` if in Docker container else `./tmp` |
 | `YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST` | Youtube cookies file path in Docker context | **Must be defined** | `/opt/cookies/youtube.txt` if in Docker container else `./cookies/youtube_cookies.txt` |

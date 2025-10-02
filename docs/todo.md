@@ -2,6 +2,18 @@
 
 This document outlines planned improvements and enhancements for HomeTube.
 
+
+## Update docker version
+
+**Status:** Planned
+**Priority:** High
+
+**Description:**
+yt-dlp can get outdated quickly as video platforms change their structures. Regularly updating the Docker image to include the latest version of yt-dlp ensures compatibility with current video sites and access to new features and bug fixes.
+Adding a notification in the UI with docker update commands in the UI when the yt-dlp version isn't the latest and hasn't been updated for 14 days would improve the user experience.
+
+---
+
 ## Direct download
 
 **Status:** Idea

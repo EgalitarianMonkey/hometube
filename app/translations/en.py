@@ -130,6 +130,8 @@ TRANSLATIONS = {
     "error_signature_issue": "🔑 SIGNATURE ISSUE DETECTED:",
     "error_cookies_required": "⚠️ ENABLE COOKIES - This is likely the main issue",
     "error_cookies_expired": "🔄 UPDATE YOUR COOKIES - They may be expired",
+    "cookies_expired_friendly_message": "Your YouTube cookies have expired and need to be refreshed. Please update them in the Advanced Options section.",
+    "cookies_warning_dismiss": "Got it, dismiss this warning",
     "hint_signature_protection": "YouTube uses encrypted signatures to protect video streams",
     "hint_cookies_for_public": "Even public videos need cookies for signature verification!",
     # === SUCCESS/WARNING MESSAGES ===
