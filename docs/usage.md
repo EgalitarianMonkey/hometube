@@ -590,50 +590,125 @@ For power users who need specific functionality, HomeTube supports custom yt-dlp
 --max-downloads 5
 ```
 
-#### 🌍 Environment Variables
+### 🌍 Environment Variables Configuration
 
-You can also set default custom arguments using environment variables:
+HomeTube supports comprehensive environment variable configuration for all its features, including custom yt-dlp arguments and system defaults:
+
+#### 📊 Quality & Download Preferences
+
+| Variable | Default | Description | Options |
+|----------|---------|-------------|---------|
+| `DEFAULT_DOWNLOAD_MODE` | `auto` | Download strategy | `auto`, `forced` |
+| `DEFAULT_QUALITY_PROFILE` | *(empty)* | Default quality profile | `mkv_av1_opus`, `mkv_vp9_opus`, `mp4_av1_aac`, `mp4_h264_aac` |
+| `DEFAULT_REFUSE_QUALITY_DOWNGRADE` | `false` | Stop at first failure | `true`, `false` |
+| `DEFAULT_EMBED_CHAPTERS` | `true` | Embed chapters by default | `true`, `false` |  
+| `DEFAULT_EMBED_SUBS` | `true` | Embed subtitles by default | `true`, `false` |
+| `DEFAULT_CUTTING_MODE` | `keyframes` | Video cutting precision | `keyframes`, `precise` |
+
+#### 🌐 Browser Configuration
+
+| Variable | Default | Description | Options |
+|----------|---------|-------------|---------|
+| `DEFAULT_BROWSER_SELECT` | `chrome` | Default browser for cookies | `chrome`, `firefox`, `edge`, `safari`, `chromium` |
+
+#### 🎯 Core Configuration
+
+| Variable | Default | Description | Example |
+|----------|---------|-------------|---------|
+| `DOWNLOAD_FOLDER` | `/data/downloads` | Main download directory | `/home/user/Videos` |
+| `TMP_DOWNLOAD_FOLDER` | `/data/tmp` | Temporary processing folder | `/tmp/hometube` |
+| `HOMETUBE_LANGUAGE` | `en` | Interface language | `en`, `fr` |
+| `YTDLP_CUSTOM_ARGS` | *(empty)* | Default yt-dlp arguments | `--max-filesize 100M` |
+
+#### 🛠️ Custom yt-dlp Arguments
+
+You can set default custom arguments using the `YTDLP_CUSTOM_ARGS` environment variable:
 
 ```bash
 # In your .env file
 YTDLP_CUSTOM_ARGS=--max-filesize 100M --write-info-json
 ```
 
-#### ⚠️ Important Notes
+**⚠️ Important Notes:**
 
 - **Format Arguments**: Don't override `--format` as it's managed by the quality selector
-- **Output Arguments**: Don't override output path arguments 
+- **Output Arguments**: Don't override output path arguments
 - **Safety**: Invalid arguments will be ignored with error messages
 - **Priority**: UI arguments override environment variables
 
-#### 🔄 Argument Parsing
+**🔄 Argument Parsing:**
 
 Arguments are parsed safely using shell-style parsing:
+
 - **Quoted Strings**: Use quotes for arguments with spaces: `--user-agent "Custom Agent 1.0"`
 - **Multiple Arguments**: Separate with spaces: `--retries 3 --max-filesize 100M`
 - **Complex Paths**: Quote paths with spaces: `--cookies "/path with spaces/cookies.txt"`
 
-#### 📚 Examples
+**📚 yt-dlp Examples:**
 
-**Corporate Network**:
+*Corporate Network:*
+
 ```bash
---proxy http://proxy.company.com:8080 --retries 5
+YTDLP_CUSTOM_ARGS=--proxy http://proxy.company.com:8080 --retries 5
 ```
 
-**Bandwidth Limited**:
+*Bandwidth Limited:*
+
 ```bash
---limit-rate 1M --max-filesize 50M
+YTDLP_CUSTOM_ARGS=--limit-rate 1M --max-filesize 50M
 ```
 
-**Archival Download**:
+*Archival Download:*
+
 ```bash
---write-info-json --write-description --write-thumbnail --write-sub
+YTDLP_CUSTOM_ARGS=--write-info-json --write-description --write-thumbnail --write-sub
 ```
 
-**Development/Testing**:
+*Development/Testing:*
+
 ```bash
---verbose --print-json --simulate
+YTDLP_CUSTOM_ARGS=--verbose --print-json --simulate
 ```
+
+#### �🔧 Usage Examples
+
+**Batch Processing Setup**:
+
+```bash
+# High-quality archival configuration
+DEFAULT_DOWNLOAD_MODE=auto
+DEFAULT_QUALITY_PROFILE=mkv_av1_opus
+DEFAULT_REFUSE_QUALITY_DOWNGRADE=false
+DEFAULT_EMBED_CHAPTERS=true
+DEFAULT_EMBED_SUBS=true
+DEFAULT_CUTTING_MODE=precise
+```
+
+**Fast Download Setup**:
+
+```bash
+# Quick downloads with fallbacks
+DEFAULT_DOWNLOAD_MODE=auto
+DEFAULT_QUALITY_PROFILE=mp4_h264_aac
+DEFAULT_REFUSE_QUALITY_DOWNGRADE=false
+DEFAULT_CUTTING_MODE=keyframes
+```
+
+**Strict Quality Control**:
+
+```bash
+# No quality compromises
+DEFAULT_DOWNLOAD_MODE=forced
+DEFAULT_QUALITY_PROFILE=mkv_av1_opus
+DEFAULT_REFUSE_QUALITY_DOWNGRADE=true
+```
+
+#### 📝 Configuration Notes
+
+- **Priority**: UI selections always override environment defaults
+- **Profile Selection**: Empty `DEFAULT_QUALITY_PROFILE` enables automatic selection
+- **Mode Impact**: `auto` mode tries all profiles, `forced` uses only the specified profile
+- **Fallback Behavior**: `DEFAULT_REFUSE_QUALITY_DOWNGRADE=false` allows trying lower quality profiles
 
 ## 🔧 Troubleshooting
 

@@ -79,7 +79,7 @@ YOUTUBE_CLIENT_FALLBACKS = [
 
 def probe_available_formats(url: str, cookies_part: List[str]) -> Dict[str, bool]:
     """
-    Probe video to check which codecs are actually available.
+    Probe video to check which codecs are actually available with comprehensive retry strategy.
     Returns a dict of codec availability to filter profiles intelligently.
 
     Args:
@@ -89,42 +89,177 @@ def probe_available_formats(url: str, cookies_part: List[str]) -> Dict[str, bool
     Returns:
         Dict with codec availability: {"av01": True, "vp9": True, "opus": False, ...}
     """
-    try:
-        safe_push_log("🔍 Probing available formats...")
+    safe_push_log("🔍 Probing available formats...")
 
-        cmd_probe = ["yt-dlp", "--list-formats", "--no-download", *cookies_part, url]
+    # Comprehensive strategies for codec probing
+    strategies = []
 
-        result = run_subprocess_safe(
-            cmd_probe, timeout=30, error_context="Format probe"
+    # Strategy 1: Web client with cookies (best for premium formats like AV1/VP9)
+    if cookies_part:
+        strategies.append(
+            {
+                "name": "cookies + web client",
+                "cmd": [
+                    "yt-dlp",
+                    "--list-formats",
+                    "--no-download",
+                    "--extractor-args",
+                    "youtube:player_client=web",
+                    "--verbose",
+                ]
+                + cookies_part
+                + [url],
+                "timeout": 45,
+            }
         )
 
-        if result.returncode != 0:
-            safe_push_log(f"⚠️ Format probe failed: {result.stderr}")
-            # Return permissive defaults if probe fails
-            return {"av01": True, "vp9": True, "h264": True, "opus": True, "aac": True}
+        strategies.append(
+            {
+                "name": "cookies + android client",
+                "cmd": [
+                    "yt-dlp",
+                    "--list-formats",
+                    "--no-download",
+                    "--extractor-args",
+                    "youtube:player_client=android",
+                ]
+                + cookies_part
+                + [url],
+                "timeout": 30,
+            }
+        )
 
-        # Parse available codecs from output
-        output = result.stdout.lower()
-        codecs_available = {
-            "av01": "av01" in output or "av1" in output,
-            "vp9": "vp9" in output,
-            "h264": "h264" in output or "avc" in output,
-            "opus": "opus" in output,
-            "aac": "aac" in output,
+        strategies.append(
+            {
+                "name": "cookies + iOS client",
+                "cmd": [
+                    "yt-dlp",
+                    "--list-formats",
+                    "--no-download",
+                    "--extractor-args",
+                    "youtube:player_client=ios",
+                ]
+                + cookies_part
+                + [url],
+                "timeout": 30,
+            }
+        )
+
+    # Strategy 2: Multiple clients without cookies
+    no_auth_clients = [
+        ("web client (no auth)", "web", 45),
+        ("android client (no auth)", "android", 30),
+        ("iOS client (no auth)", "ios", 30),
+    ]
+
+    for name, client, timeout in no_auth_clients:
+        strategies.append(
+            {
+                "name": name,
+                "cmd": [
+                    "yt-dlp",
+                    "--list-formats",
+                    "--no-download",
+                    "--extractor-args",
+                    f"youtube:player_client={client}",
+                    url,
+                ],
+                "timeout": timeout,
+            }
+        )
+
+    # Strategy 3: Default fallback
+    strategies.append(
+        {
+            "name": "default client",
+            "cmd": ["yt-dlp", "--list-formats", "--no-download", url],
+            "timeout": 30,
         }
+    )
 
-        # Log findings
+    # Try each strategy and look for the most comprehensive result
+    best_result = None
+    best_codec_count = 0
+
+    for i, strategy in enumerate(strategies, 1):
+        try:
+            safe_push_log(f"🔄 Strategy {i}/{len(strategies)}: {strategy['name']}...")
+
+            result = run_subprocess_safe(
+                strategy["cmd"],
+                timeout=strategy.get("timeout", 30),
+                error_context=f"Format probe ({strategy['name']})",
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                # Parse available codecs from output
+                output = result.stdout.lower()
+
+                # Enhanced codec detection patterns
+                codecs_available = {
+                    "av01": any(
+                        pattern in output for pattern in ["av01", "av1", "aom"]
+                    ),
+                    "vp9": "vp9" in output,
+                    "h264": any(
+                        pattern in output for pattern in ["h264", "avc", "h.264"]
+                    ),
+                    "opus": "opus" in output,
+                    "aac": "aac" in output,
+                }
+
+                # Count available codecs
+                codec_count = sum(codecs_available.values())
+
+                # Log findings
+                available_codecs = [
+                    codec for codec, available in codecs_available.items() if available
+                ]
+                safe_push_log(
+                    f"✅ {strategy['name']}: {', '.join(available_codecs)} ({codec_count} codecs)"
+                )
+
+                # Keep the result with the most codecs (most comprehensive)
+                if codec_count > best_codec_count:
+                    best_result = codecs_available
+                    best_codec_count = codec_count
+                    safe_push_log(f"🏆 New best result: {codec_count} codecs detected")
+
+                # If we found high-quality codecs, we can be confident in the result
+                if (
+                    codec_count >= 4
+                    and codecs_available.get("av01")
+                    and codecs_available.get("opus")
+                ):
+                    safe_push_log(
+                        "🎯 Excellent codec detection: all premium formats found"
+                    )
+                    return codecs_available
+
+            else:
+                safe_push_log(
+                    f"⚠️ {strategy['name']} failed: {result.stderr.strip()[:50]}..."
+                )
+
+        except Exception as e:
+            safe_push_log(f"⚠️ {strategy['name']} error: {e}")
+            continue
+
+    # Return the best result found
+    if best_result and best_codec_count > 0:
         available_codecs = [
-            codec for codec, available in codecs_available.items() if available
+            codec for codec, available in best_result.items() if available
         ]
-        safe_push_log(f"📋 Available codecs: {', '.join(available_codecs)}")
+        safe_push_log(f"✅ Using best probe result: {', '.join(available_codecs)}")
+        return best_result
 
-        return codecs_available
+    # All probes failed - return permissive defaults
+    safe_push_log("⚠️ All codec probes failed, using permissive defaults")
+    safe_push_log(
+        "📋 Assuming all codecs available (profiles will be filtered during download)"
+    )
 
-    except Exception as e:
-        safe_push_log(f"⚠️ Error probing formats: {e}")
-        # Return permissive defaults on error
-        return {"av01": True, "vp9": True, "h264": True, "opus": True, "aac": True}
+    return {"av01": True, "vp9": True, "h264": True, "opus": True, "aac": True}
 
 
 def filter_viable_profiles(
@@ -483,13 +618,26 @@ IN_CONTAINER = in_container()
 # === DEFAULT CONFIGURATION ===
 # Exhaustive dictionary defining all configurable variables with default values
 DEFAULT_CONFIG = {
+    # === Core Paths ===
     "VIDEOS_FOLDER": "/data/videos" if IN_CONTAINER else "./downloads",
     "TMP_DOWNLOAD_FOLDER": "/data/tmp" if IN_CONTAINER else "./tmp",
+    # === Authentication ===
     "YOUTUBE_COOKIES_FILE_PATH": "",
-    "UI_LANGUAGE": "en",
     "COOKIES_FROM_BROWSER": "",
+    # === Localization ===
+    "UI_LANGUAGE": "en",
     "SUBTITLES_CHOICES": "en",
+    # === Quality & Download Preferences ===
+    "DEFAULT_DOWNLOAD_MODE": "auto",  # auto (try all profiles) or forced (single profile)
+    "DEFAULT_QUALITY_PROFILE": "",  # mkv_av1_opus, mkv_vp9_opus, mp4_av1_aac, mp4_h264_aac
+    "DEFAULT_REFUSE_QUALITY_DOWNGRADE": "false",  # Stop at first failure instead of trying lower quality
+    "DEFAULT_EMBED_CHAPTERS": "true",  # Embed chapters by default
+    "DEFAULT_EMBED_SUBS": "true",  # Embed subtitles by default
+    # === Advanced Options ===
     "YTDLP_CUSTOM_ARGS": "",
+    "DEFAULT_CUTTING_MODE": "keyframes",  # keyframes or precise
+    "DEFAULT_BROWSER_SELECT": "chrome",  # Default browser for cookie extraction
+    # === System ===
     "DEBUG": "false",
 }
 
@@ -752,6 +900,48 @@ def is_sabr_warning(message: str) -> bool:
         "youtube may have enabled",
     ]
     return any(pattern in message_lower for pattern in sabr_patterns)
+
+
+def is_cookies_expired_warning(message: str) -> bool:
+    """Check if message is a YouTube cookies expiration warning"""
+    message_lower = message.lower()
+    cookies_patterns = [
+        "the provided youtube account cookies are no longer valid",
+        "cookies are no longer valid",
+        "they have likely been rotated in the browser as a security measure",
+        "for tips on how to effectively export youtube cookies",
+    ]
+    return any(pattern in message_lower for pattern in cookies_patterns)
+
+
+def should_suppress_message(message: str) -> bool:
+    """Check if a message should be suppressed from user logs"""
+    message_lower = message.lower()
+
+    # Suppress empty lines
+    if message.strip() == "":
+        return True
+
+    # Suppress cookies expiration warnings (we'll show a friendly message instead)
+    if is_cookies_expired_warning(message):
+        return True
+
+    # Suppress SABR warnings (technical, not user-relevant)
+    if is_sabr_warning(message):
+        return True
+
+    # Suppress Python tracebacks and technical errors
+    technical_patterns = [
+        "traceback (most recent call last)",
+        'file "<frozen runpy>"',
+        'file "/usr/local/bin/yt-dlp',
+        'file "/usr/lib/python',
+        "contextlib.py",
+        "cookies.py",
+        "^file ",  # Generic file references in tracebacks
+    ]
+
+    return any(pattern in message_lower for pattern in technical_patterns)
 
 
 def is_authentication_error(error_message: str) -> bool:
@@ -1340,108 +1530,193 @@ def parse_format_line(line: str) -> Optional[Dict]:
 
 def get_video_title(url: str, cookies_part: List[str]) -> str:
     """
-    Get the title of the video using yt-dlp
+    Get the title of the video using yt-dlp with retry strategy.
     Returns sanitized title suitable for filename
     """
-    try:
-        safe_push_log("📋 Retrieving video title...")
+    safe_push_log("📋 Retrieving video title...")
 
-        cmd_title = [
-            "yt-dlp",
-            "--print",
-            "title",
-            "--no-download",
-            *cookies_part,
-            url,
-        ]
+    # Simple retry strategies for title extraction
+    strategies = []
 
-        result = run_subprocess_safe(
-            cmd_title, timeout=30, error_context="Video title extraction"
+    # Try with cookies first if available
+    if cookies_part:
+        strategies.append(
+            {
+                "name": "with cookies",
+                "cmd": ["yt-dlp", "--print", "title", "--no-download"]
+                + cookies_part
+                + [url],
+            }
         )
 
-        if result.returncode == 0 and result.stdout.strip():
-            title = result.stdout.strip()
-            # Sanitize title for filename
-            sanitized = sanitize_filename(title)
-            safe_push_log(f"📝 Video title: {title}")
-            return sanitized
-        else:
-            error_msg = result.stderr.strip()
-            safe_push_log(f"⚠️ Could not retrieve title: {error_msg}")
+    # Try without cookies
+    strategies.append(
+        {
+            "name": "without cookies",
+            "cmd": ["yt-dlp", "--print", "title", "--no-download", url],
+        }
+    )
 
-            # Check if this might be a cookies/authentication issue
-            if is_authentication_error(error_msg):
-                log_authentication_error_hint(error_msg)
+    # Try each strategy
+    for strategy in strategies:
+        try:
+            result = run_subprocess_safe(
+                strategy["cmd"],
+                timeout=30,
+                error_context=f"Title extraction ({strategy['name']})",
+            )
 
-            return "video"
+            if result.returncode == 0 and result.stdout.strip():
+                title = result.stdout.strip()
+                # Sanitize title for filename
+                sanitized = sanitize_filename(title)
+                safe_push_log(f"✅ Title retrieved {strategy['name']}: {title}")
+                return sanitized
+            else:
+                safe_push_log(
+                    f"⚠️ Title extraction {strategy['name']} failed: {result.stderr.strip()[:50]}..."
+                )
+                # Only show auth hint for first failure with cookies
+                if strategy["name"] == "with cookies" and is_authentication_error(
+                    result.stderr
+                ):
+                    log_authentication_error_hint(result.stderr)
 
-    except Exception as e:
-        safe_push_log(f"⚠️ Error getting video title: {e}")
-        return "video"
+        except Exception as e:
+            safe_push_log(f"⚠️ Title extraction {strategy['name']} error: {e}")
+            continue
+
+    # All strategies failed
+    safe_push_log("⚠️ Could not retrieve video title, using default")
+    return "video"
 
 
 def get_video_formats(url: str, cookies_part: List[str]) -> List[Dict]:
     """
-    Get available video formats for a URL using yt-dlp
+    Get available video formats for a URL using yt-dlp with robust retry strategy.
     Returns a list of format dictionaries with id, ext, resolution, description
     Ordered by quality (highest first)
+
+    Retry strategy:
+    1. Try with provided cookies + different YouTube clients
+    2. Try without cookies + different YouTube clients
+    3. Handle temporary failures with backoff
     """
-    try:
-        safe_push_log(t("log_formats_detecting"))
+    safe_push_log(t("log_formats_detecting"))
 
-        cmd_formats = [
-            "yt-dlp",
-            "--list-formats",
-            "--no-download",
-            *cookies_part,
-            url,
-        ]
+    # Define retry strategies
+    strategies = []
 
-        result = run_subprocess_safe(
-            cmd_formats, timeout=60, error_context="Video formats extraction"
-        )
-
-        if result.returncode != 0:
-            error_msg = result.stderr.strip()
-            safe_push_log(t("log_formats_failed", error=error_msg))
-
-            # Check if this might be a cookies/authentication issue
-            if is_authentication_error(error_msg):
-                log_authentication_error_hint(error_msg)
-
-            return []
-
-        # Parse yt-dlp format output
-        formats = []
-        for line in result.stdout.strip().split("\n"):
-            format_info = parse_format_line(line)
-            if format_info:
-                formats.append(format_info)
-
-        # Sort formats by quality (highest first)
-        formats.sort(
-            key=lambda x: extract_resolution_value(x["resolution"]),
-            reverse=True,
-        )
-
-        safe_push_log(t("log_formats_count", count=len(formats)))
-
-        # If no formats found, provide helpful suggestions
-        if len(formats) == 0:
-            safe_push_log("⚠️ No video formats detected")
-            safe_push_log("🍪 This might indicate:")
-            safe_push_log(
-                "   • The video requires authentication (age-restricted, private, etc.)"
+    # Strategy 1: With cookies (if available)
+    if cookies_part:
+        for client in YOUTUBE_CLIENT_FALLBACKS:
+            strategies.append(
+                {
+                    "name": f"cookies + {client['name']} client",
+                    "cmd_base": ["yt-dlp", "--list-formats", "--no-download"]
+                    + client["args"]
+                    + cookies_part,
+                    "auth_attempt": True,
+                }
             )
-            safe_push_log("   • Your cookies are invalid or expired")
-            safe_push_log("   • The video is not available in your region")
-            safe_push_log("💡 Try using browser cookies or updating your cookies file")
 
-        return formats
+    # Strategy 2: Without cookies
+    for client in YOUTUBE_CLIENT_FALLBACKS:
+        strategies.append(
+            {
+                "name": f"{client['name']} client (no auth)",
+                "cmd_base": ["yt-dlp", "--list-formats", "--no-download"]
+                + client["args"],
+                "auth_attempt": False,
+            }
+        )
 
-    except Exception as e:
-        safe_push_log(t("log_formats_error", error=e))
-        return []
+    last_error = ""
+
+    # Try each strategy
+    for i, strategy in enumerate(strategies, 1):
+        try:
+            safe_push_log(f"🔍 Strategy {i}/{len(strategies)}: {strategy['name']}")
+
+            cmd_formats = strategy["cmd_base"] + [url]
+
+            result = run_subprocess_safe(
+                cmd_formats,
+                timeout=60,
+                error_context=f"Formats extraction ({strategy['name']})",
+            )
+
+            if result.returncode == 0:
+                # Success! Parse the output
+                formats = []
+                for line in result.stdout.strip().split("\n"):
+                    format_info = parse_format_line(line)
+                    if format_info:
+                        formats.append(format_info)
+
+                if formats:  # Only return if we actually got formats
+                    # Sort formats by quality (highest first)
+                    formats.sort(
+                        key=lambda x: extract_resolution_value(x["resolution"]),
+                        reverse=True,
+                    )
+
+                    safe_push_log(f"✅ Success with {strategy['name']}")
+                    safe_push_log(t("log_formats_count", count=len(formats)))
+                    return formats
+                else:
+                    safe_push_log(f"⚠️ {strategy['name']} returned no parseable formats")
+
+            else:
+                # Strategy failed, log and continue
+                error_msg = result.stderr.strip()
+                last_error = error_msg
+                safe_push_log(f"❌ {strategy['name']} failed: {error_msg[:100]}...")
+
+                # For auth errors, only show detailed hint once (from first auth attempt)
+                if (
+                    strategy["auth_attempt"]
+                    and i == 1
+                    and is_authentication_error(error_msg)
+                ):
+                    log_authentication_error_hint(error_msg)
+
+                # Add small delay before next attempt to avoid rate limiting
+                if i < len(strategies):
+                    import time
+
+                    time.sleep(0.5)
+
+        except Exception as e:
+            safe_push_log(f"❌ {strategy['name']} error: {e}")
+            last_error = str(e)
+            continue
+
+    # All strategies failed
+    safe_push_log("❌ All format detection strategies failed")
+    safe_push_log("🔧 Comprehensive troubleshooting:")
+
+    if cookies_part:
+        safe_push_log("🍪 Authentication was attempted but failed")
+        safe_push_log("💡 Try:")
+        safe_push_log("   • Update your cookies (they may be expired)")
+        safe_push_log("   • Sign out and back into YouTube in your browser")
+        safe_push_log("   • Try a different browser for cookie extraction")
+    else:
+        safe_push_log("⚠️ No authentication configured")
+        safe_push_log("💡 Consider:")
+        safe_push_log("   • Enabling browser cookies for better format access")
+        safe_push_log("   • Some videos may require authentication")
+
+    safe_push_log("🌍 Other possibilities:")
+    safe_push_log("   • Video is private, region-locked, or deleted")
+    safe_push_log("   • Temporary YouTube API issues")
+    safe_push_log("   • Network connectivity problems")
+
+    if last_error:
+        safe_push_log(f"📋 Last error: {last_error}")
+
+    return []
 
 
 # --- 2) Retrieve raw SponsorBlock data ---
@@ -2543,6 +2818,15 @@ with st.expander(f"{t('embedding_title')}", expanded=False):
 
 # === COOKIES MANAGEMENT ===
 with st.expander(t("cookies_title"), expanded=False):
+    # Show cookies expiration warning if detected during recent downloads
+    if st.session_state.get("cookies_expired", False):
+        st.warning("🔄 " + t("cookies_expired_friendly_message"))
+
+        # Add a button to clear the warning
+        if st.button(t("cookies_warning_dismiss"), key="dismiss_cookies_warning"):
+            st.session_state["cookies_expired"] = False
+            st.rerun()
+
     st.info(t("cookies_presentation"))
 
     # Determine default cookie method based on available options
@@ -2814,7 +3098,17 @@ def run_cmd(cmd: List[str], progress=None, status=None, info=None) -> int:
                 # Clean ANSI escape sequences before logging (FFmpeg can output colors)
                 clean_line = ANSI_ESCAPE_PATTERN.sub("", line)
 
-                push_log(clean_line)
+                # Check if this message should be suppressed from user logs
+                if not should_suppress_message(clean_line):
+                    push_log(clean_line)
+
+                # Track cookies expiration for user-friendly notification
+                if is_cookies_expired_warning(clean_line):
+                    if not hasattr(metrics, "_cookies_expired_detected"):
+                        metrics._cookies_expired_detected = True
+                        # Set session state for persistent notification
+                        st.session_state["cookies_expired"] = True
+                        push_log("🔄 " + t("cookies_expired_friendly_message"))
 
                 # Capture error messages for fallback strategies - use cleaned line
                 line_lower = clean_line.lower()
