@@ -37,10 +37,16 @@ def get_translations() -> Dict[str, Any]:
         language = os.getenv("UI_LANGUAGE", "en").lower()
 
     if language == "en":
-        from .en import TRANSLATIONS
+        try:
+            from .en import TRANSLATIONS
+        except ImportError:
+            from en import TRANSLATIONS
     else:
         # Default to French for any other language
-        from .fr import TRANSLATIONS
+        try:
+            from .fr import TRANSLATIONS
+        except ImportError:
+            from fr import TRANSLATIONS
 
     # Cache the translations
     _translations_cache = TRANSLATIONS

@@ -54,18 +54,80 @@ Once installed, access the web interface at:
 2. **Choose Destination**: Select or create a folder for organization
 3. **Click Download**: Monitor progress in real-time
 
-### 2. Quality Selection
+### 2. Quality Profiles & Download Modes
 
-**Auto Mode (Default)**:
-- Automatically selects best available quality
-- Balances file size and quality
-- Recommended for most users
+HomeTube features a **professional 4-tier quality matrix** that intelligently balances quality, compatibility, and file size.
 
-**Manual Mode**:
-1. Click **"Detect Formats"** to see all available options
-2. Review quality, codec, and estimated file size
-3. Select your preferred format
-4. Download with chosen settings
+#### 🏆 Quality Profiles Matrix
+
+| Priority | Profile | Video | Audio | Container | Best For |
+|----------|---------|-------|-------|-----------|----------|
+| **🏆 Ultimate** | AV1 + Opus | AV1 | Opus | MKV | Desktop viewing, archival quality |
+| **🥇 Premium** | VP9 + Opus | VP9 | Opus | MKV | Premium streaming, good device support |
+| **🥈 Compatible** | AV1 + AAC | AV1 | AAC | MP4 | Mobile devices, smart TVs |
+| **🥉 Universal** | H.264 + AAC | H.264 | AAC | MP4 | Maximum compatibility, older devices |
+
+#### 📋 Download Modes
+
+**🔄 Auto Mode (Recommended)**
+- Tries each profile in priority order until one succeeds
+- **Smart fallback**: Automatically moves to next profile if current fails
+- **Maximum success rate**: Ensures you get the best quality possible
+- **Intelligent codec detection**: Only tries profiles with available codecs
+
+**🎯 Forced Mode (Expert)**
+- Uses **only** your selected quality profile
+- **No fallback**: If the profile fails, download stops
+- **Precise control**: Perfect for specific quality requirements
+- **Best when**: You know exactly what quality you want
+
+**🚫 Refuse Quality Downgrade**
+- Stops at the **first failure** instead of trying lower quality
+- Works with both Auto and Forced modes
+- **Quality-first approach**: Get the best quality or nothing
+- **Useful when**: Storage space isn't a concern, quality is paramount
+
+#### 🎯 How Profile Selection Works
+
+**Auto Mode Process:**
+1. 🔍 **Codec Detection**: Probes video to check available formats
+2. 🎯 **Profile Filtering**: Only tries profiles with available codecs
+3. 🏆 **Quality Priority**: Starts with Ultimate, works down to Universal
+4. ✅ **Success**: Stops at first successful download
+
+**Forced Mode Process:**
+1. 🎯 **Single Target**: Uses only your selected profile
+2. 🔍 **Format Check**: Verifies the profile's codecs are available
+3. ⚡ **Direct Attempt**: Downloads immediately, no fallback
+4. ❌ **Fail Fast**: Stops if the specific profile fails
+
+#### 💡 Choosing the Right Mode
+
+**Use Auto Mode When:**
+- You want the best quality possible ✅
+- Download reliability is important ✅  
+- You're not sure about codec availability ✅
+- **Most common scenario** ✅
+
+**Use Forced Mode When:**
+- You need a specific codec/container combination 🎯
+- File size constraints require exact format 🎯
+- You're batch downloading with consistent requirements 🎯
+- You're an expert user with specific needs 🎯
+
+**Enable "Refuse Quality Downgrade" When:**
+- Quality is more important than success rate 🚫
+- You prefer failed downloads over lower quality 🚫
+- Storage limitations require high-quality files only 🚫
+
+#### 🛠️ Manual Format Override
+
+For ultimate control, you can override the profile system entirely:
+
+1. **🔍 Detect Formats**: Click to probe all available video formats
+2. **📊 Review Options**: See quality, codec, file size estimates
+3. **🎯 Select Format**: Choose your preferred format manually
+4. **⚡ Download**: Uses your exact selection, bypasses profile system
 
 ### 3. File Organization
 
@@ -152,6 +214,104 @@ rsync -avz ~/Downloads/cookies.txt user@homelab-ip:/path/to/hometube/cookies/
 - **Twitch**: Some VODs and subscriber content
 - **Platform-specific**: Member-only or geo-restricted content
 - **General**: Live streams and premium features
+
+## 🛠️ Technical: How Profile System Works
+
+### Advanced Profile Architecture
+
+HomeTube uses a **professional 4-tier matrix** with intelligent codec detection and systematic fallback:
+
+#### 🔍 Profile Detection Process
+
+**1. Codec Availability Probing**
+```
+🔍 Step 1: Probe video for available codecs
+   → Check AV1, VP9, H.264 video availability
+   → Check Opus, AAC audio availability
+   → Filter profiles to only viable combinations
+```
+
+**2. Profile Priority Ordering**
+```
+🏆 Priority 1: MKV – AV1 + Opus (Ultimate Quality)
+🥇 Priority 2: MKV – VP9 + Opus (Premium Fallback)  
+🥈 Priority 3: MP4 – AV1 + AAC (Mobile Compatible)
+🥉 Priority 4: MP4 – H.264 + AAC (Universal)
+```
+
+#### 🔄 Auto Mode Execution
+
+**Multi-Layer Fallback System**:
+```
+For each viable profile (in priority order):
+  For each YouTube client (default, android, ios, web):
+    If cookies available:
+      → Try profile + client + cookies
+    → Try profile + client (no auth)
+    → If SUCCESS: Complete download and stop
+    → If FAILED: Continue to next client
+  → If all clients failed: Try next profile
+```
+
+#### 🎯 Forced Mode Execution
+
+**Direct Profile Targeting**:
+```
+🎯 Single Profile Mode:
+  1. Verify target profile codecs are available
+  2. Use only the specified profile
+  3. Try all clients (default → android → ios → web)
+  4. SUCCESS or FAIL (no fallback to other profiles)
+```
+
+#### 🚫 Refuse Quality Downgrade
+
+**Quality-First Approach**:
+```
+🚫 Enhanced Strict Mode:
+  → Try first available profile (highest quality)
+  → If FAILED: Stop immediately, no lower quality attempts
+  → Works with both Auto and Forced modes
+  → Ensures maximum quality or no download
+```
+
+#### 💡 Key Technical Benefits
+
+**Smart Resource Management**:
+- **Codec Detection**: Only tries profiles with available formats
+- **Efficient Fallback**: Systematic testing, stops on first success
+- **Flexible Authentication**: Cookies first, graceful fallback without
+
+**Professional Quality Control**:
+- **Container Optimization**: MKV for quality, MP4 for compatibility
+- **Codec Selection**: Next-gen (AV1/VP9) prioritized over legacy (H.264)
+- **Audio Quality**: Opus (superior) preferred over AAC (compatible)
+
+**Example Auto Mode Flow**:
+```
+🔍 Probing video formats...
+✅ Available: AV1, VP9, H.264, Opus, AAC
+
+🏆 Profile 1: MKV AV1+Opus
+   🍪 default+cookies → ❌ Failed
+   🚀 default (no auth) → ❌ Failed
+   🍪 android+cookies → ✅ SUCCESS!
+   
+✅ Download complete: Ultimate quality achieved
+```
+
+**Example Forced Mode Flow**:
+```
+🎯 Forced Mode: MP4 H.264+AAC selected
+🔍 Verifying H.264 and AAC availability... ✅
+🎯 Single profile mode: No fallback allowed
+
+🥉 Profile: MP4 H.264+AAC
+   🍪 default+cookies → ❌ Failed
+   🍪 android+cookies → ✅ SUCCESS!
+   
+✅ Download complete: Exact profile delivered
+```
 
 ## 🎵 Audio & Subtitles
 
