@@ -364,13 +364,13 @@ make lint
 **In `__init__.py`:**
 
 ```python
-__version__ = "0.2.0"
+__version__ = "0.5.0"
 ```
 
 **In `pyproject.toml`:**
 
 ```toml
-version = "0.2.0"
+version = "0.5.0"
 ```
 
 **Update lock file:**
@@ -425,8 +425,8 @@ git pull origin main
 #### Create new tag and Docker image
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.5.0
+git push origin v0.5.0
 ```
 
 #### Delete feature branch

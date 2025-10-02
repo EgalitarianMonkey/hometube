@@ -2,6 +2,16 @@
 
 This document outlines planned improvements and enhancements for HomeTube.
 
+## Direct download
+
+**Status:** Idea
+**Priority:** Low
+
+**Description:**
+Add a direct download option to download directly from the browser in the local Download folder..
+
+---
+
 ## Add yt-dlp extra args
 
 **Status:** ✅ Completed

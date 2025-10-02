@@ -151,11 +151,25 @@ Custom yt-dlp arguments can be added directly from the UI or set by default for 
 
 **🔀 Smart Conflict Resolution**: HomeTube automatically detects and resolves conflicts between base settings and custom arguments, giving priority to your custom preferences while maintaining system stability.
 
+### 🎯 Smart Quality Profiles System
+
+**Professional 4-tier quality matrix** with intelligent fallback:
+
+- **🏆 MKV – AV1 + Opus**: Ultimate quality with next-gen codecs
+- **🥇 MKV – VP9 + Opus**: Premium fallback with excellent compression
+- **🥈 MP4 – AV1 + AAC**: Mobile/TV compatible with modern video codec
+- **🥉 MP4 – H.264 + AAC**: Maximum compatibility, works everywhere
+
+**🔄 Auto Mode (Recommended)**: Tries each profile until one succeeds  
+**🎯 Forced Mode**: Uses only your selected profile, no fallback  
+**🚫 Refuse Quality Downgrade**: Stop at first failure instead of trying lower quality
+
+[Learn more about quality strategies](docs/usage.md#-quality-profiles--download-modes).
+
 ### 🎯 Smart Download Management
 
 **Intelligent download system** that adapts to your needs:
 
-- **🏆 Quality Selection**: Auto-select best quality or manual override
 - **📁 Auto-Organization**: Videos organized by channel/creator automatically
 - **⚡ Resume Support**: Interrupted downloads automatically resume
 - **💾 Storage Optimization**: Duplicate detection and space management
@@ -418,13 +432,13 @@ HomeTube configuration is managed through the `.env` file:
 | `TMP_DOWNLOAD_FOLDER` | Temporary download location | `/data/tmp` if in Docker container else `./tmp` | `/data/tmp` |
 | `YOUTUBE_COOKIES_FILE_PATH` | Authentication for private videos | **Must be defined** (or `COOKIES_FROM_BROWSER`) | `/config/youtube_cookies.txt` |
 | `COOKIES_FROM_BROWSER` | Cookies auth directly from active local browser |  | `chrome,firefox,brave,chromium,edge,opera,safari,vivaldi,whale` |
-| `PORT` | Web interface port | `8501` | `8501` |
+| `YTDLP_CUSTOM_ARGS` | Custom yt-dlp arguments |  | `--max-filesize 5M --write-info-json` |
 | `TZ` | Timezone for Docker | `America/New_York` | `Europe/Paris` |
+| `PORT` | Web interface port | `8501` | `8501` |
+| `DEBUG` | Debug logging mode | `false` | `true` |
 | `VIDEOS_FOLDER_DOCKER_HOST` | Host videos folder in Docker context | **Must be defined** | `/mnt/data/videos` if in Docker container else `/downloads` |
 | `TMP_DOWNLOAD_FOLDER_DOCKER_HOST` | Host tmp download videos folder in Docker context | **Must be defined** | `/mnt/data/hometube/tmp` if in Docker container else `./tmp` |
 | `YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST` | Youtube cookies file path in Docker context | **Must be defined** | `/opt/cookies/youtube.txt` if in Docker container else `./cookies/youtube_cookies.txt` |
-| `YTDLP_CUSTOM_ARGS` | Custom yt-dlp arguments |  | `--max-filesize 5M --write-info-json` |
-| `DEBUG` | Debug logging mode | `false` | `true` |
 
 ### 🔄 Configuration Validation
 

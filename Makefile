@@ -17,9 +17,13 @@ help:
 	@echo ""
 	@echo "🧪 Testing (universal - works with any Python environment):"
 	@echo "  test             - Run fast tests (recommended for development)"
+	@echo "  test-fast-with-e2e - Run fast tests + E2E functions test (recommended)"
 	@echo "  test-all         - Run all tests including slow ones"
 	@echo "  test-unit        - Run unit tests only"
 	@echo "  test-integration - Run integration tests only"
+	@echo "  test-slow        - Run slow tests (includes real download E2E)"
+	@echo "  test-e2e-functions - Run E2E test with real HomeTube functions (fast, no download)"
+	@echo "  test-e2e-real-download    - Run REAL download E2E test (slow, downloads actual video)"
 	@echo "  test-performance - Run performance tests"
 	@echo "  test-coverage    - Run tests with coverage report"
 	@echo ""
@@ -86,6 +90,14 @@ update-reqs:
 test:
 	python -m pytest tests/ -v --tb=short -m "not slow and not external"
 
+# Run fast tests including E2E functions test
+test-fast-with-e2e:
+	@echo "🧪 Running fast tests + E2E functions test..."
+	python -m pytest tests/ -v --tb=short -m "not slow and not external"
+	@echo ""
+	@echo "🔧 Running E2E functions test (fast)..."
+	python -m pytest tests/test_end_to_end.py::TestEndToEndDownload::test_real_hometube_functions -v --tb=short
+
 # Run all tests including slow ones
 test-all:
 	python -m pytest tests/ -v --tb=short
@@ -97,6 +109,24 @@ test-unit:
 # Run integration tests only 
 test-integration:
 	python -m pytest tests/test_integration.py -v --tb=short
+
+# Run E2E test with real HomeTube functions (fast - no actual download)
+test-e2e-functions:
+	@echo "🔧 Running E2E test with real HomeTube functions (fast)..."
+	@echo "📋 Tests command building with real HomeTube code"
+	python -m pytest tests/test_end_to_end.py::TestEndToEndDownload::test_real_hometube_functions -v -s --tb=short
+
+# Run the REAL YouTube download E2E test (slow - actual download)
+test-e2e-real-download:
+	@echo "🎬 Running REAL YouTube download E2E test..."
+	@echo "⚠️  This will ACTUALLY download a real video and may take several minutes"
+	@echo "🌐 Requires internet connection to YouTube"
+	@echo "🔧 Uses real HomeTube functions + real download for complete E2E testing"
+	python -m pytest tests/test_end_to_end.py::TestEndToEndDownload::test_real_youtube_download_with_actual_download -v -s --tb=short
+
+# Run only slow tests (like the real E2E download test)
+test-slow:
+	python -m pytest tests/ -v --tb=short -m "slow"
 
 # Run performance tests
 test-performance:

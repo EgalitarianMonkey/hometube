@@ -37,38 +37,50 @@ def sanitize_filename(name: str) -> str:
     return sanitized or "unnamed"
 
 
-def parse_time_like(time_str: str) -> int:
+def parse_time_like(time_str: str) -> Optional[int]:
     """
     Parse a time-like string and return the duration in seconds.
+    Accepts: "11" (sec), "0:11", "00:00:11", "1:02:03"
+    Returns seconds (int) or None for invalid input.
 
     Args:
         time_str: Time string in format like "1:23:45" or "123"
 
     Returns:
-        Duration in seconds
+        Duration in seconds or None for invalid input
     """
-    if not time_str:
-        return 0
+    s = (time_str or "").strip()
+    if not s:
+        return None
 
-    # Remove any whitespace
-    time_str = time_str.strip()
+    # Check for negative numbers
+    if s.startswith("-"):
+        return None
 
-    # If it's just a number, treat as seconds
-    if time_str.isdigit():
-        return int(time_str)
+    if s.isdigit():
+        return int(s)
 
-    # Parse formats like "1:23:45" or "23:45" or "45"
-    parts = time_str.split(":")
-    parts = [int(p) for p in parts if p.isdigit()]
+    parts = s.split(":")
+    if not all(p.isdigit() for p in parts):
+        return None
 
-    if len(parts) == 1:
-        return parts[0]  # seconds
-    elif len(parts) == 2:
-        return parts[0] * 60 + parts[1]  # minutes:seconds
-    elif len(parts) == 3:
-        return parts[0] * 3600 + parts[1] * 60 + parts[2]  # hours:minutes:seconds
+    parts = [int(p) for p in parts]
 
-    return 0
+    # Validate limits for MM:SS
+    if len(parts) == 2:
+        m, s_ = parts
+        if s_ >= 60:  # Invalid seconds
+            return None
+        return m * 60 + s_
+
+    # Validate limits for HH:MM:SS
+    if len(parts) == 3:
+        h, m, s_ = parts
+        if m >= 60 or s_ >= 60:  # Invalid minutes or seconds
+            return None
+        return h * 3600 + m * 60 + s_
+
+    return None
 
 
 def fmt_hhmmss(seconds: int) -> str:
@@ -132,7 +144,7 @@ def extract_resolution_value(resolution_str: str) -> int:
     return int(match.group(1)) if match else 0
 
 
-def video_id_from_url(url: str) -> Optional[str]:
+def video_id_from_url(url: str) -> str:
     """
     Extract video ID from YouTube URL.
 
@@ -140,15 +152,16 @@ def video_id_from_url(url: str) -> Optional[str]:
         url: YouTube URL
 
     Returns:
-        Video ID or None if not found
+        Video ID or empty string if not found
     """
     if not url:
-        return None
+        return ""
 
     # Standard YouTube URL patterns
     patterns = [
         r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})",
         r"youtube\.com/v/([a-zA-Z0-9_-]{11})",
+        r"youtube\.com/shorts/([a-zA-Z0-9_-]{11})",  # Support for Shorts
     ]
 
     for pattern in patterns:
@@ -156,12 +169,12 @@ def video_id_from_url(url: str) -> Optional[str]:
         if match:
             return match.group(1)
 
-    return None
+    return ""
 
 
 def sanitize_url(url: str) -> str:
     """
-    Clean and validate URL.
+    Clean and validate URL, removing YouTube timestamp parameters.
 
     Args:
         url: URL to sanitize
@@ -177,6 +190,10 @@ def sanitize_url(url: str) -> str:
     # Add protocol if missing
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
+
+    # Remove YouTube timestamp parameters (HomeTube specific)
+    url = url.split("&t=")[0]
+    url = url.split("?t=")[0]
 
     return url
 

@@ -281,3 +281,116 @@ The HomeTube test suite provides:
 - ✅ **Documentation**: This comprehensive guide and inline comments
 
 **Philosophy**: Quality over quantity - focus on testing what matters most with robust, maintainable tests. 🎯
+
+---
+
+## 🎬 End-to-End Testing with Real Downloads
+
+### Overview
+HomeTube includes comprehensive E2E tests that validate the complete download pipeline using real HomeTube functions.
+
+### Available E2E Tests
+
+#### 1. Fast E2E Test (Functions Only)
+```bash
+make test-e2e-functions
+```
+- Tests real HomeTube function integration
+- Builds complete yt-dlp commands
+- Validates configurations (cookies, SponsorBlock)
+- **Fast execution** (~0.01s) - perfect for development
+
+#### 2. Real Download E2E Test
+```bash
+make test-e2e-real-download
+```
+- **Actually downloads** a real YouTube video
+- Uses real HomeTube functions end-to-end
+- Tests complete pipeline with file operations
+- **Takes time** (~17s) - comprehensive validation
+
+#### 3. All Slow Tests
+```bash
+make test-slow
+```
+- Runs all tests marked with `@pytest.mark.slow`
+- Includes both E2E tests above
+- Perfect for comprehensive regression testing
+
+### E2E Test Features
+
+#### Real HomeTube Function Integration
+The E2E tests use actual functions from `app.core`:
+- `build_base_ytdlp_command()` - Command building with 28+ arguments
+- `build_cookies_params()` - Cookie authentication
+- `build_sponsorblock_params()` - Sponsor segment removal
+- `sanitize_filename()` - Filename sanitization
+- `video_id_from_url()` - URL parsing
+
+#### Test Configuration
+```python
+# Real video used for testing
+test_url = "https://www.youtube.com/watch?v=pXRviuL6vMY"
+expected_title = "Stressed Out - Twenty One Pilots"
+
+# Cookie priority order
+cookies_priority = [
+    "cookies/youtube_cookies.txt",
+    "cookies/youtube_cookies-2025-09-29.txt", 
+    "cookies/youtube_cookies-2025-09-27.txt"
+]
+```
+
+#### Download Validation
+The real download test validates:
+- ✅ **Network connectivity** - Pings YouTube before attempting
+- ✅ **Command building** - 40+ arguments from real HomeTube functions  
+- ✅ **File download** - Actual video file downloaded
+- ✅ **File size accuracy** - Tests the original file size bug fix
+- ✅ **File operations** - Move, rename, cleanup operations
+- ✅ **Error handling** - Timeout, network failures, cleanup on error
+
+#### Output Locations
+```bash
+# Downloaded files for inspection
+./tmp/tests/videos/     # Final video files
+./tmp/tests/tmp/        # Temporary download location
+```
+
+#### Expected Results
+```
+🔧 Testing real HomeTube functions...
+📝 Sanitized 'Stressed Out - Twenty One Pilots' -> 'Stressed Out - Twenty One Pilots'
+🔗 Video ID extracted: pXRviuL6vMY
+✅ Base command built with 28 arguments
+🍪 Using cookies from: cookies/youtube_cookies.txt
+📺 SponsorBlock config: 5 parameters
+🎯 Final command built with 40 total arguments using real HomeTube functions!
+📋 This is a vrai E2E test using real HomeTube code!
+```
+
+### Troubleshooting E2E Tests
+
+#### No Network Connectivity
+```bash
+ping -c 1 youtube.com
+```
+
+#### Cookie Issues
+```bash
+ls -la cookies/
+# Ensure valid cookie files exist
+```
+
+#### Test Exclusion from Fast Tests
+E2E download tests are marked `@pytest.mark.slow`:
+- ✅ `make test` - **Excludes** real download tests (fast development)
+- ✅ `make test-all` - **Includes** all tests
+- ✅ `make test-slow` - **Only** slow tests (E2E downloads)
+
+This ensures fast development cycles while maintaining comprehensive testing capabilities.
+
+### Integration with CI/CD
+- **Fast tests** run on every commit (development workflow)
+- **Slow E2E tests** run on releases/PRs (validation workflow)
+- **Real download tests** validate against YouTube API changes
