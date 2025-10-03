@@ -207,6 +207,12 @@ For HomeLab setups not having a browser, we want to easily update cookies file. 
 rsync -avz ~/Downloads/cookies.txt user@homelab-ip:/path/to/hometube/cookies/
 ```
 
+**With specific permissions:**
+```bash
+# From your personal computer, sync cookies to your HomeLab with specific remote permissions
+rsync -avz --chown=100000:100996 --chmod=ug=rwX,o=r ~/Downloads/cookies.txt user@homelab-ip:/path/to/hometube/cookies/
+```
+
 ### What Requires Authentication?
 
 - **YouTube**: Age-restricted, private/unlisted, premium content
