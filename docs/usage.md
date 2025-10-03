@@ -2,59 +2,109 @@
 
 Complete guide to using the Universal Video Downloader application.
 
-## 🌐 Supported Video Sources
-
-This application supports **1800+ video platforms** through yt-dlp integration:
-
-### 🎥 **Major Video Platforms**
-- **YouTube** - Individual videos (with SponsorBlock)
-- **Vimeo** - Standard and premium videos
-- **Dailymotion** - Individual videos
-- **Twitch** - VODs, clips, live streams
-- **TikTok** - Individual videos, user profiles
-- **Facebook** - Videos, reels (authentication required)
-- **Instagram** - Videos, stories (authentication may be required)
-
-### 📺 **TV & Streaming**
-- **Arte** - European cultural content
-- **France TV** - French public television
-- **BBC iPlayer** - UK content (geo-restricted)
-- **ZDF** - German public television
-- **RAI** - Italian public television
-
-### 🎵 **Audio Platforms**
-- **SoundCloud** - Individual tracks
-- **Bandcamp** - Albums and individual tracks
-- **Mixcloud** - DJ sets and radio shows
-
-### 🎮 **Gaming & Tech**
-- **Kick** - Live streams and VODs
-- **Odysee** - Decentralized video platform
-- **PeerTube** - Federated video instances
-
-### 🔗 **Other Sources**
-- **Reddit** - Video posts
-- **Archive.org** - Historical video content
-- **Bitchute** - Alternative video platform
-- **And 1790+ more platforms...**
-
-> **💡 Quick Test**: Paste any video URL to check compatibility. Most video sites are supported automatically.
-
-## 🎯 Getting Started
-
-Once installed, access the web interface at:
-- **Local**: http://localhost:8501
-- **Network**: http://your-server-ip:8501
-
 ## 📺 Basic Video Download
-
-### 1. Simple Download
 
 1. **Enter URL**: Paste any video URL from supported platforms
 2. **Choose Destination**: Select or create a folder for organization
 3. **Click Download**: Monitor progress in real-time
 
-### 2. Quality Profiles & Download Modes
+## 🏆 Quality Profiles & Download Modes
+
+HomeTube uses a **professional 4-tier quality matrix** designed specifically for homelab and media server use (Plex, Jellyfin, Emby).  
+Instead of relying on the generic `best` option from yt-dlp (which can give unpredictable results), HomeTube applies carefully curated **codec + audio + container combinations** that balance **quality, compatibility, and future-proofing**.
+
+---
+
+### 🏆 Quality Profiles Matrix
+
+| Priority | Profile | Video Codec | Audio Codec | Output Container | Best For |
+|----------|---------|-------------|-------------|-----------------|----------|
+| **🏆 Ultimate** | AV1 + Opus | AV1 | Opus | **MKV** | Archival quality, desktop playback, Plex/Jellyfin |
+| **🥇 Premium** | VP9 + Opus | VP9 | Opus | **MKV** | Excellent fallback, strong compression, wide support |
+| **🥈 Compatible** | AV1 + AAC | AV1 | AAC | **MP4** | Mobile devices, smart TVs with modern codec support |
+| **🥉 Universal** | H.264 + AAC | H.264 | AAC | **MP4** | Maximum compatibility, older hardware, legacy apps |
+
+---
+
+### 📦 Why These Containers?
+- **MKV (Matroska)** → Best default for homelab: robust, supports subtitles, chapters, multiple audio tracks. Fully supported by Plex/Jellyfin.  
+- **MP4** → Maximum compatibility: supported everywhere, but limited (no Opus support, AV1 only on recent devices).  
+- **WebM** → Used internally by YouTube, but not ideal as final output (limited codec support, metadata handling weaker than MKV/MP4).  
+
+👉 **Default recommendation**:  
+Use **MKV** unless you specifically need MP4 for mobile/TV playback.
+
+---
+
+### 📋 Download Modes
+
+#### 🔄 Auto Mode (Recommended)
+- Tries each profile in priority order until one succeeds  
+- **Smart fallback**: Always ensures the best possible quality available  
+- Ideal for **most users and homelab scenarios**
+
+#### 🎯 Forced Mode (Expert)
+- Uses **only** the selected profile  
+- **No fallback** → if unavailable, download fails  
+- Perfect when you need **strict control** (e.g. “only AV1 or nothing”)
+
+#### 🚫 Refuse Quality Downgrade
+- Works with Auto **or** Forced mode  
+- Stops at the **first failure** instead of downgrading  
+- For **quality-first users**: better to fail than accept lower quality
+
+---
+
+### 🎯 How It Works
+
+**Auto Mode Process**  
+1. 🔍 Probes available formats on YouTube  
+2. 🎯 Filters only the formats relevant to the 4 profiles  
+3. 🏆 Attempts profiles in priority order (Ultimate → Universal)  
+4. ✅ Stops at the first success  
+
+**Forced Mode Process**  
+1. 🎯 Uses the single profile you selected  
+2. 🔍 Verifies codecs are available  
+3. ⚡ Downloads immediately  
+4. ❌ Fails fast if the profile is not available  
+
+---
+
+### 💡 Choosing the Right Mode
+
+- **Use Auto Mode when:**  
+  ✅ You want best quality possible  
+  ✅ You don’t want to worry about codec details  
+  ✅ You’re integrating with Plex/Jellyfin  
+
+- **Use Forced Mode when:**  
+  🎯 You require strict codecs (e.g. only AV1 + Opus in MKV)  
+  🎯 You’re preparing content for devices with known limitations  
+
+- **Enable “Refuse Quality Downgrade” when:**  
+  🚫 Quality > success rate  
+  🚫 You prefer failures over lower quality  
+  🚫 You want predictable archival files  
+
+---
+
+### 🛠️ Manual Override (Advanced)
+
+For maximum control, you can bypass profiles entirely:
+
+1. 🔍 List all available formats with yt-dlp  
+2. 📊 Review codecs, resolutions, file sizes  
+3. 🎯 Select exactly the stream combination you want  
+4. ⚡ Download directly (no fallback, no remux rules)  
+
+---
+
+✅ **Summary:**  
+HomeTube’s profiles are designed to give you the **best balance of quality and compatibility**. By default, you get AV1+Opus in MKV if possible, with intelligent fallbacks ensuring success. Expert users can lock profiles or override formats entirely.
+
+
+<!-- ### 2. Quality Profiles & Download Modes
 
 HomeTube features a **professional 4-tier quality matrix** that intelligently balances quality, compatibility, and file size.
 
@@ -127,7 +177,53 @@ For ultimate control, you can override the profile system entirely:
 1. **🔍 Detect Formats**: Click to probe all available video formats
 2. **📊 Review Options**: See quality, codec, file size estimates
 3. **🎯 Select Format**: Choose your preferred format manually
-4. **⚡ Download**: Uses your exact selection, bypasses profile system
+4. **⚡ Download**: Uses your exact selection, bypasses profile system -->
+
+
+## 🌐 Supported Video Sources
+
+This application supports **1800+ video platforms** through yt-dlp integration:
+
+### 🎥 **Major Video Platforms**
+- **YouTube** - Individual videos (with SponsorBlock)
+- **Vimeo** - Standard and premium videos
+- **Dailymotion** - Individual videos
+- **Twitch** - VODs, clips, live streams
+- **TikTok** - Individual videos, user profiles
+- **Facebook** - Videos, reels (authentication required)
+- **Instagram** - Videos, stories (authentication may be required)
+
+### 📺 **TV & Streaming**
+- **Arte** - European cultural content
+- **France TV** - French public television
+- **BBC iPlayer** - UK content (geo-restricted)
+- **ZDF** - German public television
+- **RAI** - Italian public television
+
+### 🎵 **Audio Platforms**
+- **SoundCloud** - Individual tracks
+- **Bandcamp** - Albums and individual tracks
+- **Mixcloud** - DJ sets and radio shows
+
+### 🎮 **Gaming & Tech**
+- **Kick** - Live streams and VODs
+- **Odysee** - Decentralized video platform
+- **PeerTube** - Federated video instances
+
+### 🔗 **Other Sources**
+- **Reddit** - Video posts
+- **Archive.org** - Historical video content
+- **Bitchute** - Alternative video platform
+- **And 1790+ more platforms...**
+
+> **💡 Quick Test**: Paste any video URL to check compatibility. Most video sites are supported automatically.
+
+## 🎯 Getting Started
+
+Once installed, access the web interface at:
+- **Local**: http://localhost:8501
+- **Network**: http://your-server-ip:8501
+
 
 ### 3. File Organization
 
@@ -205,6 +301,12 @@ For HomeLab setups not having a browser, we want to easily update cookies file. 
 ```bash
 # From your personal computer, sync cookies to your HomeLab
 rsync -avz ~/Downloads/cookies.txt user@homelab-ip:/path/to/hometube/cookies/
+```
+
+**With specific permissions:**
+```bash
+# From your personal computer, sync cookies to your HomeLab with specific remote permissions
+rsync -avz --chown=100000:100996 --chmod=ug=rwX,o=r ~/Downloads/cookies.txt user@homelab-ip:/path/to/hometube/cookies/
 ```
 
 ### What Requires Authentication?
