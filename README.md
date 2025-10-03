@@ -14,9 +14,9 @@
 
 <br/>
 
-**🌐 Universal Video Downloader for your HomeLab**
+**🏡 Universal Video Downloader for Your Media Server**
 
-*Download, process and organize videos at Home*
+Download, process, and organize ads-free best-quality videos at Home.
 
 <br/>
 
@@ -32,9 +32,24 @@
 
 🎬 HomeTube is a simple web UI for downloading single videos from the internet with the highest quality available and moving them to specific local locations automatically managed and integrated by media server such as Plex or Jellyfin.
 
-A simple friendly solution for easily integrating preferred videos from Youtube and others platforms to local media server.
+A simple friendly solution for easily integrating preferred videos from Youtube and others platforms to local media server:
 
-## 🏠 **HomeLab Integration**
+<br/>
+
+<!-- ## 🏠 **HomeLab Integration** -->
+
+- **🚫 Ad-Free Content**: Block natively all videos' ads and sponsors
+- **🏆 Best Quality Control**: Advanced best videos quality download strategy or manual override
+- **🎬 Media Server Ready**: Download best quality videos with explicit name and location directly in your HomeLab media server structure and get automatic watch experience on Plex, Jellyfin, Emby or even on your PC
+- **📱 Network Access**: Web interface videos download accessible from any device on your network
+- **🎯 One-Click Downloads**: Paste URL → Get perfectly organized video
+- **🔐 Cookies Authentication**: Essential for reliable downloads - unlocks restricted content and prevents signature errors
+- **🎬 Advanced Processing**: Cut clips, embed subtitles, convert formats
+- **⚙️ Advanced Configurations**: Organized advanced options including any custom yt-dlp arguments (proxy, max-filesize, etc.)
+- **🎥 Video Sources**: **YouTube**, Reddit, Vimeo, Dailymotion, TikTok, Twitch, Facebook, Instagra, etc. [See complete list (1800+)](docs/supported-platforms.md)
+
+
+<!-- ## 🏠 **HomeLab Integration**
 
 - **🎬 Media server Ready**: Download best quality videos with explicit name and location directly in your HomeLab media server structure and get automatic watch experience on Plex, Jellyfin, Emby or even on your PC
 - **📱 Network Access**: Web interface videos download accessible from any device on your network
@@ -47,7 +62,7 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 - **⚙️ Advanced configurations**: Set any custom yt-dlp arguments (proxy, max-filesize, etc.)
 - **🔐 Cookies Authentication**: Essential for reliable downloads - unlocks restricted content and prevents signature errors
 - **📊 Quality Control**: Auto-select best quality or manual override
-- **🎥 Video Sources**: **YouTube**, Reddit, Vimeo, Dailymotion, TikTok, Twitch, Facebook, Instagra, etc. [See complete list (1800+)](docs/supported-platforms.md)
+- **🎥 Video Sources**: **YouTube**, Reddit, Vimeo, Dailymotion, TikTok, Twitch, Facebook, Instagra, etc. [See complete list (1800+)](docs/supported-platforms.md) -->
 
 <!-- ## ⚡ Technical Highlights
 
@@ -65,9 +80,11 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 
 <br/>
 <br/>
+<br/>
 
 ![Application Demo](./docs/images/simple_ui_demo.gif)
 
+<br/>
 <br/>
 <br/>
 
@@ -105,19 +122,19 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 
 #### 🚨 **Why Cookies Are Essential**
 
-**Even for public videos**, cookies are often required due to modern platform protections:
+Even for **public YouTube videos**, cookies are increasingly necessary because of modern protections.  
+They ensure **higher quality, reliability, and access** to all formats:
 
-- **🔐 Encrypted Signatures**: Video streams use encrypted signatures (n-sig) that require authentication
-- **🛡️ Anti-Bot Protection**: Platforms implement sophisticated anti-automation measures
-- **📺 Stream Access**: Audio/video streams may be signature-protected even for public content
-- **⚡ Download Reliability**: Prevents common "signature extraction" and "format unavailable" errors
+- **🏆 Access the best quality** (AV1/Opus, high-res video, premium audio)  
+- **🔓 Unlock restricted content** (age-gated, member-only, region-locked)  
+- **🔐 Handle encrypted signatures (n-sig)** required for many video/audio streams  
+- **🛡️ Bypass anti-bot measures** that block automated downloaders  
+- **📺 Ensure stream availability** (audio/video may be signature-protected even for public videos)  
+- **⚡ Improve reliability** (fewer "format unavailable" or extraction errors)  
+- **🎵 Get high-quality audio tracks** (Opus, AAC) without failures  
+- **🚀 Reduce throttling** for faster, more stable downloads  
 
-#### 🎯 **What Cookies Unlock**
-
-- **🔓 Private Content**: Age-restricted, member-only, and region-locked videos
-- **✅ Public Videos**: Reliable access to all quality formats and streams
-- **🎵 Audio Streams**: High-quality audio formats that may be signature-protected
-- **🚀 Better Performance**: Reduced throttling and connection issues
+👉 In short: **cookies are not just for private content — they’re the key to consistent, best-quality downloads.**
 
 #### 🛠️ **Setup Options**
 
@@ -153,18 +170,19 @@ Custom yt-dlp arguments can be added directly from the UI or set by default for 
 
 ### 🎯 Smart Quality Profiles System
 
-**Professional 4-tier quality matrix** with intelligent fallback:
+HomeTube doesn’t just grab the generic *“best”* stream — it uses a **curated 4-tier quality matrix** with intelligent fallback, balancing **maximum quality** and **broad compatibility**:
 
-- **🏆 MKV – AV1 + Opus**: Ultimate quality with next-gen codecs
-- **🥇 MKV – VP9 + Opus**: Premium fallback with excellent compression
-- **🥈 MP4 – AV1 + AAC**: Mobile/TV compatible with modern video codec
-- **🥉 MP4 – H.264 + AAC**: Maximum compatibility, works everywhere
+- **🏆 MKV – AV1 + Opus**: Ultimate quality with next-gen codecs  
+- **🥇 MKV – VP9 + Opus**: Premium fallback with excellent compression  
+- **🥈 MP4 – AV1 + AAC**: Modern codec support for mobile & smart TVs  
+- **🥉 MP4 – H.264 + AAC**: Maximum compatibility, works everywhere, legacy-safe  
 
-**🔄 Auto Mode (Recommended)**: Tries each profile until one succeeds  
-**🎯 Forced Mode**: Uses only your selected profile, no fallback  
-**🚫 Refuse Quality Downgrade**: Stop at first failure instead of trying lower quality
+**Download Modes:**  
+- **🔄 Auto Mode (Recommended)** → Smart fallback through the 4 profiles  
+- **🎯 Forced Mode** → Only the profile you select, no fallback  
+- **🚫 Refuse Downgrade** → Stop at first failure instead of accepting lower quality  
 
-[Learn more about quality strategies](docs/usage.md#-quality-profiles--download-modes).
+👉 [Full details on quality profiles & strategies](docs/usage.md#-quality-profiles--download-modes)
 
 ### 🎯 Smart Download Management
 
