@@ -457,6 +457,7 @@ HomeTube configuration is managed through the `.env` file:
 | **Quality & Download Preferences** | | | |
 | `DEFAULT_DOWNLOAD_MODE` | Download strategy | `auto` | `auto,forced` |
 | `DEFAULT_QUALITY_PROFILE` | Default quality profile. Following best quality strategy by default | *auto-selection* | `mkv_av1_opus,mkv_vp9_opus,mp4_av1_aac,mp4_h264_aac` |
+| `VIDEO_QUALITY_MAX` | Maximum video resolution limit | `max` | `max,2160,1440,1080,720,480,360` |
 | `DEFAULT_REFUSE_QUALITY_DOWNGRADE` | Stop at first failure vs fallback | `false` | `true,false` |
 | `DEFAULT_EMBED_CHAPTERS` | Embed chapters by default | `true` | `true,false` |
 | `DEFAULT_EMBED_SUBS` | Embed subtitles by default | `true` | `true,false` |

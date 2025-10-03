@@ -702,6 +702,7 @@ HomeTube supports comprehensive environment variable configuration for all its f
 |----------|---------|-------------|---------|
 | `DEFAULT_DOWNLOAD_MODE` | `auto` | Download strategy | `auto`, `forced` |
 | `DEFAULT_QUALITY_PROFILE` | *(empty)* | Default quality profile | `mkv_av1_opus`, `mkv_vp9_opus`, `mp4_av1_aac`, `mp4_h264_aac` |
+| `VIDEO_QUALITY_MAX` | `max` | Maximum video resolution limit | `max`, `2160`, `1440`, `1080`, `720`, `480`, `360` |
 | `DEFAULT_REFUSE_QUALITY_DOWNGRADE` | `false` | Stop at first failure | `true`, `false` |
 | `DEFAULT_EMBED_CHAPTERS` | `true` | Embed chapters by default | `true`, `false` |  
 | `DEFAULT_EMBED_SUBS` | `true` | Embed subtitles by default | `true`, `false` |
@@ -780,6 +781,7 @@ YTDLP_CUSTOM_ARGS=--verbose --print-json --simulate
 # High-quality archival configuration
 DEFAULT_DOWNLOAD_MODE=auto
 DEFAULT_QUALITY_PROFILE=mkv_av1_opus
+VIDEO_QUALITY_MAX=max
 DEFAULT_REFUSE_QUALITY_DOWNGRADE=false
 DEFAULT_EMBED_CHAPTERS=true
 DEFAULT_EMBED_SUBS=true
@@ -792,6 +794,7 @@ DEFAULT_CUTTING_MODE=precise
 # Quick downloads with fallbacks
 DEFAULT_DOWNLOAD_MODE=auto
 DEFAULT_QUALITY_PROFILE=mp4_h264_aac
+VIDEO_QUALITY_MAX=1080
 DEFAULT_REFUSE_QUALITY_DOWNGRADE=false
 DEFAULT_CUTTING_MODE=keyframes
 ```
@@ -802,6 +805,7 @@ DEFAULT_CUTTING_MODE=keyframes
 # No quality compromises
 DEFAULT_DOWNLOAD_MODE=forced
 DEFAULT_QUALITY_PROFILE=mkv_av1_opus
+VIDEO_QUALITY_MAX=2160
 DEFAULT_REFUSE_QUALITY_DOWNGRADE=true
 ```
 
@@ -811,6 +815,7 @@ DEFAULT_REFUSE_QUALITY_DOWNGRADE=true
 - **Profile Selection**: Empty `DEFAULT_QUALITY_PROFILE` enables automatic selection
 - **Mode Impact**: `auto` mode tries all profiles, `forced` uses only the specified profile
 - **Fallback Behavior**: `DEFAULT_REFUSE_QUALITY_DOWNGRADE=false` allows trying lower quality profiles
+- **Resolution Limit**: `VIDEO_QUALITY_MAX` caps the maximum resolution (e.g., `1080` limits to 1080p even if 4K is available)
 
 ## 🔧 Troubleshooting
 
