@@ -364,13 +364,13 @@ make lint
 **In `__init__.py`:**
 
 ```python
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 ```
 
 **In `pyproject.toml`:**
 
 ```toml
-version = "0.5.0"
+version = "0.6.0"
 ```
 
 **Update lock file:**
@@ -484,8 +484,8 @@ git pull origin main
 # Add new version section with changes
 
 # 3. Create and push tag
-git tag v1.2.0
-git push origin v1.2.0
+git tag v0.6.0
+git push origin v0.6.0
 
 # 4. GitHub Actions automatically:
 # - Builds Docker images
@@ -501,7 +501,7 @@ git push origin v1.2.0
 
 **Production**:
 - Version tags → versioned Docker images
-- Available at `ghcr.io/EgalitarianMonkey/hometube:v1.2.0`
+- Available at `ghcr.io/EgalitarianMonkey/hometube:v0.6.0
 - GitHub releases with changelogs and artifacts
 
 ## 🛠️ Development Tools

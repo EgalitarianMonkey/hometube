@@ -89,33 +89,61 @@ def probe_available_formats(url: str, cookies_part: List[str]) -> Dict[str, bool
     Returns:
         Dict with codec availability: {"av01": True, "vp9": True, "opus": False, ...}
     """
-    safe_push_log("🔍 Probing available formats...")
+    safe_push_log("")
+    log_title("🔍 Analyzing video compatibility...")
+    safe_push_log("💡 Strategy: Default client first (most reliable)")
 
-    # Comprehensive strategies for codec probing
+    # Optimized strategies prioritizing the most successful client (Default)
     strategies = []
 
-    # Strategy 1: Web client with cookies (best for premium formats like AV1/VP9)
+    # Strategy 1: Default client first (often most successful)
     if cookies_part:
         strategies.append(
             {
-                "name": "cookies + web client",
+                "name": "🔄 Default Client (with cookies)",
+                "description": "Most reliable - often finds all codecs",
+                "cmd": ["yt-dlp", "--list-formats", "--no-download"]
+                + cookies_part
+                + [url],
+                "timeout": 45,
+                "priority": "highest",
+            }
+        )
+
+    strategies.append(
+        {
+            "name": "🔄 Default Client (no cookies)",
+            "description": "Most reliable fallback",
+            "cmd": ["yt-dlp", "--list-formats", "--no-download", url],
+            "timeout": 30,
+            "priority": "highest",
+        }
+    )
+
+    # Strategy 2: Specialized clients with cookies (if available)
+    if cookies_part:
+        strategies.append(
+            {
+                "name": "🌐 Web Browser (with cookies)",
+                "description": "Premium formats with authentication",
                 "cmd": [
                     "yt-dlp",
                     "--list-formats",
                     "--no-download",
                     "--extractor-args",
                     "youtube:player_client=web",
-                    "--verbose",
                 ]
                 + cookies_part
                 + [url],
                 "timeout": 45,
+                "priority": "high",
             }
         )
 
         strategies.append(
             {
-                "name": "cookies + android client",
+                "name": "🤖 Android App (with cookies)",
+                "description": "Mobile client with authentication",
                 "cmd": [
                     "yt-dlp",
                     "--list-formats",
@@ -126,36 +154,22 @@ def probe_available_formats(url: str, cookies_part: List[str]) -> Dict[str, bool
                 + cookies_part
                 + [url],
                 "timeout": 30,
+                "priority": "medium",
             }
         )
 
-        strategies.append(
-            {
-                "name": "cookies + iOS client",
-                "cmd": [
-                    "yt-dlp",
-                    "--list-formats",
-                    "--no-download",
-                    "--extractor-args",
-                    "youtube:player_client=ios",
-                ]
-                + cookies_part
-                + [url],
-                "timeout": 30,
-            }
-        )
-
-    # Strategy 2: Multiple clients without cookies
-    no_auth_clients = [
-        ("web client (no auth)", "web", 45),
-        ("android client (no auth)", "android", 30),
-        ("iOS client (no auth)", "ios", 30),
+    # Strategy 3: Specialized clients without cookies
+    specialized_clients = [
+        ("🌐 Web Browser (no cookies)", "web", 45),
+        ("🤖 Android App (no cookies)", "android", 30),
+        ("📱 iOS App (no cookies)", "ios", 30),
     ]
 
-    for name, client, timeout in no_auth_clients:
+    for name, client, timeout in specialized_clients:
         strategies.append(
             {
                 "name": name,
+                "description": f"Specialized {client} client",
                 "cmd": [
                     "yt-dlp",
                     "--list-formats",
@@ -165,25 +179,35 @@ def probe_available_formats(url: str, cookies_part: List[str]) -> Dict[str, bool
                     url,
                 ],
                 "timeout": timeout,
+                "priority": "low",
             }
         )
 
-    # Strategy 3: Default fallback
-    strategies.append(
-        {
-            "name": "default client",
-            "cmd": ["yt-dlp", "--list-formats", "--no-download", url],
-            "timeout": 30,
-        }
-    )
+    # Strategy 4: Default client again as final fallback (double insurance)
+    if cookies_part:
+        strategies.append(
+            {
+                "name": "🔄 Default Client (final attempt with cookies)",
+                "description": "Last resort with maximum timeout",
+                "cmd": ["yt-dlp", "--list-formats", "--no-download", "--verbose"]
+                + cookies_part
+                + [url],
+                "timeout": 60,
+                "priority": "lowest",
+            }
+        )
 
     # Try each strategy and look for the most comprehensive result
     best_result = None
     best_codec_count = 0
+    total_strategies = len(strategies)
+
+    safe_push_log(f"🎯 Testing {total_strategies} detection strategies:")
 
     for i, strategy in enumerate(strategies, 1):
         try:
-            safe_push_log(f"🔄 Strategy {i}/{len(strategies)}: {strategy['name']}...")
+            safe_push_log("")
+            safe_push_log(f"🔁 Strategy {i}/{total_strategies}: {strategy['name']}")
 
             result = run_subprocess_safe(
                 strategy["cmd"],
@@ -210,54 +234,115 @@ def probe_available_formats(url: str, cookies_part: List[str]) -> Dict[str, bool
 
                 # Count available codecs
                 codec_count = sum(codecs_available.values())
-
-                # Log findings
                 available_codecs = [
                     codec for codec, available in codecs_available.items() if available
                 ]
-                safe_push_log(
-                    f"✅ {strategy['name']}: {', '.join(available_codecs)} ({codec_count} codecs)"
+
+                # Quality assessment
+                has_premium = codecs_available.get("av01") and codecs_available.get(
+                    "opus"
                 )
+                has_modern = codecs_available.get("vp9") and codecs_available.get(
+                    "opus"
+                )
+
+                if has_premium:
+                    quality_note = "🏆 Premium quality formats detected!"
+                elif has_modern:
+                    quality_note = "🥈 Modern quality formats detected"
+                elif codec_count >= 3:
+                    quality_note = "📺 Standard quality formats detected"
+                else:
+                    quality_note = "⚡ Basic compatibility formats only"
+
+                safe_push_log(
+                    f"✅ Success: {', '.join(available_codecs)} ({codec_count} total)"
+                )
+                safe_push_log(f"{quality_note}")
 
                 # Keep the result with the most codecs (most comprehensive)
                 if codec_count > best_codec_count:
                     best_result = codecs_available
                     best_codec_count = codec_count
-                    safe_push_log(f"🏆 New best result: {codec_count} codecs detected")
+                    safe_push_log("🏆 This is now our best result!")
 
-                # If we found high-quality codecs, we can be confident in the result
-                if (
-                    codec_count >= 4
-                    and codecs_available.get("av01")
-                    and codecs_available.get("opus")
-                ):
+                # Early exit conditions - stop if we found excellent results
+                if has_premium and codec_count >= 4:
+                    safe_push_log("")
                     safe_push_log(
-                        "🎯 Excellent codec detection: all premium formats found"
+                        "🎉 Excellent! Found all premium codecs - stopping search"
                     )
+                    safe_push_log("")
+                    return codecs_available
+
+                # Also stop early if Default client found good results and we're past strategy 2
+                if (
+                    i >= 2
+                    and "Default Client" in strategy["name"]
+                    and codec_count >= 3
+                    and has_modern
+                ):
+                    safe_push_log("")
+                    safe_push_log(
+                        "🎯 Default client found good codecs - stopping search"
+                    )
+                    safe_push_log("")
                     return codecs_available
 
             else:
-                safe_push_log(
-                    f"⚠️ {strategy['name']} failed: {result.stderr.strip()[:50]}..."
+                # Strategy failed - provide clear reason
+                error_msg = (
+                    result.stderr.strip() if result.stderr else "No output received"
                 )
 
+                if "sign in" in error_msg.lower() or "login" in error_msg.lower():
+                    safe_push_log("🔐 Authentication required")
+                elif "private" in error_msg.lower():
+                    safe_push_log("🔒 Video private/restricted")
+                elif "not available" in error_msg.lower():
+                    safe_push_log("🌍 Region/client unavailable")
+                else:
+                    safe_push_log(f"❌ Failed: {error_msg[:50]}")
+
         except Exception as e:
-            safe_push_log(f"⚠️ {strategy['name']} error: {e}")
+            safe_push_log(f"💥 Error: {str(e)[:50]}")
             continue
 
-    # Return the best result found
+    # Summarize results
+    safe_push_log("")
     if best_result and best_codec_count > 0:
         available_codecs = [
             codec for codec, available in best_result.items() if available
         ]
-        safe_push_log(f"✅ Using best probe result: {', '.join(available_codecs)}")
+        has_premium = best_result.get("av01") and best_result.get("opus")
+        has_modern = best_result.get("vp9") and best_result.get("opus")
+
+        if has_premium:
+            safe_push_log("🎉 RESULT: Premium quality formats available!")
+        elif has_modern:
+            safe_push_log("✅ RESULT: Modern quality formats available")
+        else:
+            safe_push_log("📺 RESULT: Standard quality formats available")
+
+        safe_push_log(f"📋 Final codec list: {', '.join(available_codecs)}")
         return best_result
 
-    # All probes failed - return permissive defaults
-    safe_push_log("⚠️ All codec probes failed, using permissive defaults")
+    # All probes failed - provide helpful guidance
+    safe_push_log("")
+    safe_push_log("⚠️ Format detection failed")
+    if cookies_part:
+        safe_push_log(
+            "💡 Possible causes: Expired cookies, special permissions, or geo-blocking"
+        )
+    else:
+        safe_push_log(
+            "💡 Possible causes: Authentication required, private video, or API issues"
+        )
+
     safe_push_log(
-        "📋 Assuming all codecs available (profiles will be filtered during download)"
+        "🔄 Continuing with optimistic assumptions (all profiles will be tested)"
     )
+    safe_push_log("")
 
     return {"av01": True, "vp9": True, "h264": True, "opus": True, "aac": True}
 
@@ -277,6 +362,7 @@ def filter_viable_profiles(
     """
     viable_profiles = []
 
+    # Analyze each profile for compatibility
     for profile in QUALITY_PROFILES:
         # Check if required codecs are available
         required_codecs = profile.get("requires_probe", [])
@@ -292,18 +378,41 @@ def filter_viable_profiles(
                 for codec in required_codecs
                 if not available_codecs.get(codec, True)
             ]
-            safe_push_log(
-                f"⏭️ Skipping {profile['label']} - missing: {', '.join(missing_codecs)}"
+
+            # Provide detailed explanation for why profile was skipped
+            reason_details = []
+            if "av01" in missing_codecs:
+                reason_details.append("AV1 codec not detected")
+            if "vp9" in missing_codecs:
+                reason_details.append("VP9 codec not detected")
+            if "opus" in missing_codecs:
+                reason_details.append("Opus audio not detected")
+
+            reason_str = (
+                " & ".join(reason_details)
+                if reason_details
+                else f"missing: {', '.join(missing_codecs)}"
             )
+            safe_push_log(f"⏭️ Skipping {profile['label']} - {reason_str}")
 
     if not viable_profiles:
         # Fallback to most compatible profile if nothing else works
-        safe_push_log("⚠️ No profiles match available codecs, using H.264 fallback")
+        safe_push_log("")
+        safe_push_log("⚠️ Compatibility fallback activated")
+        safe_push_log("💡 No profiles matched the detected codecs")
+        safe_push_log("🔄 Forcing H.264 + AAC profile (maximum compatibility)")
+
         viable_profiles = [
             profile for profile in QUALITY_PROFILES if profile["name"] == "mp4_h264_aac"
         ]
 
-    safe_push_log(f"✅ {len(viable_profiles)} viable profile(s) found")
+        if not viable_profiles:
+            safe_push_log("❌ Critical error: Even basic H.264 profile not found!")
+
+    if viable_profiles:
+        safe_push_log(f"✅ Final selection: {len(viable_profiles)} viable profile(s)")
+        for i, p in enumerate(viable_profiles, 1):
+            safe_push_log(f"   {i}. {p['label']}")
     return sorted(viable_profiles, key=lambda x: x["priority"])
 
 
@@ -343,32 +452,21 @@ def show_download_failure_help(cookies_available: bool, profiles_count: int):
         cookies_available: Whether cookies are configured and available
         profiles_count: Number of profiles that were attempted
     """
-    safe_push_log("❌ ALL PROFILES FAILED")
-    safe_push_log(LOG_SEPARATOR)
+    safe_push_log("")
+    safe_push_log("❌ All profiles failed")
+    safe_push_log("=" * 30)
 
     if not cookies_available:
-        safe_push_log("🔑 PRIMARY ISSUE: No authentication configured")
-        safe_push_log("💡 IMMEDIATE SOLUTION:")
-        safe_push_log("   1. ⚠️ CONFIGURE COOKIES in the authentication section")
-        safe_push_log("   2. 🌐 Use 'Browser Cookies' (easiest)")
-        safe_push_log("   3. 📁 Or export cookies from browser to file")
-        safe_push_log("")
-        safe_push_log("🎯 KEY INSIGHT: Premium codecs often require authentication!")
+        safe_push_log("🔑 No authentication configured")
+        safe_push_log("💡 Try: Enable browser cookies or export cookie file")
     else:
-        cookies_method = st.session_state.get("cookies_method", "unknown")
-        safe_push_log("🔑 AUTHENTICATION ISSUE: Cookies configured but not working")
-        safe_push_log("💡 SOLUTIONS TO TRY:")
-        safe_push_log("   1. 🔄 Update your cookies (they may be expired)")
-        safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
-        safe_push_log("   3. 🔁 Try different browser or re-export cookies")
-        safe_push_log(f"   4. 📋 Current method: {cookies_method}")
+        safe_push_log("🔑 Authentication issue")
+        safe_push_log(
+            "� Try: Refresh browser authentication or check video accessibility"
+        )
 
-    safe_push_log("")
-    safe_push_log("📺 Technical context: Modern video platforms use sophisticated")
-    safe_push_log(
-        "    protection that requires fresh authentication for premium codecs."
-    )
-    safe_push_log(LOG_SEPARATOR)
+    safe_push_log("📺 Modern video platforms require fresh auth for premium codecs")
+    safe_push_log("=" * 30)
 
 
 def smart_download_with_profiles(
@@ -407,10 +505,10 @@ def smart_download_with_profiles(
     Returns:
         Tuple[int, str]: (return_code, error_message)
     """
-    safe_push_log("🎯 STARTING PROFILE-BASED DOWNLOAD")
-    safe_push_log(LOG_SEPARATOR)
+    safe_push_log("")
+    log_title("🎯 Starting profile-based download...")
 
-    # Setup cookies
+    # Setup cookies (compact)
     cookies_available = False
     cookies_part = []
     cookies_method = st.session_state.get("cookies_method", "none")
@@ -418,10 +516,18 @@ def smart_download_with_profiles(
         cookies_part = build_cookies_params()
         cookies_available = len(cookies_part) > 0
 
+    # Reset session-based message suppression for new download
+    session_keys_to_reset = ["auth_hint_shown_this_download", "po_token_warning_shown"]
+    for key in session_keys_to_reset:
+        if key in st.session_state:
+            del st.session_state[key]
+
     # Probe available formats first
     available_codecs = probe_available_formats(url, cookies_part)
 
-    # Determine profiles to try
+    # Determine profiles to try based on mode and compatibility
+    log_title("🎯 Selecting quality profiles...")
+
     if download_mode == "forced" and target_profile:
         # Forced mode - single profile only
         profile = get_profile_by_name(target_profile)
@@ -429,25 +535,73 @@ def smart_download_with_profiles(
             return 1, f"Unknown profile: {target_profile}"
 
         profiles_to_try = [profile]
-        safe_push_log(f"🔒 FORCED MODE: Only trying {profile['label']}")
+        safe_push_log(f"🔒 FORCED MODE: {profile['label']}")
+        safe_push_log("⚠️ No fallback - will fail if this profile doesn't work")
 
     else:
         # Auto mode - try all viable profiles
+        safe_push_log("🤖 Auto mode: Intelligent profile selection")
+
+        # Show which codecs were detected
+        detected_codecs = [
+            codec for codec, available in available_codecs.items() if available
+        ]
+        safe_push_log(f"📋 Available codecs: {', '.join(detected_codecs)}")
+
         profiles_to_try = filter_viable_profiles(available_codecs, "auto")
-        safe_push_log(f"🤖 AUTO MODE: Trying {len(profiles_to_try)} profiles")
+
+        if profiles_to_try:
+            safe_push_log(f"✅ Selected: {len(profiles_to_try)} compatible profile(s)")
+            safe_push_log("")
+
+            # Show selected profiles compactly
+            for i, p in enumerate(profiles_to_try, 1):
+                if i == 1:
+                    priority_icon = "🏆"
+                elif i == 2:
+                    priority_icon = "🥈"
+                elif i == 3:
+                    priority_icon = "🥉"
+                else:
+                    priority_icon = "📋"
+                safe_push_log(f"{priority_icon} Priority {i}: {p['label']}")
+        else:
+            safe_push_log("❌ No compatible profiles found!")
 
     if not profiles_to_try:
-        return 1, "No viable profiles found"
+        safe_push_log("")
+        safe_push_log("❌ Profile selection failed")
+        safe_push_log(
+            "💡 This means none of the quality profiles are compatible with the detected codecs"
+        )
+        safe_push_log("🔧 Try enabling different codec options or check your video URL")
+        return 1, "No viable profiles found based on codec compatibility"
 
-    # Try each profile
+    # Try each profile with clear progress indication
+    safe_push_log("")
+    log_title("🚀 Starting download attempts...")
+
     for profile_idx, profile in enumerate(profiles_to_try, 1):
         safe_push_log("")
         safe_push_log(
-            f"🏆 PROFILE {profile_idx}/{len(profiles_to_try)}: {profile['label']}"
+            f"🏆 Profile {profile_idx}/{len(profiles_to_try)}: {profile['label']}"
         )
-        safe_push_log(f"📋 {profile['description']}")
-        safe_push_log(f"🎯 Format: {profile['format']}")
-        safe_push_log(f"📊 Sort: {profile['format_sort']}")
+
+        # Show codec targeting in a concise way
+        codec_info = []
+        if "av01" in profile["format"].lower():
+            codec_info.append("🎬 AV1 (best compression)")
+        elif "vp9" in profile["format"].lower():
+            codec_info.append("🎥 VP9 (modern)")
+        else:
+            codec_info.append("📺 H.264 (compatible)")
+
+        if "opus" in profile["format"].lower():
+            codec_info.append("🎵 Opus audio")
+        else:
+            codec_info.append("🔊 AAC audio")
+
+        safe_push_log(" | ".join(codec_info))
 
         if status_placeholder:
             status_placeholder.info(f"🏆 Profile {profile_idx}: {profile['label']}")
@@ -467,10 +621,6 @@ def smart_download_with_profiles(
         # Add subtitles if requested
         if subs_selected:
             langs_csv = ",".join(subs_selected)
-            safe_push_log(
-                f"🔍 Subtitles: {langs_csv} | embed={embed_subs} | cut={do_cut}"
-            )
-
             cmd_base.extend(
                 [
                     "--write-subs",
@@ -495,20 +645,19 @@ def smart_download_with_profiles(
         if sb_params:
             cmd_base.extend(sb_params)
 
-        # Try all clients with this profile
+        # Store current profile for error diagnostics
+        st.session_state["current_attempting_profile"] = profile["label"]
+
+        # Try all clients with this profile (compact logging)
         success = False
-        for client in YOUTUBE_CLIENT_FALLBACKS:
+        for client_idx, client in enumerate(YOUTUBE_CLIENT_FALLBACKS, 1):
             client_name = client["name"]
             client_args = client["args"]
 
-            # Always use android client first for better format availability
             # Try with cookies first if available
             if cookies_available:
-                safe_push_log(f"   🍪 Trying {client_name} client + cookies")
                 if status_placeholder:
-                    status_placeholder.info(
-                        f"🍪 Profile {profile_idx}: {client_name} + cookies"
-                    )
+                    status_placeholder.info(f"🍪 {client_name.title()} + cookies")
 
                 cmd = cmd_base + client_args + cookies_part + [url]
                 ret = run_cmd(
@@ -516,18 +665,13 @@ def smart_download_with_profiles(
                 )
 
                 if ret == 0:
-                    safe_push_log(
-                        f"   ✅ SUCCESS with {profile['label']} + {client_name} + cookies!"
-                    )
+                    safe_push_log(f"✅ SUCCESS: {client_name.title()} client + cookies")
                     success = True
                     break
 
             # Try without cookies
-            safe_push_log(f"   🚀 Trying {client_name} client (no auth)")
             if status_placeholder:
-                status_placeholder.info(
-                    f"🚀 Profile {profile_idx}: {client_name} client"
-                )
+                status_placeholder.info(f"🚀 {client_name.title()} client")
 
             cmd = cmd_base + client_args + [url]
             ret = run_cmd(
@@ -535,24 +679,43 @@ def smart_download_with_profiles(
             )
 
             if ret == 0:
-                safe_push_log(
-                    f"   ✅ SUCCESS with {profile['label']} + {client_name} client!"
-                )
+                safe_push_log(f"✅ SUCCESS: {client_name.title()} client")
                 success = True
                 break
 
         if success:
             return 0, ""
 
-        safe_push_log(f"   ❌ All clients failed for {profile['label']}")
+        # Profile failed - provide compact summary
+        safe_push_log("")
+        safe_push_log(f"❌ FAILED: {profile['label']}")
 
-        # In forced mode or refuse quality downgrade, don't try other profiles
+        # Check what the main issue was (concise)
+        last_error = st.session_state.get("last_error", "").lower()
+        if "requested format is not available" in last_error:
+            safe_push_log("⚠️ Format rejected (authentication limitation)")
+        elif any(
+            auth_word in last_error for auth_word in ["403", "forbidden", "sign in"]
+        ):
+            safe_push_log("🔐 Authentication/permission issue")
+        else:
+            safe_push_log("⚠️ Technical compatibility issue")
+
+        # Check fallback options (compact)
+        remaining_profiles = len(profiles_to_try) - profile_idx
+
         if download_mode == "forced":
-            safe_push_log("🔒 FORCED MODE: No fallback, download failed")
+            safe_push_log("🔒 FORCED MODE: No fallback allowed")
             break
         elif refuse_quality_downgrade:
-            safe_push_log("🚫 REFUSE QUALITY DOWNGRADE: Stopping at first failure")
+            safe_push_log("🚫 STOPPING: Quality downgrade refused")
             break
+        elif remaining_profiles > 0:
+            safe_push_log(
+                f"🔄 FALLBACK: Trying next profile ({remaining_profiles} remaining)"
+            )
+        else:
+            safe_push_log("❌ No more profiles available")
 
     # All profiles failed - show comprehensive help
     profiles_count = len(profiles_to_try)
@@ -587,7 +750,7 @@ AUTH_ERROR_KEYWORDS = [
 ]
 
 # Constants
-LOG_SEPARATOR = "=" * 60
+# LOG_SEPARATOR removed - now using log_title() function for dynamic sizing
 
 # CSS Styles
 LOGS_CONTAINER_STYLE = """
@@ -930,6 +1093,26 @@ def should_suppress_message(message: str) -> bool:
     if is_sabr_warning(message):
         return True
 
+    # Suppress repetitive PO Token warnings (shown once per session)
+    if "po token" in message_lower and "gvs" in message_lower:
+        session_key = "po_token_warning_shown"
+        if st.session_state.get(session_key, False):
+            return True  # Suppress repeated warnings
+        st.session_state[session_key] = True
+        # Allow first warning to show, but simplify it
+        return False
+
+    # Suppress other repetitive technical warnings
+    repetitive_patterns = [
+        "there are missing subtitles languages because a po token was not provided",
+        "only images are available for download",
+        "the extractor specified to use impersonation",
+        "sleeping",  # "Sleeping 1.0 seconds" messages
+    ]
+
+    if any(pattern in message_lower for pattern in repetitive_patterns):
+        return True
+
     # Suppress Python tracebacks and technical errors
     technical_patterns = [
         "traceback (most recent call last)",
@@ -1004,6 +1187,13 @@ def log_http_403_error_hint(error_message: str = ""):
 
 def log_authentication_error_hint(error_message: str = ""):
     """Log context-aware authentication error messages"""
+    # Prevent spam - only show once per download session
+    session_key = "auth_hint_shown_this_download"
+    if st.session_state.get(session_key, False):
+        return
+
+    st.session_state[session_key] = True
+
     # Check if this is specifically an HTTP 403 error
     if is_http_403_error(error_message):
         log_http_403_error_hint(error_message)
@@ -1040,6 +1230,71 @@ def log_authentication_error_hint(error_message: str = ""):
     safe_push_log(
         "📺 Note: Age-restricted and private videos always require authentication"
     )
+
+
+def is_format_unavailable_error(error_message: str) -> bool:
+    """Check if error is specifically about requested format not being available"""
+    error_lower = error_message.lower()
+    return (
+        "requested format is not available" in error_lower
+        or "format is not available" in error_lower
+    )
+
+
+def log_format_unavailable_error_hint(
+    error_message: str = "", current_profile_name: str = ""
+):
+    """Log specific guidance for format unavailable errors - often auth issues with premium codecs"""
+
+    # Prevent spam - only show detailed explanation once per profile
+    session_key = f"format_hint_shown_{current_profile_name}"
+    if st.session_state.get(session_key, False):
+        # Just show brief message for subsequent failures
+        safe_push_log("⚠️ Format rejected (authentication limitation)")
+        return
+
+    st.session_state[session_key] = True
+
+    # Analyze the profile being attempted
+    profile_info = ""
+    if current_profile_name:
+        if "av1" in current_profile_name.lower():
+            profile_info = "AV1 codec"
+        elif "vp9" in current_profile_name.lower():
+            profile_info = "VP9 codec"
+        elif "opus" in current_profile_name.lower():
+            profile_info = "Opus audio"
+        else:
+            profile_info = current_profile_name
+
+    safe_push_log("🚫 FORMAT AUTHENTICATION ISSUE")
+    if profile_info:
+        safe_push_log(f"🎯 YouTube refused to serve {profile_info} format")
+
+    safe_push_log(
+        "🔍 EXPLANATION: Format was detected as available, but YouTube's download"
+    )
+    safe_push_log(
+        "   API uses stricter authentication for premium codecs than format detection."
+    )
+    safe_push_log("")
+
+    cookies_method = _get_current_cookies_method()
+
+    if cookies_method == "none":
+        safe_push_log("🔧 SOLUTION: Enable authentication cookies for premium formats")
+        safe_push_log("   • Use browser cookies (recommended)")
+        safe_push_log(
+            "   • Premium codecs (AV1, VP9, Opus) typically require authentication"
+        )
+    elif cookies_method in ["browser", "file"]:
+        safe_push_log("💡 SOLUTION: Refresh your authentication")
+        safe_push_log("   • Sign out and back into YouTube in your browser")
+        safe_push_log("   • Clear browser cache and re-authenticate")
+        if "av1" in profile_info.lower():
+            safe_push_log("   • AV1 has the strictest authentication requirements")
+
+    safe_push_log("✅ FALLBACK: Trying more compatible profiles next")
 
 
 def smart_download_with_fallback(
@@ -1136,8 +1391,7 @@ def smart_download_with_fallback(
 
     safe_push_log("❌ All fallback strategies failed")
     safe_push_log("")
-    safe_push_log("🚫 DOWNLOAD FAILED - COMPREHENSIVE TROUBLESHOOTING:")
-    safe_push_log(LOG_SEPARATOR)
+    log_title("🚫 Download failed - Comprehensive troubleshooting:")
 
     # Show specific error based on what was tried
     if not cookies_available:
@@ -1163,7 +1417,7 @@ def smart_download_with_fallback(
         "📺 Technical context: YouTube uses encrypted signatures that require"
     )
     safe_push_log("    fresh authentication tokens to decrypt video URLs.")
-    safe_push_log(LOG_SEPARATOR)
+    safe_push_log("─" * 50)  # Static separator for end of troubleshooting section
 
     return ret, "Authentication failed after all strategies"
 
@@ -1214,8 +1468,7 @@ def _log_strategy_header(
 ) -> None:
     """Log strategy attempt header with consistent formatting"""
     safe_push_log("")
-    safe_push_log(f"🎯 Strategy {strategy_num}/{total_strategies}: {strategy_name}")
-    safe_push_log("─" * 50)
+    log_title(f"🎯 Strategy {strategy_num}/{total_strategies}: {strategy_name}")
 
 
 def cleanup_temp_files(base_filename: str, tmp_dir: Path = None) -> None:
@@ -1479,6 +1732,21 @@ def safe_push_log(message: str):
         print(f"[LOG] {message} (Error: {e})")
 
 
+def log_title(title: str, underline_char: str = "─"):
+    """
+    Log a title with automatic underline of the same length
+
+    Args:
+        title: The title text to display
+        underline_char: Character to use for underline (default: ─)
+    """
+    # Simply use the full string length - much more natural!
+    underline_length = len(title)
+
+    safe_push_log(title)
+    safe_push_log(underline_char * underline_length)
+
+
 def extract_resolution_value(resolution_str: str) -> int:
     """Extract numeric value from resolution string for sorting"""
     if not resolution_str:
@@ -1636,7 +1904,15 @@ def get_video_formats(url: str, cookies_part: List[str]) -> List[Dict]:
     # Try each strategy
     for i, strategy in enumerate(strategies, 1):
         try:
-            safe_push_log(f"🔍 Strategy {i}/{len(strategies)}: {strategy['name']}")
+            # Clear status for each attempt
+            auth_status = (
+                "🔐 with authentication"
+                if strategy["auth_attempt"]
+                else "🌐 without authentication"
+            )
+            safe_push_log("")
+            safe_push_log(f"🔁 Attempt {i}/{len(strategies)}: {strategy['name']}")
+            safe_push_log(f"   💡 Testing format extraction {auth_status}")
 
             cmd_formats = strategy["cmd_base"] + [url]
 
@@ -1661,25 +1937,53 @@ def get_video_formats(url: str, cookies_part: List[str]) -> List[Dict]:
                         reverse=True,
                     )
 
-                    safe_push_log(f"✅ Success with {strategy['name']}")
-                    safe_push_log(t("log_formats_count", count=len(formats)))
+                    # Analyze quality of found formats
+                    max_res = max(
+                        extract_resolution_value(f["resolution"]) for f in formats
+                    )
+                    has_4k = max_res >= 2160
+                    has_hd = max_res >= 1080
+
+                    quality_note = ""
+                    if has_4k:
+                        quality_note = "🎬 4K+ formats available"
+                    elif has_hd:
+                        quality_note = "📺 HD formats available"
+                    else:
+                        quality_note = "📱 Standard definition formats"
+
+                    safe_push_log(f"   ✅ SUCCESS! Found {len(formats)} video formats")
+                    safe_push_log(f"   {quality_note} (max: {max_res}p)")
                     return formats
                 else:
-                    safe_push_log(f"⚠️ {strategy['name']} returned no parseable formats")
+                    safe_push_log("   ⚠️ Connected but no parseable formats found")
 
             else:
                 # Strategy failed, log and continue
                 error_msg = result.stderr.strip()
                 last_error = error_msg
-                safe_push_log(f"❌ {strategy['name']} failed: {error_msg[:100]}...")
+
+                # Provide user-friendly error interpretation
+                if "sign in" in error_msg.lower() or "login" in error_msg.lower():
+                    safe_push_log("   🔐 Authentication required for this strategy")
+                elif "private" in error_msg.lower():
+                    safe_push_log("   🔒 Video appears to be private or restricted")
+                elif (
+                    "not available" in error_msg.lower()
+                    or "unavailable" in error_msg.lower()
+                ):
+                    safe_push_log("   🌍 Video not available for this client/region")
+                elif "cookies" in error_msg.lower():
+                    safe_push_log("   🍪 Cookie authentication issue")
+                else:
+                    safe_push_log(f"   ❌ Failed: {error_msg[:80]}...")
 
                 # For auth errors, only show detailed hint once (from first auth attempt)
-                if (
-                    strategy["auth_attempt"]
-                    and i == 1
-                    and is_authentication_error(error_msg)
-                ):
-                    log_authentication_error_hint(error_msg)
+                if strategy["auth_attempt"] and i == 1:
+                    if is_format_unavailable_error(error_msg):
+                        log_format_unavailable_error_hint(error_msg)
+                    elif is_authentication_error(error_msg):
+                        log_authentication_error_hint(error_msg)
 
                 # Add small delay before next attempt to avoid rate limiting
                 if i < len(strategies):
@@ -1688,33 +1992,59 @@ def get_video_formats(url: str, cookies_part: List[str]) -> List[Dict]:
                     time.sleep(0.5)
 
         except Exception as e:
-            safe_push_log(f"❌ {strategy['name']} error: {e}")
+            safe_push_log(f"   💥 Unexpected error: {str(e)[:60]}...")
             last_error = str(e)
             continue
 
-    # All strategies failed
-    safe_push_log("❌ All format detection strategies failed")
-    safe_push_log("🔧 Comprehensive troubleshooting:")
+    # All strategies failed - provide comprehensive guidance
+    safe_push_log("")
+    log_title("❌ Format detection failed")
 
+    # Categorize the likely issue
     if cookies_part:
-        safe_push_log("🍪 Authentication was attempted but failed")
-        safe_push_log("💡 Try:")
-        safe_push_log("   • Update your cookies (they may be expired)")
-        safe_push_log("   • Sign out and back into YouTube in your browser")
-        safe_push_log("   • Try a different browser for cookie extraction")
+        safe_push_log(
+            "🔍 DIAGNOSIS: Authentication was attempted but all methods failed"
+        )
+        safe_push_log("")
+        safe_push_log("🆕 SOLUTIONS TO TRY:")
+        safe_push_log("   1. 🍪 Refresh your cookies:")
+        safe_push_log("      • Sign out and back into YouTube in your browser")
+        safe_push_log("      • Clear browser cache and re-extract cookies")
+        safe_push_log("      • Try a different browser (Chrome, Firefox, Safari)")
+        safe_push_log("")
+        safe_push_log("   2. 🔄 Check video accessibility:")
+        safe_push_log("      • Open the video in your browser to confirm it works")
+        safe_push_log("      • Make sure you're logged into the same YouTube account")
     else:
-        safe_push_log("⚠️ No authentication configured")
-        safe_push_log("💡 Consider:")
-        safe_push_log("   • Enabling browser cookies for better format access")
-        safe_push_log("   • Some videos may require authentication")
+        safe_push_log("🔍 DIAGNOSIS: No authentication configured")
+        safe_push_log("")
+        safe_push_log("🛠️ SOLUTIONS TO TRY:")
+        safe_push_log("   1. 🍪 Enable browser cookies:")
+        safe_push_log("      • Many videos require authentication for format access")
+        safe_push_log("      • Configure cookies in the app settings")
+        safe_push_log("")
+        safe_push_log("   2. 🔄 Check video accessibility:")
+        safe_push_log("      • Open the video in your browser to confirm it exists")
+        safe_push_log("      • Some videos may be region-locked or private")
 
-    safe_push_log("🌍 Other possibilities:")
-    safe_push_log("   • Video is private, region-locked, or deleted")
-    safe_push_log("   • Temporary YouTube API issues")
-    safe_push_log("   • Network connectivity problems")
+    safe_push_log("")
+    safe_push_log("🌍 OTHER POSSIBLE CAUSES:")
+    safe_push_log("   • Video is private, unlisted, or deleted")
+    safe_push_log("   • Video is region-locked (geo-blocked)")
+    safe_push_log("   • Temporary YouTube API rate limiting")
+    safe_push_log("   • Network connectivity issues")
+    safe_push_log("   • YouTube changed their API (rare)")
 
     if last_error:
-        safe_push_log(f"📋 Last error: {last_error}")
+        safe_push_log("")
+        safe_push_log("🔍 TECHNICAL DETAILS:")
+        safe_push_log(f"   Last error: {last_error[:150]}...")
+
+    safe_push_log("")
+    safe_push_log("💡 If this continues happening:")
+    safe_push_log("   • Try a different video to test if the issue is video-specific")
+    safe_push_log("   • Check the HomeTube GitHub issues for known problems")
+    safe_push_log("   • Report the issue with the video URL and error details")
 
     return []
 
@@ -3069,10 +3399,54 @@ def update_download_metrics(info_placeholder, speed="", eta="", size="", fragmen
                     cols[i].markdown(metric)
 
 
+def create_command_summary(cmd: List[str]) -> str:
+    """Create a user-friendly summary of the yt-dlp command instead of showing the full verbose command"""
+    if not cmd or len(cmd) < 2:
+        return "Running command..."
+
+    # Extract key information from the command
+    summary_parts = []
+
+    # Determine the client being used
+    if "--extractor-args" in cmd:
+        extractor_idx = cmd.index("--extractor-args")
+        if extractor_idx + 1 < len(cmd):
+            extractor_arg = cmd[extractor_idx + 1]
+            if "android" in extractor_arg:
+                summary_parts.append("📱 Android client")
+            elif "ios" in extractor_arg:
+                summary_parts.append("📱 iOS client")
+            elif "web" in extractor_arg:
+                summary_parts.append("🌐 Web client")
+            else:
+                summary_parts.append("🔧 Custom client")
+    else:
+        summary_parts.append("🎯 Default client")
+
+    # Check for authentication
+    if "--cookies" in cmd:
+        summary_parts.append("🍪 with cookies")
+    else:
+        summary_parts.append("🔓 no auth")
+
+    # Get the URL (usually the last argument)
+    url = cmd[-1] if cmd else ""
+    if "youtube.com" in url or "youtu.be" in url:
+        video_id = (
+            url.split("v=")[-1].split("&")[0] if "v=" in url else url.split("/")[-1]
+        )
+        summary_parts.append(f"📺 {video_id[:11]}")
+
+    return " • ".join(summary_parts)
+
+
 def run_cmd(cmd: List[str], progress=None, status=None, info=None) -> int:
     """Execute command with enhanced progress tracking and metrics display"""
     start_time = time.time()
-    push_log(f"$ {' '.join(cmd)}")
+
+    # Create a user-friendly command summary instead of the full verbose command
+    cmd_summary = create_command_summary(cmd)
+    push_log(f"🚀 {cmd_summary}")
 
     # Initialize metrics tracking
     metrics = DownloadMetrics()
@@ -3117,8 +3491,27 @@ def run_cmd(cmd: List[str], progress=None, status=None, info=None) -> int:
                 ):
                     st.session_state["last_error"] = clean_line
 
-                # Check for HTTP 403 and authentication errors
-                if is_authentication_error(clean_line):
+                # Check for format unavailable errors (premium codec authentication issues)
+                if is_format_unavailable_error(clean_line):
+                    # Don't spam logs - only show hint once per profile attempt
+                    current_profile = st.session_state.get(
+                        "current_attempting_profile", ""
+                    )
+                    hint_key = f"_format_hint_shown_{current_profile}"
+
+                    if not getattr(
+                        metrics, hint_key, False
+                    ) and not st.session_state.get(hint_key, False):
+                        push_log("")  # Empty line for readability
+                        log_format_unavailable_error_hint(clean_line, current_profile)
+                        push_log("")  # Empty line for readability
+                        setattr(metrics, hint_key, True)
+                        st.session_state[hint_key] = (
+                            True  # Persist across different run_cmd calls
+                        )
+
+                # Check for HTTP 403 and other authentication errors
+                elif is_authentication_error(clean_line):
                     # Don't spam logs - only show hint once per download
                     if not getattr(metrics, "_auth_hint_shown", False):
                         push_log("")  # Empty line for readability
