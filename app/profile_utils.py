@@ -1,6 +1,6 @@
 """
-Fonctions utilitaires pour le matching des profils de qualité.
-Séparées de main.py pour éviter les imports Streamlit dans les tests.
+Utility functions for quality profile matching.
+Separated from main.py to avoid Streamlit imports in tests.
 """
 
 from typing import List, Dict, Optional, Tuple
@@ -11,17 +11,17 @@ from pathlib import Path
 
 def parse_format_line(line: str) -> Optional[Dict]:
     """
-    Parse une ligne de sortie yt-dlp --list-formats.
+    Parse a line from yt-dlp --list-formats output.
 
     Args:
-        line: Ligne de la liste des formats
+        line: Line from the formats list
 
     Returns:
-        Dict au format EXAMPLE_FORMATS ou None si pas un format valide
+        Dict in EXAMPLE_FORMATS format or None if not a valid format
     """
     line = line.strip()
 
-    # Ignorer les en-têtes et lignes vides
+    # Ignore headers and empty lines
     if (
         not line
         or line.startswith("ID")
@@ -40,14 +40,14 @@ def parse_format_line(line: str) -> Optional[Dict]:
         format_id = parts[0]
         ext = parts[1]
 
-        # Détecter résolution et type
+        # Detect resolution and type
         resolution_str = "unknown"
         height = 0
         fps = None
         vcodec = "none"
         acodec = "none"
 
-        # Chercher la résolution
+        # Look for resolution
         for i, part in enumerate(parts):
             if "x" in part and part.replace("x", "").replace(".", "").isdigit():
                 resolution_str = part
@@ -55,7 +55,7 @@ def parse_format_line(line: str) -> Optional[Dict]:
                     height = int(part.split("x")[1])
                 except:
                     height = 0
-                # FPS souvent après la résolution
+                # FPS often after resolution
                 if i + 1 < len(parts) and parts[i + 1].isdigit():
                     fps = int(parts[i + 1])
                 break
@@ -64,10 +64,10 @@ def parse_format_line(line: str) -> Optional[Dict]:
                 height = 0
                 break
 
-        # Détecter les codecs dans le contenu de la ligne
+        # Detect codecs in line content
         line_lower = line.lower()
 
-        # Codecs vidéo
+        # Video codecs
         if "avc1" in line_lower or "h264" in line_lower:
             vcodec = "avc1"
         elif "vp9" in line_lower:
@@ -75,13 +75,13 @@ def parse_format_line(line: str) -> Optional[Dict]:
         elif "av01" in line_lower:
             vcodec = "av01"
 
-        # Codecs audio
+        # Audio codecs
         if "mp4a" in line_lower or "aac" in line_lower:
             acodec = "aac"
         elif "opus" in line_lower:
             acodec = "opus"
 
-        # Chercher les bitrates (nombres suivis de 'k')
+        # Look for bitrates (numbers followed by 'k')
         tbr = None
         abr = None
         vbr = None
@@ -135,24 +135,24 @@ def get_max_allowed_resolution(
         int: Résolution maximale autorisée en pixels (hauteur)
     """
     if not available_formats:
-        return 1080  # Fallback par défaut
+        return 1080  # Default fallback
 
-    # Trouver la résolution max disponible
+    # Find max available resolution
     max_available = max(
         f.get("height", 0) for f in available_formats if f.get("height", 0) > 0
     )
 
-    # Si VIDEO_QUALITY_MAX = "max", retourner la max disponible
+    # If VIDEO_QUALITY_MAX = "max", return the max available
     if video_quality_max == "max":
         return max_available
 
-    # Sinon, essayer de parser comme entier
+    # Otherwise, try to parse as integer
     try:
         max_requested = int(video_quality_max)
-        # Retourner le minimum entre demandé et disponible
+        # Return minimum between requested and available
         return min(max_requested, max_available)
     except (ValueError, TypeError):
-        # Si parsing échoue, utiliser max disponible
+        # If parsing fails, use max available
         return max_available
 
 
@@ -177,17 +177,17 @@ def match_profiles_to_formats(
     if not formats or not quality_profiles:
         return []
 
-    # Séparer les formats vidéo et audio
+    # Separate video and audio formats
     video_formats = [f for f in formats if f["vcodec"] != "none"]
     audio_formats = [f for f in formats if f["acodec"] != "none"]
 
     if not video_formats or not audio_formats:
         return []
 
-    # 1. Déterminer la résolution max autorisée
+    # 1. Determine max allowed resolution
     max_resolution = get_max_allowed_resolution(video_quality_max, video_formats)
 
-    # 2. Filtrer les formats à cette résolution exacte
+    # 2. Filter formats to this exact resolution
     target_video_formats = [
         f for f in video_formats if f.get("height", 0) == max_resolution
     ]
@@ -195,7 +195,7 @@ def match_profiles_to_formats(
     if not target_video_formats:
         return []
 
-    # 3. Grouper par codec et trier par qualité
+    # 3. Group by codec and sort by quality
     video_by_codec = {}
     audio_by_codec = {}
 
@@ -211,7 +211,7 @@ def match_profiles_to_formats(
             audio_by_codec[codec] = []
         audio_by_codec[codec].append(fmt)
 
-    # Trier par qualité dans chaque groupe
+    # Sort by quality within each group
     for codec_formats in video_by_codec.values():
         codec_formats.sort(
             key=lambda x: (x.get("fps", 0) or 0, x.get("vbr", 0) or 0), reverse=True
@@ -220,14 +220,14 @@ def match_profiles_to_formats(
     for codec_formats in audio_by_codec.values():
         codec_formats.sort(key=lambda x: x.get("abr", 0) or 0, reverse=True)
 
-    # 4. Nouvelle logique simple : 2 configs max par profil dans l'ordre QUALITY_PROFILES
+    # 4. New simple logic: max 2×2 combinations per profile in QUALITY_PROFILES order
     all_combinations = []
 
     for profile in quality_profiles:
         profile_name = profile["name"]
         profile_combinations = []
 
-        # Matcher les codecs vidéo pour ce profil
+        # Match video codecs for this profile
         for video_spec in profile.get("video_codec_ext", []):
             required_codecs = video_spec.get("vcodec", [])
             allowed_exts = video_spec.get("ext", [None])
@@ -243,17 +243,17 @@ def match_profiles_to_formats(
                     ):
                         matching_codecs.append(available_codec)
 
-        # Collecter tous les formats vidéo et audio compatibles pour ce profil
+        # Collect all compatible video and audio formats for this profile
         matching_video_formats = []
         matching_audio_formats = []
 
-        # Collecter les formats vidéo compatibles
+        # Collect compatible video formats
         for video_spec in profile.get("video_codec_ext", []):
             required_codecs = video_spec.get("vcodec", [])
             allowed_exts = video_spec.get("ext", [None])
 
             for required_codec in required_codecs:
-                # Chercher les codecs qui matchent (exact ou préfixe)
+                # Look for matching codecs (exact or prefix)
                 matching_codecs = []
                 for available_codec in video_by_codec.keys():
                     if (
@@ -266,7 +266,7 @@ def match_profiles_to_formats(
                 for video_codec in matching_codecs:
                     video_formats = video_by_codec[video_codec]
 
-                    # Filtrer par extension si spécifiée
+                    # Filter by extension if specified
                     if allowed_exts and None not in allowed_exts:
                         video_formats = [
                             f for f in video_formats if f["ext"] in allowed_exts
@@ -275,9 +275,9 @@ def match_profiles_to_formats(
                     if video_formats:
                         matching_video_formats.extend(
                             video_formats[:2]
-                        )  # Top 2 par codec
+                        )  # Top 2 per codec
 
-        # Collecter les formats audio compatibles
+        # Collect compatible audio formats
         for audio_spec in profile.get("audio_codec_ext", []):
             audio_required_codecs = audio_spec.get("acodec", [])
             audio_allowed_exts = audio_spec.get("ext", [None])
@@ -293,7 +293,7 @@ def match_profiles_to_formats(
                 for audio_codec in matching_audio_codecs:
                     audio_formats = audio_by_codec[audio_codec]
 
-                    # Filtrer par extension si spécifiée
+                    # Filter by extension if specified
                     if audio_allowed_exts and None not in audio_allowed_exts:
                         audio_formats = [
                             f for f in audio_formats if f["ext"] in audio_allowed_exts
@@ -302,9 +302,9 @@ def match_profiles_to_formats(
                     if audio_formats:
                         matching_audio_formats.extend(
                             audio_formats[:2]
-                        )  # Top 2 par codec
+                        )  # Top 2 per codec
 
-        # Dédoublonner et prendre les 2 meilleurs de chaque type
+        # Deduplicate and take the 2 best of each type
         video_matches = list(
             {f["format_id"]: f for f in matching_video_formats}.values()
         )[:2]
@@ -312,10 +312,10 @@ def match_profiles_to_formats(
             {f["format_id"]: f for f in matching_audio_formats}.values()
         )[:2]
 
-        # Créer TOUTES les combinaisons entre les meilleurs vidéos et audios
+        # Create ALL combinations between the best videos and audios
         if video_matches and audio_matches:
-            for video_format in video_matches:  # Chaque format vidéo
-                for audio_format in audio_matches:  # × Chaque format audio
+            for video_format in video_matches:  # Each video format
+                for audio_format in audio_matches:  # × Each audio format
                     combination = {
                         "profile_name": profile_name,
                         "profile_label": profile["label"],
@@ -329,8 +329,8 @@ def match_profiles_to_formats(
                     }
                     profile_combinations.append(combination)
 
-        # Ajouter toutes les combinaisons de ce profil (jusqu'à 4 max avec 2×2)
+        # Add all combinations from this profile (up to 4 max with 2×2)
         all_combinations.extend(profile_combinations)
 
-    # Retourner dans l'ordre strict de QUALITY_PROFILES (pas de tri par score)
+    # Return in strict QUALITY_PROFILES order (no sorting by score)
     return all_combinations

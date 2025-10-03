@@ -2,7 +2,7 @@ import pytest
 from app.profile_utils import match_profiles_to_formats
 from app.quality_profiles import QUALITY_PROFILES
 
-# Sample yt-dlp format data for testing (format demandé par l'utilisateur)
+# Sample yt-dlp format data for testing (format requested by user)
 # Data includes all common codec combinations for comprehensive testing
 SAMPLE_FORMATS = [
     {
@@ -136,14 +136,14 @@ SAMPLE_FORMATS = [
 
 
 def test_match_profiles_basic():
-    """Test du matching basique des profils."""
+    """Test basic profile matching."""
     combinations = match_profiles_to_formats(SAMPLE_FORMATS, QUALITY_PROFILES)
 
-    # Doit retourner une liste de combinaisons
+    # Should return a list of combinations
     assert isinstance(combinations, list)
     assert len(combinations) > 0
 
-    # Chaque combinaison doit avoir la structure attendue
+    # Each combination should have the expected structure
     combo = combinations[0]
     required_keys = [
         "profile_name",
@@ -159,7 +159,7 @@ def test_match_profiles_basic():
     for key in required_keys:
         assert key in combo, f"Missing required key: {key}"
 
-    # Vérifier les types des données
+    # Verify data types
     assert isinstance(combo["profile_name"], str)
     assert isinstance(combo["profile_label"], str)
     assert isinstance(combo["video_format"], dict)
@@ -170,7 +170,7 @@ def test_match_profiles_basic():
     assert isinstance(combo["priority"], int)
     assert isinstance(combo["target_resolution"], int)
 
-    # Vérifier que format_spec a la bonne forme (video+audio)
+    # Verify that format_spec has the correct format (video+audio)
     assert "+" in combo["format_spec"]
     video_id, audio_id = combo["format_spec"].split("+")
     assert video_id == combo["video_format"]["format_id"]
@@ -178,19 +178,19 @@ def test_match_profiles_basic():
 
 
 def test_match_profiles_empty():
-    """Test avec une liste de formats vide."""
+    """Test with empty format list."""
     combinations = match_profiles_to_formats([], QUALITY_PROFILES)
     assert combinations == []
 
 
 def test_match_profiles_no_profiles():
-    """Test avec une liste de profils vide."""
+    """Test with empty profile list."""
     combinations = match_profiles_to_formats(SAMPLE_FORMATS, [])
     assert combinations == []
 
 
 def test_match_profiles_invalid_input():
-    """Test avec des entrées invalides."""
+    """Test with invalid inputs."""
     # None input
     combinations = match_profiles_to_formats(None, QUALITY_PROFILES)
     assert combinations == []
@@ -200,10 +200,10 @@ def test_match_profiles_invalid_input():
 
 
 def test_av1_opus_priority():
-    """Test que AV1+Opus est prioritaire (profil mkv_av1_opus)."""
+    """Test that AV1+Opus has priority (mkv_av1_opus profile)."""
     combinations = match_profiles_to_formats(SAMPLE_FORMATS, QUALITY_PROFILES)
 
-    # Doit trouver une combinaison AV1+Opus
+    # Should find an AV1+Opus combination
     av1_opus_combos = [
         combo
         for combo in combinations
@@ -213,14 +213,14 @@ def test_av1_opus_priority():
         )
     ]
 
-    assert len(av1_opus_combos) > 0, "Aucune combinaison AV1+Opus trouvée"
+    assert len(av1_opus_combos) > 0, "No AV1+Opus combination found"
 
-    # La première combinaison AV1+Opus doit être du profil mkv_av1_opus
+    # The first AV1+Opus combination should be from mkv_av1_opus profile
     best_av1_opus = av1_opus_combos[0]
     assert best_av1_opus["profile_name"] == "mkv_av1_opus"
-    assert best_av1_opus["priority"] == 1, "AV1+Opus devrait avoir la priorité 1"
+    assert best_av1_opus["priority"] == 1, "AV1+Opus should have priority 1"
 
-    # Vérifier que le format_spec correspond bien aux formats choisis
+    # Verify that format_spec matches the chosen formats
     format_spec = best_av1_opus["format_spec"]
     video_id, audio_id = format_spec.split("+")
     assert best_av1_opus["video_format"]["format_id"] == video_id
@@ -228,50 +228,50 @@ def test_av1_opus_priority():
 
 
 def test_priority_ordering():
-    """Test que les combinaisons sont triées par priorité."""
+    """Test that combinations are sorted by priority."""
     combinations = match_profiles_to_formats(SAMPLE_FORMATS, QUALITY_PROFILES)
 
-    # Les priorités doivent être dans l'ordre croissant (1 = plus haute)
+    # Priorities should be in ascending order (1 = highest)
     priorities = [combo["priority"] for combo in combinations]
-    assert priorities == sorted(priorities), f"Priorités mal triées: {priorities}"
+    assert priorities == sorted(priorities), f"Priorities badly sorted: {priorities}"
 
-    # Le premier élément doit avoir la priorité 1 (si disponible)
+    # The first element should have priority 1 (if available)
     if combinations:
         assert combinations[0]["priority"] >= 1
 
 
 def test_resolution_based_matching():
-    """Test du matching basé sur la résolution."""
+    """Test resolution-based matching."""
 
-    # Tester avec les formats d'exemple et tous les profils
+    # Test with sample formats and all profiles
     combinations = match_profiles_to_formats(SAMPLE_FORMATS, QUALITY_PROFILES, "max")
 
     assert len(combinations) > 0, "Aucune combinaison trouvée"
 
-    # Vérifier que chaque combinaison a une résolution cible
+    # Verify that each combination has a target resolution
     for combo in combinations:
         target_res = combo["target_resolution"]
-        assert isinstance(target_res, int), f"Résolution cible invalide: {target_res}"
-        assert target_res > 0, f"Résolution cible négative: {target_res}"
+        assert isinstance(target_res, int), f"Invalid target resolution: {target_res}"
+        assert target_res > 0, f"Negative target resolution: {target_res}"
 
-        # La résolution vidéo ne doit pas dépasser la cible
+        # Video resolution should not exceed the target
         video_height = combo["video_format"].get("height", 0)
         assert (
             video_height <= target_res
-        ), f"Résolution vidéo {video_height} > cible {target_res}"
+        ), f"Video resolution {video_height} > target {target_res}"
 
 
 def test_codec_matching():
-    """Test que les codecs sont correctement matchés selon les profils."""
+    """Test that codecs are correctly matched according to profiles."""
     combinations = match_profiles_to_formats(SAMPLE_FORMATS, QUALITY_PROFILES)
 
-    # Vérifier que chaque combinaison respecte les contraintes du profil
+    # Verify that each combination respects the profile constraints
     for combo in combinations:
         profile_name = combo["profile_name"]
         video_codec = combo["video_format"]["vcodec"]
         audio_codec = combo["audio_format"]["acodec"]
 
-        # Trouver le profil correspondant
+        # Find the corresponding profile
         profile = None
         for p in QUALITY_PROFILES:
             if p["name"] == profile_name:
@@ -280,16 +280,16 @@ def test_codec_matching():
 
         assert (
             profile is not None
-        ), f"Profil {profile_name} non trouvé dans QUALITY_PROFILES"
+        ), f"Profile {profile_name} not found in QUALITY_PROFILES"
 
-        # Vérifier que les codecs matchent (structure réelle: vcodec/acodec dans les listes)
+        # Verify that codecs match (actual structure: vcodec/acodec in lists)
         if "video_codec_ext" in profile:
             expected_video_codecs = []
             for ext in profile["video_codec_ext"]:
                 expected_video_codecs.extend(ext.get("vcodec", []))
             assert (
                 video_codec in expected_video_codecs
-            ), f"Codec vidéo {video_codec} non supporté par profil {profile_name}. Attendus: {expected_video_codecs}"
+            ), f"Video codec {video_codec} not supported by profile {profile_name}. Expected: {expected_video_codecs}"
 
         if "audio_codec_ext" in profile:
             expected_audio_codecs = []
@@ -297,11 +297,11 @@ def test_codec_matching():
                 expected_audio_codecs.extend(ext.get("acodec", []))
             assert (
                 audio_codec in expected_audio_codecs
-            ), f"Codec audio {audio_codec} non supporté par profil {profile_name}. Attendus: {expected_audio_codecs}"
+            ), f"Audio codec {audio_codec} not supported by profile {profile_name}. Expected: {expected_audio_codecs}"
 
 
 def test_no_duplicate_combinations():
-    """Test qu'il n'y a pas de combinaisons dupliquées."""
+    """Test that there are no duplicate combinations."""
     combinations = match_profiles_to_formats(SAMPLE_FORMATS, QUALITY_PROFILES)
 
     format_specs = [combo["format_spec"] for combo in combinations]
@@ -311,10 +311,10 @@ def test_no_duplicate_combinations():
 
 
 def test_combination_logic():
-    """Test que toutes les combinaisons 2×2 sont générées pour chaque profil."""
+    """Test that all 2×2 combinations are generated for each profile."""
     combinations = match_profiles_to_formats(SAMPLE_FORMATS, QUALITY_PROFILES, "max")
 
-    # Grouper par profile name
+    # Group by profile name
     by_profile = {}
     for combo in combinations:
         profile_name = combo["profile_name"]
@@ -322,49 +322,49 @@ def test_combination_logic():
             by_profile[profile_name] = []
         by_profile[profile_name].append(combo)
 
-    # Pour chaque profil, vérifier les combinaisons
+    # For each profile, verify the combinations
     for profile_name, profile_combos in by_profile.items():
         # On s'attend à avoir jusqu'à 4 combinaisons (2 vidéo × 2 audio)
         assert (
             len(profile_combos) <= 4
-        ), f"Trop de combinaisons pour {profile_name}: {len(profile_combos)}"
+        ), f"Too many combinations for {profile_name}: {len(profile_combos)}"
 
         # Vérifier que les combinaisons sont uniques
         format_specs = [combo["format_spec"] for combo in profile_combos]
         assert len(format_specs) == len(
             set(format_specs)
-        ), f"Doublons dans {profile_name}"
+        ), f"Duplicates in {profile_name}"
 
 
 def test_format_spec_validity():
-    """Test que tous les format_spec sont valides et référencent des formats existants."""
+    """Test that all format_spec are valid and reference existing formats."""
     combinations = match_profiles_to_formats(SAMPLE_FORMATS, QUALITY_PROFILES)
 
     format_ids = {fmt["format_id"] for fmt in SAMPLE_FORMATS}
 
     for combo in combinations:
         format_spec = combo["format_spec"]
-        assert "+" in format_spec, f"Format spec invalide (pas de +): {format_spec}"
+        assert "+" in format_spec, f"Invalid format spec (no +): {format_spec}"
 
         video_id, audio_id = format_spec.split("+")
         assert (
             video_id in format_ids
-        ), f"Format vidéo {video_id} non trouvé dans SAMPLE_FORMATS"
+        ), f"Video format {video_id} not found in SAMPLE_FORMATS"
         assert (
             audio_id in format_ids
-        ), f"Format audio {audio_id} non trouvé dans SAMPLE_FORMATS"
+        ), f"Audio format {audio_id} not found in SAMPLE_FORMATS"
 
 
 if __name__ == "__main__":
     # Test de base
     combinations = match_profiles_to_formats(SAMPLE_FORMATS, QUALITY_PROFILES)
-    print(f"Combinaisons générées: {len(combinations)}")
+    print(f"Generated combinations: {len(combinations)}")
 
     for i, combo in enumerate(combinations, 1):
         print(f"{i}. {combo['profile_label']}")
         print(f"   Format: {combo['format_spec']}")
         print(
-            f"   Vidéo: {combo['video_format']['vcodec']} {combo['video_format']['height']}p"
+            f"   Video: {combo['video_format']['vcodec']} {combo['video_format']['height']}p"
         )
         print(
             f"   Audio: {combo['audio_format']['acodec']} {combo['audio_format']['abr']}kbps"

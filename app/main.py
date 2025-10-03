@@ -93,24 +93,24 @@ def get_video_formats(
     url: str, cookies_part: List[str] = None
 ) -> Tuple[bool, List[Dict], str]:
     """
-    Récupère la liste des formats vidéo depuis yt-dlp.
+    Retrieve video format list from yt-dlp.
 
     Args:
-        url: URL de la vidéo à analyser
-        cookies_part: Paramètres de cookies optionnels
+        url: Video URL to analyze
+        cookies_part: Optional cookie parameters
 
     Returns:
         Tuple[bool, List[Dict], str]:
-        - success: True si récupération réussie
-        - formats: Liste de dictionnaires de formats avec format_id, ext, vcodec, acodec, height, etc.
-        - error_msg: Message d'erreur si échec
+        - success: True if retrieval successful
+        - formats: List of format dictionaries with format_id, ext, vcodec, acodec, height, etc.
+        - error_msg: Error message if failed
     """
     if cookies_part is None:
         cookies_part = []
 
-    safe_push_log("🔍 Récupération des formats vidéo...")
+    safe_push_log("🔍 Retrieving video formats...")
 
-    # Stratégies de fallback avec différents clients
+    # Fallback strategies with different clients
     strategies = [
         {"name": "Default", "args": [], "timeout": 20},
         {
@@ -134,15 +134,15 @@ def get_video_formats(
 
     for i, strategy in enumerate(strategies, 1):
         try:
-            safe_push_log(f"🔄 Stratégie {i}/{len(strategies)}: {strategy['name']}")
+            safe_push_log(f"🔄 Strategy {i}/{len(strategies)}: {strategy['name']}")
 
-            # Construction de la commande
+            # Build command
             cmd = ["yt-dlp", "--list-formats", "--no-download"] + strategy["args"]
             if cookies_part:
                 cmd.extend(cookies_part)
-                safe_push_log(f"   🍪 Avec authentification...")
+                safe_push_log(f"   🍪 With authentication...")
             else:
-                safe_push_log(f"   🌐 Sans authentification...")
+                safe_push_log(f"   🌐 Without authentication...")
             cmd.append(url)
 
             result = run_subprocess_safe(
@@ -154,7 +154,7 @@ def get_video_formats(
             if result.returncode == 0 and result.stdout.strip():
                 output_lines = result.stdout.strip().split("\n")
 
-                # Parse des lignes de format
+                # Parse format lines
                 formats = []
                 for line in output_lines:
                     format_info = parse_format_line(line)
@@ -166,22 +166,22 @@ def get_video_formats(
                     audio_formats = [f for f in formats if f["acodec"] != "none"]
 
                     safe_push_log(
-                        f"   ✅ {len(video_formats)} formats vidéo, {len(audio_formats)} formats audio"
+                        f"   ✅ {len(video_formats)} video formats, {len(audio_formats)} audio formats"
                     )
                     return True, formats, ""
                 else:
-                    safe_push_log(f"   ⚠️ Aucun format valide parsé")
-                    # Debug: montrer quelques lignes de sortie
+                    safe_push_log(f"   ⚠️ No valid format parsed")
+                    # Debug: show some output lines
                     safe_push_log(
-                        f"   🔍 Debug: {len(output_lines)} lignes de sortie yt-dlp"
+                        f"   🔍 Debug: {len(output_lines)} yt-dlp output lines"
                     )
-                    for i, line in enumerate(output_lines[:5]):  # Premières 5 lignes
+                    for i, line in enumerate(output_lines[:5]):  # First 5 lines
                         safe_push_log(
                             f"   Line {i+1}: {line[:80]}..."
-                        )  # Tronquer à 80 chars
+                        )  # Truncate to 80 chars
             else:
-                error_msg = result.stderr.strip() if result.stderr else "Pas de sortie"
-                safe_push_log(f"   ❌ Échec: {error_msg[:50]}...")
+                error_msg = result.stderr.strip() if result.stderr else "No output"
+                safe_push_log(f"   ❌ Failed: {error_msg[:50]}...")
                 last_error = error_msg
 
         except Exception as e:
@@ -189,7 +189,7 @@ def get_video_formats(
             last_error = str(e)
             continue
 
-    safe_push_log("❌ Toutes les stratégies d'extraction ont échoué")
+    safe_push_log("❌ All extraction strategies failed")
     return False, [], last_error
 
 
@@ -396,39 +396,39 @@ def calculate_quality_score(video_format: Dict, audio_format: Dict) -> float:
 
 def match_profiles_to_formats(formats: List[Dict]) -> List[Dict]:
     """
-    Fait matcher les profils de qualité avec les formats disponibles et retourne
-    les combinaisons optimales par ordre de préférence.
+    Match quality profiles with available formats and return
+    optimal combinations in order of preference.
 
     Args:
-        formats: Liste des formats récupérés par get_video_formats()
+        formats: List of formats retrieved by get_video_formats()
 
     Returns:
-        Liste des combinaisons optimales triées par priorité/qualité
+        List of optimal combinations sorted by priority/quality
     """
     if not formats:
-        safe_push_log("❌ Aucun format disponible pour le matching")
+        safe_push_log("❌ No format available for matching")
         return []
 
-    # Utiliser le module utilitaire pour le matching
+    # Use utility module for matching
     try:
         from .profile_utils import match_profiles_to_formats as utils_match
     except ImportError:
         from profile_utils import match_profiles_to_formats as utils_match
 
-    # Log de progression
+    # Progress logging
     video_formats = [f for f in formats if f["vcodec"] != "none"]
     audio_formats = [f for f in formats if f["acodec"] != "none"]
     safe_push_log(
-        f"📊 Analyse: {len(video_formats)} formats vidéo, {len(audio_formats)} formats audio"
+        f"📊 Analysis: {len(video_formats)} video formats, {len(audio_formats)} audio formats"
     )
 
-    # Utiliser la fonction utilitaire avec VIDEO_QUALITY_MAX
+    # Use utility function with VIDEO_QUALITY_MAX
     video_quality_max = CONFIG.get("VIDEO_QUALITY_MAX", "max")
     combinations = utils_match(formats, QUALITY_PROFILES, video_quality_max)
 
-    # Log des résultats
+    # Log results
     if combinations:
-        safe_push_log(f"🎯 {len(combinations)} combinaisons générées:")
+        safe_push_log(f"🎯 {len(combinations)} combinations generated:")
         for i, combo in enumerate(combinations, 1):
             video_info = combo["video_format"]
             audio_info = combo["audio_format"]
@@ -437,21 +437,21 @@ def match_profiles_to_formats(formats: List[Dict]) -> List[Dict]:
                 f"      Format: {combo['format_spec']} ({video_info['height']}p + {audio_info['abr']}kbps)"
             )
     else:
-        safe_push_log("❌ Aucune combinaison viable trouvée")
+        safe_push_log("❌ No viable combination found")
 
     return combinations
 
 
 def get_optimal_profiles(formats: List[Dict], max_profiles: int = 4) -> List[Dict]:
     """
-    Fonction de compatibilité - appelle la nouvelle match_profiles_to_formats.
+    Compatibility function - calls the new match_profiles_to_formats.
 
     Args:
-        formats: Liste des formats de yt-dlp
-        max_profiles: Nombre maximum de profils à retourner
+        formats: List of yt-dlp formats
+        max_profiles: Maximum number of profiles to return
 
     Returns:
-        Liste des combinaisons optimales triées par priorité et qualité
+        List of optimal combinations sorted by priority and quality
     """
     combinations = match_profiles_to_formats(formats)
     return combinations[:max_profiles]
@@ -524,27 +524,27 @@ def analyze_video_formats_unified(
     url: str, cookies_part: List[str]
 ) -> Tuple[Dict[str, bool], List[Dict]]:
     """
-    Fonction unifiée qui analyse les formats vidéo et détecte les codecs disponibles.
+    Unified function that analyzes video formats and detects available codecs.
 
-    Wrapper de compatibilité autour des nouvelles fonctions get_video_formats.
+    Compatibility wrapper around the new get_video_formats functions.
 
     Args:
-        url: URL de la vidéo à analyser
-        cookies_part: Paramètres de cookies pour l'authentification
+        url: Video URL to analyze
+        cookies_part: Cookie parameters for authentication
 
     Returns:
         Tuple[Dict[str, bool], List[Dict]]:
-        - Dict de disponibilité des codecs: {"av01": True, "vp9": True, ...}
-        - Liste de tous les formats disponibles avec détails (triés par qualité)
+        - Codec availability dict: {"av01": True, "vp9": True, ...}
+        - List of all available formats with details (sorted by quality)
     """
     safe_push_log("")
-    log_title("🔍 Analyse des formats vidéo et codecs...")
+    log_title("🔍 Analyzing video formats and codecs...")
 
-    # Utiliser la nouvelle fonction simplifiée
+    # Use the new simplified function
     success, formats, error_msg = get_video_formats(url, cookies_part)
 
     if success and formats:
-        # Extraire les codecs disponibles
+        # Extract available codecs
         video_codecs = set()
         audio_codecs = set()
 
@@ -554,7 +554,7 @@ def analyze_video_formats_unified(
             if fmt["acodec"] != "none":
                 audio_codecs.add(fmt["acodec"])
 
-        # Créer le dict de disponibilité pour compatibilité
+        # Create availability dict for compatibility
         codecs_available = {
             "av01": any(codec.startswith("av01") for codec in video_codecs),
             "vp9": "vp9" in video_codecs,
@@ -567,16 +567,16 @@ def analyze_video_formats_unified(
             or any(codec.startswith("mp4a") for codec in audio_codecs),
         }
 
-        # Trier les formats par qualité (hauteur décroissante)
+        # Sort formats by quality (descending height)
         sorted_formats = sorted(formats, key=lambda x: x.get("height", 0), reverse=True)
 
-        safe_push_log(f"✅ Codecs détectés: {sum(codecs_available.values())}/5")
-        safe_push_log(f"📊 Formats analysés: {len(sorted_formats)}")
+        safe_push_log(f"✅ Codecs detected: {sum(codecs_available.values())}/5")
+        safe_push_log(f"📊 Formats analyzed: {len(sorted_formats)}")
 
         return codecs_available, sorted_formats
 
-    # En cas d'échec, retour par défaut optimiste
-    safe_push_log("⚠️ Échec de l'analyse, utilisation des valeurs par défaut")
+    # In case of failure, optimistic default return
+    safe_push_log("⚠️ Analysis failed, using default values")
     default_codecs = {
         "av01": True,
         "vp9": True,
