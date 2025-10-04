@@ -179,7 +179,7 @@ HomeTube uses **dynamic profile detection** with a **curated 4-tier quality matr
 
 **Enhanced Detection:**  
 - **🔍 Real-time Analysis** → Detects available codecs and formats for each video  
-- **� Smart Generation** → Creates multiple quality combinations from detected streams  
+- **🧪 Smart Generation** → Creates multiple quality combinations from detected streams  
 - **🎯 Intelligent Matching** → Uses actual format IDs instead of generic fallbacks  
 
 **Download Modes:**  

@@ -157,6 +157,51 @@ make debug-test
 make test-failed
 ```
 
+## 🔧 Development Environment Variables
+
+### Debug & Testing Options
+
+```bash
+# Keep temporary files for debugging (useful for troubleshooting subtitle issues)
+export REMOVE_TMP_FILES=false
+
+# Enable debug mode for detailed logging
+export DEBUG=1
+
+# Custom development paths
+export VIDEOS_FOLDER=./dev-downloads
+export TMP_DOWNLOAD_FOLDER=./dev-tmp
+
+# Test with different languages
+export UI_LANGUAGE=fr
+export SUBTITLES_CHOICES=en,fr,es
+```
+
+### Useful Debug Combinations
+
+```bash
+# Full debug mode with file preservation
+export DEBUG=1
+export REMOVE_TMP_FILES=false
+python run.py
+
+# Test subtitle processing (keeps all .srt/.vtt files)
+export REMOVE_TMP_FILES=false
+make test
+
+# Development with custom paths
+export VIDEOS_FOLDER=./test-videos
+export TMP_DOWNLOAD_FOLDER=./test-tmp
+export REMOVE_TMP_FILES=false
+streamlit run app/main.py
+```
+
+**🔍 Debug Mode Benefits:**
+
+- **REMOVE_TMP_FILES=false**: Keeps all temporary files (.srt, .vtt, .part, intermediate outputs) in `tmp/` folder
+- **DEBUG=1**: Enables detailed logging and configuration summary
+- **Custom paths**: Separate development files from production
+
 ## 🚀 Quick Development Commands
 
 ### Launch Application

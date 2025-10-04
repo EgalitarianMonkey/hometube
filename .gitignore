@@ -25,6 +25,7 @@ docker-compose.yml
 coverage.xml
 htmlcov/
 **Testing.ipynb
+tests/medias/*
 
 # Backup files
 *.old

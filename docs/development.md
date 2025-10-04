@@ -364,13 +364,13 @@ make lint
 **In `__init__.py`:**
 
 ```python
-__version__ = "0.6.0"
+__version__ = "0.8.0"
 ```
 
 **In `pyproject.toml`:**
 
 ```toml
-version = "0.6.0"
+version = "0.8.0"
 ```
 
 **Update lock file:**
@@ -425,8 +425,8 @@ git pull origin main
 #### Create new tag and Docker image
 
 ```bash
-git tag v0.5.0
-git push origin v0.5.0
+git tag v0.8.0
+git push origin v0.8.0
 ```
 
 #### Delete feature branch
@@ -473,26 +473,6 @@ _Check CI results for validation before merging._
 - **MINOR**: New features (backward compatible)
 - **PATCH**: Bug fixes
 
-### Release Steps
-
-```bash
-# 1. Update version
-git checkout main
-git pull origin main
-
-# 2. Update CHANGELOG.md
-# Add new version section with changes
-
-# 3. Create and push tag
-git tag v0.6.0
-git push origin v0.6.0
-
-# 4. GitHub Actions automatically:
-# - Builds Docker images
-# - Creates GitHub release
-# - Updates documentation
-```
-
 ### Deployment
 
 **Development**:
@@ -501,7 +481,7 @@ git push origin v0.6.0
 
 **Production**:
 - Version tags → versioned Docker images
-- Available at `ghcr.io/EgalitarianMonkey/hometube:v0.6.0
+- Available at `ghcr.io/EgalitarianMonkey/hometube:v0.8.0
 - GitHub releases with changelogs and artifacts
 
 ## 🛠️ Development Tools
