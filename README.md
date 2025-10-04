@@ -170,16 +170,21 @@ Custom yt-dlp arguments can be added directly from the UI or set by default for 
 
 ### 🎯 Smart Quality Profiles System
 
-HomeTube doesn’t just grab the generic *“best”* stream — it uses a **curated 4-tier quality matrix** with intelligent fallback, balancing **maximum quality** and **broad compatibility**:
+HomeTube uses **dynamic profile detection** with a **curated 4-tier quality matrix**, generating **up to 10 optimal combinations** per video based on real-time format analysis:
 
 - **🏆 MKV – AV1 + Opus**: Ultimate quality with next-gen codecs  
 - **🥇 MKV – VP9 + Opus**: Premium fallback with excellent compression  
 - **🥈 MP4 – AV1 + AAC**: Modern codec support for mobile & smart TVs  
 - **🥉 MP4 – H.264 + AAC**: Maximum compatibility, works everywhere, legacy-safe  
 
+**Enhanced Detection:**  
+- **🔍 Real-time Analysis** → Detects available codecs and formats for each video  
+- **� Smart Generation** → Creates multiple quality combinations from detected streams  
+- **🎯 Intelligent Matching** → Uses actual format IDs instead of generic fallbacks  
+
 **Download Modes:**  
-- **🔄 Auto Mode (Recommended)** → Smart fallback through the 4 profiles  
-- **🎯 Forced Mode** → Only the profile you select, no fallback  
+- **🔄 Auto Mode** → Smart fallback through all detected profile combinations  
+- **🎯 Force Profile** → Select from real detected profiles with specific codecs  
 - **🚫 Refuse Downgrade** → Stop at first failure instead of accepting lower quality  
 
 👉 [Full details on quality profiles & strategies](docs/usage.md#-quality-profiles--download-modes)

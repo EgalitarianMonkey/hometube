@@ -3,10 +3,7 @@ Utility functions for quality profile matching.
 Separated from main.py to avoid Streamlit imports in tests.
 """
 
-from typing import List, Dict, Optional, Tuple
-import subprocess
-import re
-from pathlib import Path
+from typing import List, Dict, Optional
 
 
 def parse_format_line(line: str) -> Optional[Dict]:
@@ -53,7 +50,7 @@ def parse_format_line(line: str) -> Optional[Dict]:
                 resolution_str = part
                 try:
                     height = int(part.split("x")[1])
-                except:
+                except (ValueError, IndexError):
                     height = 0
                 # FPS often after resolution
                 if i + 1 < len(parts) and parts[i + 1].isdigit():

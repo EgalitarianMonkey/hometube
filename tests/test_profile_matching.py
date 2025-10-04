@@ -1,4 +1,3 @@
-import pytest
 from app.profile_utils import match_profiles_to_formats
 from app.quality_profiles import QUALITY_PROFILES
 

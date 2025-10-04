@@ -1,8 +1,23 @@
 # 📖 Usage Guide
 
-Complete guide to using the Universal Video Downloader application.
+Complete guide to using the Universal Video Downloader appli### 💡 Choosing the Right Mode
 
-## 📺 Basic Video Download
+- **Use Auto Mode when:**  
+  ✅ You want best quality possible with automatic fallback  
+  ✅ You don't want to worry about codec details  
+  ✅ You're integrating with Plex/Jellyfin  
+  ✅ You want to benefit from up to 10 intelligent profile combinations  
+
+- **Use Force Profile Mode when:**  
+  🎯 You want to see exactly what codecs are available for each video  
+  🎯 You require specific codec combinations from detected formats  
+  🎯 You want complete transparency about available quality options  
+  🎯 You're preparing content for devices with known codec requirements  
+
+- **Enable "Refuse Quality Downgrade" when:**  
+  🚫 Quality > success rate  
+  🚫 You prefer failures over lower quality  
+  � You want predictable archival filesBasic Video Download
 
 1. **Enter URL**: Paste any video URL from supported platforms
 2. **Choose Destination**: Select or create a folder for organization
@@ -10,8 +25,13 @@ Complete guide to using the Universal Video Downloader application.
 
 ## 🏆 Quality Profiles & Download Modes
 
-HomeTube uses a **professional 4-tier quality matrix** designed specifically for homelab and media server use (Plex, Jellyfin, Emby).  
+HomeTube uses a **professional 4-tier quality matrix** with **dynamic profile detection** designed specifically for homelab and media server use (Plex, Jellyfin, Emby).  
 Instead of relying on the generic `best` option from yt-dlp (which can give unpredictable results), HomeTube applies carefully curated **codec + audio + container combinations** that balance **quality, compatibility, and future-proofing**.
+
+**🆕 Enhanced Detection System:**
+- **🔍 Real-time Format Analysis** → Detects available codecs and quality options for each video
+- **📊 Up to 10 Profile Combinations** → Generated automatically based on detected formats  
+- **🎯 Dynamic Profile Matching** → Uses actual available formats instead of static fallbacks
 
 ---
 
@@ -58,16 +78,16 @@ Use **MKV** unless you specifically need MP4 for mobile/TV playback.
 ### 🎯 How It Works
 
 **Auto Mode Process**  
-1. 🔍 Probes available formats on YouTube  
-2. 🎯 Filters only the formats relevant to the 4 profiles  
-3. 🏆 Attempts profiles in priority order (Ultimate → Universal)  
-4. ✅ Stops at the first success  
+1. 🔍 **Dynamic Format Detection** → Analyzes all available video/audio formats  
+2. 🎯 **Profile Generation** → Creates up to 10 optimal combinations from detected formats  
+3. 🏆 **Smart Prioritization** → Orders by codec quality (AV1 > VP9 > H.264) and container preference  
+4. ✅ **Intelligent Fallback** → Tries each generated profile until success  
 
-**Forced Mode Process**  
-1. 🎯 Uses the single profile you selected  
-2. 🔍 Verifies codecs are available  
-3. ⚡ Downloads immediately  
-4. ❌ Fails fast if the profile is not available  
+**Force Profile Mode Process**  
+1. 🔍 **Real-time Detection** → Scans available formats for the video  
+2. 🎯 **Dynamic Profile Selection** → Shows actual detected codec combinations  
+3. 🏆 **Precise Matching** → Uses real format IDs from detected streams  
+4. ⚡ **Direct Download** → No fallback, uses exactly what was detected  
 
 ---
 
@@ -321,24 +341,34 @@ rsync -avz --chown=100000:100996 --chmod=ug=rwX,o=r ~/Downloads/cookies.txt user
 
 ### Advanced Profile Architecture
 
-HomeTube uses a **professional 4-tier matrix** with intelligent codec detection and systematic fallback:
+HomeTube uses a **professional 4-tier matrix** with **enhanced dynamic detection** that generates up to 10 profile combinations with intelligent codec detection and systematic fallback:
 
 #### 🔍 Profile Detection Process
 
-**1. Codec Availability Probing**
+**1. Dynamic Format Analysis**
 ```
-🔍 Step 1: Probe video for available codecs
-   → Check AV1, VP9, H.264 video availability
-   → Check Opus, AAC audio availability
-   → Filter profiles to only viable combinations
+🔍 Step 1: Real-time format detection
+   → Analyze all available video formats (resolution, codec, bitrate)
+   → Analyze all available audio formats (codec, bitrate, channels)
+   → Extract actual format IDs from video stream
 ```
 
-**2. Profile Priority Ordering**
+**2. Intelligent Profile Generation**
 ```
-🏆 Priority 1: MKV – AV1 + Opus (Ultimate Quality)
-🥇 Priority 2: MKV – VP9 + Opus (Premium Fallback)  
-🥈 Priority 3: MP4 – AV1 + AAC (Mobile Compatible)
-🥉 Priority 4: MP4 – H.264 + AAC (Universal)
+🎯 Step 2: Generate up to 10 optimal combinations
+   → Match detected video formats with compatible audio formats
+   → Prioritize by codec quality: AV1 > VP9 > H.264
+   → Prioritize by container: MKV for quality, MP4 for compatibility
+   → Create profile combinations with real format IDs
+```
+
+**3. Smart Priority Ordering**
+```
+🏆 Priority 1: MKV – AV1 + Opus (Ultimate Quality - if detected)
+🥇 Priority 2: MKV – VP9 + Opus (Premium Fallback - if detected)  
+🥈 Priority 3: MP4 – AV1 + AAC (Mobile Compatible - if detected)
+🥉 Priority 4: MP4 – H.264 + AAC (Universal - if detected)
+   → Additional combinations based on actual detected formats up to 10 total
 ```
 
 #### 🔄 Auto Mode Execution
