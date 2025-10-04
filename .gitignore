@@ -67,6 +67,9 @@ Thumbs.db
 *.log
 logs/
 
+# GitHub
+.github/instructions/*
+
 # Docker volumes and data
 docker-volumes/
 data/
