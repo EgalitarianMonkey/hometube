@@ -30,6 +30,10 @@ try:
         fmt_hhmmss,
     )
     from .quality_profiles import QUALITY_PROFILES
+    from .subtitle_utils import (
+        has_embedded_subtitles,
+        embed_subtitles_manually,
+    )
 except ImportError:
     # Fallback for direct execution from app directory
     from translations import t, configure_language
@@ -48,6 +52,10 @@ except ImportError:
         fmt_hhmmss,
     )
     from quality_profiles import QUALITY_PROFILES
+    from subtitle_utils import (
+        has_embedded_subtitles,
+        embed_subtitles_manually,
+    )
 
 
 # === CONSTANTS ===
@@ -875,7 +883,7 @@ def smart_download_with_profiles(
         safe_push_log(f"💾 Using cached analysis ({cache_age_minutes:.1f}min old)")
     else:
         # Force fresh analysis for accurate profile matching
-        safe_push_log("� Fresh format analysis required for accurate profile matching")
+        safe_push_log("🆕 Fresh format analysis required for accurate profile matching")
         available_codecs, available_formats = analyze_video_formats_unified(
             sanitize_url(url), cookies_part
         )
@@ -1029,6 +1037,7 @@ def smart_download_with_profiles(
         quality_strategy = {
             "format": format_string,
             "format_sort": profile.get("format_sort", "res,fps,+size,br"),
+            "extra_args": profile.get("extra_args", []),
         }
 
         # Respect the profile's container choice instead of force_mp4 parameter
@@ -1225,6 +1234,8 @@ DEFAULT_CONFIG = {
     "DEFAULT_REFUSE_QUALITY_DOWNGRADE": "false",  # Stop at first failure instead of trying lower quality
     "DEFAULT_EMBED_CHAPTERS": "true",  # Embed chapters by default
     "DEFAULT_EMBED_SUBS": "true",  # Embed subtitles by default
+    # === Debug Options ===
+    "REMOVE_TMP_FILES": "true",  # Remove temporary files after processing (set to false for debugging)
     # === Advanced Options ===
     "YTDLP_CUSTOM_ARGS": "",
     "DEFAULT_CUTTING_MODE": "keyframes",  # keyframes or precise
@@ -1903,34 +1914,101 @@ def _log_strategy_header(
     log_title(f"🎯 Strategy {strategy_num}/{total_strategies}: {strategy_name}")
 
 
-def cleanup_temp_files(base_filename: str, tmp_dir: Path = None) -> None:
-    """Clean up temporary files created during download"""
+def cleanup_temp_files(
+    base_filename: str, tmp_dir: Path = None, cleanup_type: str = "all"
+) -> None:
+    """
+    Centralized cleanup function for temporary files
+
+    Args:
+        base_filename: Base filename for targeted cleanup
+        tmp_dir: Directory to clean (defaults to TMP_DOWNLOAD_FOLDER)
+        cleanup_type: Type of cleanup - "all", "download", "subtitles", "cutting", "outputs"
+    """
+    if not CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+        safe_push_log(
+            f"🔍 Debug mode: Skipping {cleanup_type} cleanup (REMOVE_TMP_FILES=false)"
+        )
+        return
+
     if tmp_dir is None:
         tmp_dir = TMP_DOWNLOAD_FOLDER
 
-    safe_push_log(t("cleaning_temp_files"))
+    safe_push_log(f"🧹 Cleaning {cleanup_type} temporary files...")
 
     try:
-        # Clean up various temporary files
-        patterns = [f"{base_filename}.*", "*.part", "*.ytdl", "*.temp", "*.tmp"]
-
         files_cleaned = 0
-        for pattern in patterns:
-            for file_path in tmp_dir.glob(pattern):
-                try:
-                    if file_path.is_file():
-                        file_path.unlink()
+
+        if cleanup_type in ("all", "download"):
+            # Download temporary files
+            patterns = [f"{base_filename}.*", "*.part", "*.ytdl", "*.temp", "*.tmp"]
+            for pattern in patterns:
+                for file_path in tmp_dir.glob(pattern):
+                    if file_path.is_file() and _should_remove_file(
+                        file_path, cleanup_type
+                    ):
+                        try:
+                            file_path.unlink()
+                            files_cleaned += 1
+                        except Exception as e:
+                            safe_push_log(f"⚠️ Could not remove {file_path.name}: {e}")
+
+        if cleanup_type in ("all", "subtitles"):
+            # Subtitle files (.srt/.vtt) and .part files
+            for ext in (".srt", ".vtt"):
+                for f in tmp_dir.glob(f"{base_filename}*{ext}"):
+                    try:
+                        f.unlink()
                         files_cleaned += 1
-                except Exception as e:
-                    safe_push_log(f"⚠️ Could not remove {file_path.name}: {e}")
+                    except Exception:
+                        pass
+            # Part files related to base_filename
+            for f in tmp_dir.glob(f"{base_filename}*.*.part"):
+                try:
+                    f.unlink()
+                    files_cleaned += 1
+                except Exception:
+                    pass
+
+        if cleanup_type in ("all", "cutting"):
+            # Cutting intermediate files
+            for suffix in ("-cut", "-cut-final"):
+                for ext in (".srt", ".vtt", ".mkv", ".mp4", ".webm"):
+                    for f in tmp_dir.glob(f"{base_filename}*{suffix}*{ext}"):
+                        try:
+                            f.unlink()
+                            files_cleaned += 1
+                        except Exception:
+                            pass
+
+        if cleanup_type in ("all", "outputs"):
+            # Final output files (for retry cleanup)
+            for ext in (".mkv", ".mp4", ".webm"):
+                p = tmp_dir / f"{base_filename}{ext}"
+                if p.exists():
+                    try:
+                        p.unlink()
+                        files_cleaned += 1
+                    except Exception:
+                        pass
 
         if files_cleaned > 0:
-            safe_push_log(f"🧹 Cleaned {files_cleaned} temporary files")
-
-        safe_push_log(t("cleanup_complete"))
+            safe_push_log(f"🧹 Cleaned {files_cleaned} {cleanup_type} temporary files")
+        else:
+            safe_push_log(f"✅ No {cleanup_type} files to clean")
 
     except Exception as e:
-        safe_push_log(f"⚠️ Error during cleanup: {e}")
+        safe_push_log(f"⚠️ Error during {cleanup_type} cleanup: {e}")
+
+
+def _should_remove_file(file_path: Path, cleanup_type: str) -> bool:
+    """Helper function to determine if a file should be removed based on cleanup type"""
+    # Skip removing final output files during download cleanup
+    if cleanup_type == "download" and file_path.suffix in (".mkv", ".mp4", ".webm"):
+        # Only remove if it's clearly a temporary file (has additional suffixes)
+        stem = file_path.stem
+        return any(suffix in stem for suffix in [".temp", ".tmp", ".part", "-cut"])
+    return True
 
 
 def ensure_dir(path: Path) -> None:
@@ -1944,29 +2022,13 @@ def move_file(src: Path, dest_dir: Path) -> Path:
 
 
 def cleanup_extras(tmp_dir: Path, base_filename: str):
-    # remove .srt/.vtt residuals + .part
-    for ext in (".srt", ".vtt"):
-        for f in tmp_dir.glob(f"{base_filename}*{ext}"):
-            try:
-                f.unlink()
-            except Exception:
-                pass
-    for f in tmp_dir.glob(f"{base_filename}*.*.part"):
-        try:
-            f.unlink()
-        except Exception:
-            pass
+    """Legacy wrapper for cleanup_temp_files - maintained for compatibility"""
+    cleanup_temp_files(base_filename, tmp_dir, "subtitles")
 
 
 def delete_intermediate_outputs(tmp_dir: Path, base_filename: str):
-    """Cleans any final files before a retry (avoids confusion)."""
-    for ext in (".mkv", ".mp4", ".webm"):
-        p = tmp_dir / f"{base_filename}{ext}"
-        if p.exists():
-            try:
-                p.unlink()
-            except Exception:
-                pass
+    """Legacy wrapper for cleanup_temp_files - maintained for compatibility"""
+    cleanup_temp_files(base_filename, tmp_dir, "outputs")
 
 
 # === Helpers time ===
@@ -4082,6 +4144,33 @@ with st.expander(t("advanced_options"), expanded=False):
         key="ytdlp_custom_args",
     )
 
+    st.markdown("---")
+
+    # Debug options
+    st.markdown("**🔍 Debug Options**")
+
+    # Store current REMOVE_TMP_FILES setting in session state
+    if "remove_tmp_files" not in st.session_state:
+        st.session_state.remove_tmp_files = (
+            CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true"
+        )
+
+    remove_tmp_files = st.checkbox(
+        "Remove temporary files after processing",
+        value=st.session_state.remove_tmp_files,
+        help="When disabled, all temporary files (.srt, .vtt, .part, intermediate outputs) will be kept for debugging. Check the tmp/ folder after download.",
+        key="remove_tmp_files_checkbox",
+    )
+
+    # Update CONFIG in real-time based on UI selection
+    CONFIG["REMOVE_TMP_FILES"] = "true" if remove_tmp_files else "false"
+    st.session_state.remove_tmp_files = remove_tmp_files
+
+    if not remove_tmp_files:
+        st.info(
+            "🔍 **Debug mode active**: Temporary files will be preserved in the tmp/ folder for inspection."
+        )
+
 
 # === DOWNLOAD BUTTON ===
 st.markdown("\n")
@@ -4257,11 +4346,15 @@ def run_cmd(cmd: List[str], progress=None, status=None, info=None) -> int:
     cmd_summary = create_command_summary(cmd)
     push_log(f"🚀 {cmd_summary}")
 
-    # Also show the actual complete yt-dlp command for transparency
+    # Also show the actual complete command for transparency
     if cmd and "yt-dlp" in cmd[0]:
-        # Show the full command exactly as executed
+        # Show the full yt-dlp command exactly as executed
         cmd_str = " ".join(cmd)
-        push_log(f"💻 Full command: {cmd_str}")
+        push_log(f"💻 Full yt-dlp command:\n{cmd_str}")
+    elif cmd and "ffmpeg" in cmd[0]:
+        # Show the full ffmpeg command exactly as executed
+        cmd_str = " ".join(cmd)
+        push_log(f"💻 Full ffmpeg command:\n{cmd_str}")
 
     # Initialize metrics tracking
     metrics = DownloadMetrics()
@@ -4833,7 +4926,7 @@ if submitted:
     # Handle cancellation
     if ret_dl == -1:
         status_placeholder.info(t("cleaning_temp_files"))
-        cleanup_temp_files(base_output, tmp_subfolder_dir)
+        cleanup_temp_files(base_output, tmp_subfolder_dir, "download")
         status_placeholder.success(t("cleanup_complete"))
 
         # Mark download as finished
@@ -4886,7 +4979,13 @@ if submitted:
 
         if cut_output.exists():
             try:
-                cut_output.unlink()
+                if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                    cut_output.unlink()
+                    push_log("🗑️ Removed existing cut output file")
+                else:
+                    push_log(
+                        f"🔍 Debug mode: Keeping existing cut output file {cut_output.name}"
+                    )
             except Exception:
                 pass
 
@@ -4942,9 +5041,13 @@ if submitted:
 
                 srt_file = None
                 for possible_file in possible_srt_files:
+                    push_log(f"🔍 Checking for subtitle file: {possible_file}")
                     if possible_file.exists():
                         srt_file = possible_file
+                        push_log(f"✅ Found subtitle file: {srt_file}")
                         break
+                    else:
+                        push_log(f"❌ Not found: {possible_file}")
 
                 if srt_file:
                     push_log(f"📝 Processing subtitle file: {srt_file.name} ({lang})")
@@ -5015,7 +5118,12 @@ if submitted:
 
                     # Clean up intermediate file
                     try:
-                        cut_srt_file.unlink()
+                        if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                            cut_srt_file.unlink()
+                        else:
+                            push_log(
+                                f"🔍 Debug mode: Keeping intermediate subtitle file {cut_srt_file.name}"
+                            )
                     except Exception:
                         pass
 
@@ -5113,7 +5221,7 @@ if submitted:
             # Handle cancellation during cutting
             if ret_cut == -1:
                 status_placeholder.info(t("cleaning_temp_files"))
-                cleanup_temp_files(base_output, tmp_subfolder_dir)
+                cleanup_temp_files(base_output, tmp_subfolder_dir, "cutting")
                 status_placeholder.success(t("cleanup_complete"))
 
                 # Mark download as finished
@@ -5136,12 +5244,27 @@ if submitted:
 
         if final_cut_name.exists():
             try:
-                final_cut_name.unlink()
-                push_log("🗑️ Removed existing final file")
+                if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                    final_cut_name.unlink()
+                    push_log("🗑️ Removed existing final file")
+                else:
+                    push_log(
+                        f"🔍 Debug mode: Keeping existing final file {final_cut_name.name}"
+                    )
             except Exception:
                 pass
-        cut_output.rename(final_cut_name)
-        push_log("✅ Cut file renamed to final name")
+        # In debug mode, copy instead of rename to preserve intermediate files
+        if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "false":
+            push_log(
+                f"🔍 Debug mode: Copying cut file to preserve intermediate {cut_output.name}"
+            )
+            import shutil
+
+            shutil.copy2(cut_output, final_cut_name)
+            push_log("✅ Cut file copied to final name (intermediate preserved)")
+        else:
+            cut_output.rename(final_cut_name)
+            push_log("✅ Cut file renamed to final name")
 
         # The renamed cut file becomes our final source
         final_source = final_cut_name
@@ -5149,13 +5272,16 @@ if submitted:
         # Delete the original complete file to save space
         try:
             if final_tmp.exists() and final_tmp != final_source:
-                final_tmp.unlink()
+                if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                    final_tmp.unlink()
+                    push_log("🗑️ Removed original file after cutting")
+                else:
+                    push_log(f"🔍 Debug mode: Keeping original file {final_tmp.name}")
         except Exception as e:
             push_log(t("log_cleanup_warning", error=e))
     else:
         # No cutting, use the original downloaded file
         final_source = final_tmp  # === Cleanup + move
-    cleanup_extras(tmp_subfolder_dir, base_output)
 
     # === METADATA CUSTOMIZATION ===
     # Customize metadata with user-provided title
@@ -5172,6 +5298,76 @@ if submitted:
 
         except Exception as e:
             push_log(f"⚠️ Error during metadata customization: {e}")
+
+    # === SUBTITLE VERIFICATION & MANUAL EMBEDDING ===
+    # Check if subtitles were requested and verify they are properly embedded
+    if subs_selected:
+        safe_push_log("🔍 Checking if subtitles are properly embedded...")
+
+        if not has_embedded_subtitles(final_source):
+            safe_push_log(
+                "⚠️ No embedded subtitles detected, attempting manual embedding..."
+            )
+
+            # Find available subtitle files
+            subtitle_files_to_embed = []
+            for lang in subs_selected:
+                # Try multiple possible subtitle file patterns
+                if do_cut:
+                    # For cut videos, look for the final processed subtitle files
+                    possible_srt_files = [
+                        tmp_subfolder_dir / f"{base_output}-cut-final.{lang}.srt",
+                        tmp_subfolder_dir / f"{base_output}-cut.{lang}.srt",
+                        tmp_subfolder_dir / f"{base_output}.{lang}.srt",
+                    ]
+                else:
+                    # For uncut videos, use original subtitle files
+                    possible_srt_files = [
+                        tmp_subfolder_dir / f"{base_output}.{lang}.srt",
+                        tmp_subfolder_dir / f"{base_output}.srt",
+                    ]
+
+                for possible_file in possible_srt_files:
+                    if possible_file.exists():
+                        subtitle_files_to_embed.append(possible_file)
+                        safe_push_log(
+                            f"📝 Found subtitle file: {possible_file.name} ({lang})"
+                        )
+                        break
+
+            # Attempt manual embedding
+            if subtitle_files_to_embed:
+                status_placeholder.info("🔧 Manually embedding subtitles...")
+
+                if embed_subtitles_manually(final_source, subtitle_files_to_embed):
+                    safe_push_log("✅ Subtitles successfully embedded manually")
+
+                    # Clean up subtitle files after successful embedding
+                    if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                        for sub_file in subtitle_files_to_embed:
+                            try:
+                                sub_file.unlink()
+                                safe_push_log(
+                                    f"🗑️ Removed subtitle file: {sub_file.name}"
+                                )
+                            except Exception as e:
+                                safe_push_log(
+                                    f"⚠️ Could not remove subtitle file {sub_file.name}: {e}"
+                                )
+                    else:
+                        safe_push_log(
+                            "🔍 Debug mode: Keeping subtitle files for inspection"
+                        )
+                else:
+                    safe_push_log("❌ Manual subtitle embedding failed")
+            else:
+                safe_push_log("⚠️ No subtitle files found for manual embedding")
+        else:
+            safe_push_log("✅ Subtitles are already properly embedded")
+
+    # === CLEANUP EXTRA FILES ===
+    # Clean up temporary files now that cutting and metadata are complete
+    cleanup_temp_files(base_output, tmp_subfolder_dir, "subtitles")
 
     try:
         final_moved = move_file(final_source, dest_dir)
