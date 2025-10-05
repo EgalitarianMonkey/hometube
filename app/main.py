@@ -1555,10 +1555,8 @@ DEFAULT_CONFIG = {
     "UI_LANGUAGE": "en",
     "SUBTITLES_CHOICES": "en",
     # === Quality & Download Preferences ===
-    "DOWNLOAD_MODE": "auto",  # auto (try all profiles) or forced (single profile)
     "VIDEO_QUALITY_MAX": "max",  # Maximum video resolution: "max" for highest available, or "2160", "1440", "1080", "720", "480", "360"
     "QUALITY_PROFILE": "auto",  # auto, mkv_av1_opus, mkv_vp9_opus, mp4_av1_aac, mp4_h264_aac
-    "REFUSE_QUALITY_DOWNGRADE": "false",  # Stop at first failure instead of trying lower quality
     "EMBED_CHAPTERS": "true",  # Embed chapters by default
     "EMBED_SUBTITLES": "true",  # Embed subtitles by default
     # === Debug Options ===
