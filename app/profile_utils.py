@@ -157,11 +157,13 @@ def match_profiles_to_formats(
     formats: List[Dict], quality_profiles: List[Dict], video_quality_max: str = "max"
 ) -> List[Dict]:
     """
-    Nouvelle logique simplifiée de matching des profils.
+    Logique simple et prévisible de matching des profils.
 
-    1. Détermine la résolution max autorisée selon VIDEO_QUALITY_MAX
-    2. Filtre les formats à cette résolution exacte
-    3. Pour chaque profil dans l'ordre QUALITY_PROFILES, propose max 2 configurations
+    Pour chaque profil :
+    1. Trouve les 2 meilleurs formats vidéo qui correspondent aux codecs du profil
+    2. Trouve les 2 meilleurs formats audio qui correspondent aux codecs du profil
+    3. Crée toutes les combinaisons (2 vidéo × 2 audio = max 4 par profil)
+    4. Au total : 4 profils × 4 combinaisons = max 16 combinaisons
 
     Args:
         formats: Liste des formats récupérés par get_video_formats()
@@ -174,17 +176,21 @@ def match_profiles_to_formats(
     if not formats or not quality_profiles:
         return []
 
-    # Separate video and audio formats
-    video_formats = [f for f in formats if f["vcodec"] != "none"]
-    audio_formats = [f for f in formats if f["acodec"] != "none"]
+    # Séparer les formats vidéo et audio (formats purs uniquement)
+    video_formats = [
+        f for f in formats if f["vcodec"] != "none" and f["acodec"] == "none"
+    ]
+    audio_formats = [
+        f for f in formats if f["acodec"] != "none" and f["vcodec"] == "none"
+    ]
 
     if not video_formats or not audio_formats:
         return []
 
-    # 1. Determine max allowed resolution
+    # Déterminer la résolution max autorisée
     max_resolution = get_max_allowed_resolution(video_quality_max, video_formats)
 
-    # 2. Filter formats to this exact resolution
+    # Filtrer les formats vidéo à cette résolution
     target_video_formats = [
         f for f in video_formats if f.get("height", 0) == max_resolution
     ]
@@ -192,127 +198,89 @@ def match_profiles_to_formats(
     if not target_video_formats:
         return []
 
-    # 3. Group by codec and sort by quality
-    video_by_codec = {}
-    audio_by_codec = {}
+    # Trier tous les formats par qualité
+    target_video_formats.sort(
+        key=lambda x: (x.get("fps", 0) or 0, x.get("vbr", 0) or x.get("tbr", 0) or 0),
+        reverse=True,
+    )
+    audio_formats.sort(key=lambda x: x.get("abr", 0) or 0, reverse=True)
 
-    for fmt in target_video_formats:
-        codec = fmt["vcodec"]
-        if codec not in video_by_codec:
-            video_by_codec[codec] = []
-        video_by_codec[codec].append(fmt)
-
-    for fmt in audio_formats:
-        codec = fmt["acodec"]
-        if codec not in audio_by_codec:
-            audio_by_codec[codec] = []
-        audio_by_codec[codec].append(fmt)
-
-    # Sort by quality within each group
-    for codec_formats in video_by_codec.values():
-        codec_formats.sort(
-            key=lambda x: (x.get("fps", 0) or 0, x.get("vbr", 0) or 0), reverse=True
-        )
-
-    for codec_formats in audio_by_codec.values():
-        codec_formats.sort(key=lambda x: x.get("abr", 0) or 0, reverse=True)
-
-    # 4. New simple logic: max 2×2 combinations per profile in QUALITY_PROFILES order
     all_combinations = []
 
+    # Pour chaque profil, trouver les formats compatibles
     for profile in quality_profiles:
         profile_name = profile["name"]
-        profile_combinations = []
 
-        # Match video codecs for this profile
-        for video_spec in profile.get("video_codec_ext", []):
-            required_codecs = video_spec.get("vcodec", [])
-            allowed_exts = video_spec.get("ext", [None])
-
-            for required_codec in required_codecs:
-                # Chercher les codecs qui matchent (exact ou préfixe)
-                matching_codecs = []
-                for available_codec in video_by_codec.keys():
-                    if (
-                        available_codec == required_codec
-                        or available_codec.startswith(required_codec + ".")
-                        or (required_codec == "h264" and available_codec == "avc1")
-                    ):
-                        matching_codecs.append(available_codec)
-
-        # Collect all compatible video and audio formats for this profile
+        # Trouver les 2 meilleurs formats vidéo pour ce profil
         matching_video_formats = []
-        matching_audio_formats = []
-
-        # Collect compatible video formats
         for video_spec in profile.get("video_codec_ext", []):
-            required_codecs = video_spec.get("vcodec", [])
-            allowed_exts = video_spec.get("ext", [None])
+            required_video_codecs = video_spec.get("vcodec", [])
+            allowed_video_exts = video_spec.get("ext", [])
 
-            for required_codec in required_codecs:
-                # Look for matching codecs (exact or prefix)
-                matching_codecs = []
-                for available_codec in video_by_codec.keys():
+            for fmt in target_video_formats:
+                fmt_codec = fmt["vcodec"]
+                fmt_ext = fmt["ext"]
+
+                # Vérifier si le codec correspond
+                codec_match = False
+                for required_codec in required_video_codecs:
                     if (
-                        available_codec == required_codec
-                        or available_codec.startswith(required_codec + ".")
-                        or (required_codec == "h264" and available_codec == "avc1")
+                        fmt_codec == required_codec
+                        or fmt_codec.startswith(required_codec + ".")
+                        or (required_codec == "h264" and fmt_codec == "avc1")
                     ):
-                        matching_codecs.append(available_codec)
+                        codec_match = True
+                        break
 
-                for video_codec in matching_codecs:
-                    video_formats = video_by_codec[video_codec]
+                # Vérifier l'extension si spécifiée
+                ext_match = True
+                if allowed_video_exts and None not in allowed_video_exts:
+                    ext_match = fmt_ext in allowed_video_exts
 
-                    # Filter by extension if specified
-                    if allowed_exts and None not in allowed_exts:
-                        video_formats = [
-                            f for f in video_formats if f["ext"] in allowed_exts
-                        ]
+                if codec_match and ext_match:
+                    matching_video_formats.append(fmt)
+                    if len(matching_video_formats) >= 2:  # Max 2 formats vidéo
+                        break
 
-                    if video_formats:
-                        matching_video_formats.extend(
-                            video_formats[:2]
-                        )  # Top 2 per codec
+            if len(matching_video_formats) >= 2:
+                break
 
-        # Collect compatible audio formats
+        # Trouver les 2 meilleurs formats audio pour ce profil
+        matching_audio_formats = []
         for audio_spec in profile.get("audio_codec_ext", []):
-            audio_required_codecs = audio_spec.get("acodec", [])
-            audio_allowed_exts = audio_spec.get("ext", [None])
+            required_audio_codecs = audio_spec.get("acodec", [])
+            allowed_audio_exts = audio_spec.get("ext", [])
 
-            for audio_required_codec in audio_required_codecs:
-                matching_audio_codecs = []
-                for available_codec in audio_by_codec.keys():
-                    if available_codec == audio_required_codec or (
-                        audio_required_codec == "mp4a" and available_codec == "aac"
+            for fmt in audio_formats:
+                fmt_codec = fmt["acodec"]
+                fmt_ext = fmt["ext"]
+
+                # Vérifier si le codec correspond
+                codec_match = False
+                for required_codec in required_audio_codecs:
+                    if fmt_codec == required_codec or (
+                        required_codec == "mp4a" and fmt_codec == "aac"
                     ):
-                        matching_audio_codecs.append(available_codec)
+                        codec_match = True
+                        break
 
-                for audio_codec in matching_audio_codecs:
-                    audio_formats = audio_by_codec[audio_codec]
+                # Vérifier l'extension si spécifiée
+                ext_match = True
+                if allowed_audio_exts and None not in allowed_audio_exts:
+                    ext_match = fmt_ext in allowed_audio_exts
 
-                    # Filter by extension if specified
-                    if audio_allowed_exts and None not in audio_allowed_exts:
-                        audio_formats = [
-                            f for f in audio_formats if f["ext"] in audio_allowed_exts
-                        ]
+                if codec_match and ext_match:
+                    matching_audio_formats.append(fmt)
+                    if len(matching_audio_formats) >= 2:  # Max 2 formats audio
+                        break
 
-                    if audio_formats:
-                        matching_audio_formats.extend(
-                            audio_formats[:2]
-                        )  # Top 2 per codec
+            if len(matching_audio_formats) >= 2:
+                break
 
-        # Deduplicate and take the 2 best of each type
-        video_matches = list(
-            {f["format_id"]: f for f in matching_video_formats}.values()
-        )[:2]
-        audio_matches = list(
-            {f["format_id"]: f for f in matching_audio_formats}.values()
-        )[:2]
-
-        # Create ALL combinations between the best videos and audios
-        if video_matches and audio_matches:
-            for video_format in video_matches:  # Each video format
-                for audio_format in audio_matches:  # × Each audio format
+        # Créer toutes les combinaisons pour ce profil (2×2 = max 4)
+        if matching_video_formats and matching_audio_formats:
+            for video_format in matching_video_formats:
+                for audio_format in matching_audio_formats:
                     combination = {
                         "profile_name": profile_name,
                         "profile_label": profile["label"],
@@ -324,10 +292,29 @@ def match_profiles_to_formats(
                         "priority": profile["priority"],
                         "target_resolution": max_resolution,
                     }
-                    profile_combinations.append(combination)
+                    all_combinations.append(combination)
 
-        # Add all combinations from this profile (up to 4 max with 2×2)
-        all_combinations.extend(profile_combinations)
-
-    # Return in strict QUALITY_PROFILES order (no sorting by score)
     return all_combinations
+
+
+def generate_profile_combinations(
+    profiles: List[Dict], formats: List[Dict], video_quality_max: str = "max"
+) -> List[Dict]:
+    """
+    Generate combinations for specific profiles with available formats.
+
+    Args:
+        profiles: List of specific profiles to match (instead of all QUALITY_PROFILES)
+        formats: List of formats retrieved by get_video_formats()
+        video_quality_max: Maximum video resolution
+
+    Returns:
+        List of combinations for the specified profiles
+    """
+    if not formats or not profiles:
+        return []
+
+    # Use the main matching function with specific profiles
+    combinations = match_profiles_to_formats(formats, profiles, video_quality_max)
+
+    return combinations

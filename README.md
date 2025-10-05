@@ -460,8 +460,7 @@ HomeTube configuration is managed through the `.env` file:
 | `COOKIES_FROM_BROWSER` | Cookies auth directly from active local browser |  | `chrome,firefox,brave,chromium,edge,opera,safari,vivaldi,whale` |
 | `BROWSER_SELECT` | Default browser for cookie extraction | `chrome` | `chrome,firefox,edge,safari` |
 | **Quality & Download Preferences** | | | |
-| `DOWNLOAD_MODE` | Download strategy | `auto` | `auto,forced` |
-| `QUALITY_PROFILE` | Default quality profile. Following best quality strategy by default | *auto-selection* | `mkv_av1_opus,mkv_vp9_opus,mp4_av1_aac,mp4_h264_aac` |
+| `QUALITY_PROFILE` | Download quality profiles to test. HomeTube proposes 4 main profiles. `auto`, by default, will strategically go through all of them and stop when success | `auto` | `auto,mkv_av1_opus,mkv_vp9_opus,mp4_av1_aac,mp4_h264_aac` |
 | `VIDEO_QUALITY_MAX` | Maximum video resolution limit | `max` | `max,2160,1440,1080,720,480,360` |
 | `REFUSE_QUALITY_DOWNGRADE` | Stop at first failure vs fallback | `false` | `true,false` |
 | `EMBED_CHAPTERS` | Embed chapters by default | `true` | `true,false` |
