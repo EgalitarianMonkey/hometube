@@ -730,10 +730,8 @@ HomeTube supports comprehensive environment variable configuration for all its f
 
 | Variable | Default | Description | Options |
 |----------|---------|-------------|---------|
-| `DOWNLOAD_MODE` | `auto` | Download strategy | `auto`, `forced` |
-| `QUALITY_PROFILE` | *(empty)* | Default quality profile | `mkv_av1_opus`, `mkv_vp9_opus`, `mp4_av1_aac`, `mp4_h264_aac` |
+| `QUALITY_PROFILE` | `auto` | Default quality profile | `mkv_av1_opus`, `mkv_vp9_opus`, `mp4_av1_aac`, `mp4_h264_aac` |
 | `VIDEO_QUALITY_MAX` | `max` | Maximum video resolution limit | `max`, `2160`, `1440`, `1080`, `720`, `480`, `360` |
-| `REFUSE_QUALITY_DOWNGRADE` | `false` | Stop at first failure | `true`, `false` |
 | `EMBED_CHAPTERS` | `true` | Embed chapters by default | `true`, `false` |  
 | `EMBED_SUBTITLES` | `true` | Embed subtitles by default | `true`, `false` |
 | `CUTTING_MODE` | `keyframes` | Video cutting precision | `keyframes`, `precise` |
@@ -810,10 +808,8 @@ YTDLP_CUSTOM_ARGS=--verbose --print-json --simulate
 
 ```bash
 # High-quality archival configuration
-DOWNLOAD_MODE=auto
 QUALITY_PROFILE=mkv_av1_opus
 VIDEO_QUALITY_MAX=max
-REFUSE_QUALITY_DOWNGRADE=false
 EMBED_CHAPTERS=true
 EMBED_SUBTITLES=true
 CUTTING_MODE=precise
@@ -823,10 +819,8 @@ CUTTING_MODE=precise
 
 ```bash
 # Quick downloads with fallbacks
-DOWNLOAD_MODE=auto
 QUALITY_PROFILE=mp4_h264_aac
 VIDEO_QUALITY_MAX=1080
-REFUSE_QUALITY_DOWNGRADE=false
 CUTTING_MODE=keyframes
 ```
 
@@ -834,10 +828,8 @@ CUTTING_MODE=keyframes
 
 ```bash
 # No quality compromises
-DOWNLOAD_MODE=forced
 QUALITY_PROFILE=mkv_av1_opus
 VIDEO_QUALITY_MAX=2160
-REFUSE_QUALITY_DOWNGRADE=true
 ```
 
 #### 📝 Configuration Notes
@@ -845,7 +837,6 @@ REFUSE_QUALITY_DOWNGRADE=true
 - **Priority**: UI selections always override environment defaults
 - **Profile Selection**: Empty `QUALITY_PROFILE` enables automatic selection
 - **Mode Impact**: `auto` mode tries all profiles, `forced` uses only the specified profile
-- **Fallback Behavior**: `REFUSE_QUALITY_DOWNGRADE=false` allows trying lower quality profiles
 - **Resolution Limit**: `VIDEO_QUALITY_MAX` caps the maximum resolution (e.g., `1080` limits to 1080p even if 4K is available)
 
 ## 🔧 Troubleshooting
