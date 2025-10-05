@@ -10,8 +10,6 @@ from typing import Optional, Tuple, List, Dict, Union
 import requests
 import streamlit as st
 
-# Simple codec and format detection - no complex threading needed
-
 try:
     # Try relative imports first (when running as module or with Streamlit)
     from .translations import t, configure_language
@@ -64,6 +62,7 @@ except ImportError:
 SPONSORBLOCK_API = "https://sponsor.ajay.app"
 MIN_COOKIE_FILE_SIZE = 100  # bytes
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+HOMETUBE_GITHUB_REPO = "EgalitarianMonkey/hometube"  # GitHub repository for HomeTube
 
 # Browser support for cookie extraction
 SUPPORTED_BROWSERS = [
@@ -85,6 +84,152 @@ YOUTUBE_CLIENT_FALLBACKS = [
     {"name": "ios", "args": ["--extractor-args", "youtube:player_client=ios"]},
     {"name": "web", "args": ["--extractor-args", "youtube:player_client=web"]},
 ]
+
+
+# === YT-DLP VERSION CHECK ===
+
+
+def get_current_ytdlp_version() -> Optional[str]:
+    """Get the currently installed yt-dlp version."""
+
+    try:
+        result = subprocess.run(
+            ["yt-dlp", "--version"], capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        pass
+    return None
+
+
+def get_latest_ytdlp_version() -> Optional[str]:
+    """Get the latest yt-dlp version from GitHub API."""
+    # Environment variable for testing
+    test_version = CONFIG.get("TEST_LATEST_YTDLP_VERSION")
+    if test_version:
+        return test_version
+
+    try:
+        response = requests.get(
+            "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("tag_name", "").lstrip("v")  # Remove 'v' prefix if present
+    except (requests.RequestException, json.JSONDecodeError, Exception):
+        pass
+    return None
+
+
+# === HOMETUBE VERSION CHECK ===
+
+
+def get_current_hometube_version() -> Optional[str]:
+    """Get the current HomeTube version from pyproject.toml."""
+
+    try:
+        import tomllib
+
+        pyproject_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "pyproject.toml"
+        )
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+            return data.get("project", {}).get("version")
+    except (FileNotFoundError, ImportError, Exception):
+        # Fallback for Python < 3.11 or if tomllib not available
+        try:
+            pyproject_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)), "pyproject.toml"
+            )
+            with open(pyproject_path, "r") as f:
+                for line in f:
+                    if line.strip().startswith("version = "):
+                        # Extract version from line like: version = "0.7.1"
+                        return line.split('"')[1]
+        except (FileNotFoundError, IndexError, Exception):
+            pass
+    return None
+
+
+def get_latest_hometube_version() -> Optional[str]:
+    """Get the latest HomeTube version from GitHub API."""
+    # Environment variable for testing
+    test_version = CONFIG.get("TEST_LATEST_HOMETUBE_VERSION")
+    if test_version:
+        return test_version
+
+    try:
+        response = requests.get(
+            f"https://api.github.com/repos/{HOMETUBE_GITHUB_REPO}/releases/latest",
+            timeout=10,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("tag_name", "").lstrip("v")  # Remove 'v' prefix if present
+        elif response.status_code == 404:
+            # Repository might not have releases yet, try tags
+            response = requests.get(
+                f"https://api.github.com/repos/{HOMETUBE_GITHUB_REPO}/tags", timeout=10
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data and len(data) > 0:
+                    return data[0].get("name", "").lstrip("v")
+    except (requests.RequestException, json.JSONDecodeError, Exception):
+        pass
+    return None
+
+
+def check_and_show_updates() -> None:
+    """
+    Simplified function to check and display update information
+    Called when user clicks the update check button in sidebar
+    """
+    try:
+        # Get current versions
+        ytdlp_current = get_current_ytdlp_version() or "unknown"
+        ytdlp_latest = get_latest_ytdlp_version() or "unknown"
+        hometube_current = get_current_hometube_version() or "unknown"
+        hometube_latest = get_latest_hometube_version() or "unknown"
+
+        # Build information message
+        update_info_markdown = f"""
+**🔄 Update Information**
+
+**HomeTube:**
+
+**{t('update_current_version')}:** {hometube_current}  
+**{t('update_latest_version')}:** {hometube_latest}  
+**Status:** {"✅ Up to date" if hometube_current == hometube_latest else "🔄 Update available"}
+
+**yt-dlp:**
+
+**{t('update_current_version')}:** {ytdlp_current}  
+**{t('update_latest_version')}:** {ytdlp_latest}  
+**Status:** {"✅ Up to date" if ytdlp_current == ytdlp_latest else "🔄 Update available"}
+
+**{t('update_docker_title')}:**
+
+{t('update_docker_instruction')}
+
+{t('update_docker_command')}
+
+**{t('update_local_title')} (yt-dlp):**
+
+{t('update_local_instruction')}
+
+**{t('update_git_title')} (HomeTube):**
+
+{t('update_git_instruction')}
+            """
+        st.info(update_info_markdown)
+
+    except Exception as e:
+        # Never break the app, but show a friendly error
+        st.error(f"⚠️ Could not check for updates: {str(e)}")
+        st.info("Please check for updates manually using the commands above.")
 
 
 # === VIDEO FORMAT EXTRACTION AND ANALYSIS ===
@@ -317,89 +462,33 @@ def match_codec_requirements(
     return matches
 
 
-def generate_profile_combinations(profile: Dict, available_formats: Dict) -> List[Dict]:
+def generate_profile_combinations(
+    profiles: List[Dict], formats: List[Dict]
+) -> List[Dict]:
     """
-    Generate viable download combinations for a profile based on available formats.
+    Generate combinations for specific profiles with available formats.
 
     Args:
-        profile: Quality profile definition
-        available_formats: Available codecs from extract_format_codecs()
+        profiles: List of specific profiles to match (instead of all QUALITY_PROFILES)
+        formats: List of formats retrieved by get_video_formats()
 
     Returns:
-        List of viable combinations with format specs
+        List of combinations for the specified profiles
     """
-    combinations = []
+    if not formats or not profiles:
+        return []
 
-    # Match video codecs
-    video_matches = match_codec_requirements(
-        available_formats["video_codecs"], profile["video_codec_ext"]
-    )
+    # Use utility module for matching
+    try:
+        from .profile_utils import match_profiles_to_formats as utils_match
+    except ImportError:
+        from profile_utils import match_profiles_to_formats as utils_match
 
-    # Match audio codecs
-    audio_matches = match_codec_requirements(
-        available_formats["audio_codecs"], profile["audio_codec_ext"]
-    )
-
-    # Generate combinations (up to 2 best per profile as requested)
-    combination_count = 0
-    for video_match in video_matches:
-        if combination_count >= 2:
-            break
-
-        for audio_match in audio_matches:
-            if combination_count >= 2:
-                break
-
-            # Take best video format and best audio format
-            best_video = video_match["formats"][0]
-            best_audio = audio_match["formats"][0]
-
-            # Generate yt-dlp format specification
-            format_spec = f"{best_video['format_id']}+{best_audio['format_id']}"
-
-            combinations.append(
-                {
-                    "profile_name": profile["name"],
-                    "profile_label": profile["label"],
-                    "video_codec": video_match["codec"],
-                    "audio_codec": audio_match["codec"],
-                    "video_format": best_video,
-                    "audio_format": best_audio,
-                    "format_spec": format_spec,
-                    "container": profile["container"],
-                    "extra_args": profile.get("extra_args", []),
-                    "priority": profile["priority"],
-                    "quality_score": calculate_quality_score(best_video, best_audio),
-                }
-            )
-
-            combination_count += 1
+    # Use utility function with specific profiles instead of all QUALITY_PROFILES
+    video_quality_max = CONFIG.get("VIDEO_QUALITY_MAX", "max")
+    combinations = utils_match(formats, profiles, video_quality_max)
 
     return combinations
-
-
-def calculate_quality_score(video_format: Dict, audio_format: Dict) -> float:
-    """
-    Calculate a quality score for ranking combinations.
-
-    Args:
-        video_format: Video format info
-        audio_format: Audio format info
-
-    Returns:
-        Quality score (higher = better)
-    """
-    # Video score: resolution * fps * bitrate
-    video_score = (
-        video_format.get("resolution", 0)
-        * max(video_format.get("fps", 1), 1)
-        * max(video_format.get("tbr", 0), 1)
-    )
-
-    # Audio score: bitrate
-    audio_score = audio_format.get("abr", 0) * 1000  # Weight audio less than video
-
-    return video_score + audio_score
 
 
 def match_profiles_to_formats(formats: List[Dict]) -> List[Dict]:
@@ -754,6 +843,30 @@ def format_profile_codec_info(profile: Dict) -> str:
     return f"🎬 Video: **{video_display}** | 🎵 Audio: **{audio_display}** | 📦 Container: **{container.upper()}**"
 
 
+def get_default_profile_index() -> int:
+    """
+    Get the default profile index based on QUALITY_PROFILE configuration.
+
+    Returns:
+        Index of the configured profile in QUALITY_PROFILES, or 0 if not found/empty
+    """
+    default_profile_name = CONFIG.get("QUALITY_PROFILE", "").strip()
+
+    if not default_profile_name:
+        return 0  # Return first profile if no default configured
+
+    # Find the index of the configured profile
+    for i, profile in enumerate(QUALITY_PROFILES):
+        if profile["name"] == default_profile_name:
+            return i
+
+    # If configured profile not found, return 0 and log a warning
+    print(
+        f"⚠️ Configured QUALITY_PROFILE '{default_profile_name}' not found, using first profile"
+    )
+    return 0
+
+
 def get_download_configuration() -> Dict:
     """
     Centralized configuration retrieval from session state.
@@ -911,21 +1024,83 @@ def smart_download_with_profiles(
     # Determine profiles to try based on mode and compatibility
     log_title("🎯 Selecting quality profiles...")
 
+    # Check if QUALITY_PROFILE is configured in environment
+    configured_profile_name = CONFIG.get("QUALITY_PROFILE", "").strip()
+    if configured_profile_name and not target_profile:
+        # Override with configured profile if set and no explicit target given
+        configured_profile = get_profile_by_name(configured_profile_name)
+        if configured_profile:
+            safe_push_log(
+                f"⚙️ CONFIGURATION OVERRIDE: Using configured profile '{configured_profile_name}'"
+            )
+            safe_push_log(f"🎯 Profile: {configured_profile['label']}")
+            safe_push_log("⚠️ WARNING: Only this profile will be tested - no fallback!")
+            safe_push_log(
+                "💡 This may fail if the profile is not compatible with the video"
+            )
+            safe_push_log(
+                '🔧 Set QUALITY_PROFILE="" to enable automatic profile selection'
+            )
+
+            # Force single profile mode
+            download_mode = "forced"
+            target_profile = configured_profile_name
+        else:
+            safe_push_log(
+                f"❌ ERROR: Configured QUALITY_PROFILE '{configured_profile_name}' not found!"
+            )
+            safe_push_log("🔄 Falling back to automatic profile selection")
+
     if download_mode == "forced" and target_profile:
-        # Forced mode - single profile only
+        # Forced mode - single profile with format matching
         if isinstance(target_profile, dict):
             # Dynamic profile object
-            profile = target_profile
-            safe_push_log(f"🔒 FORCED MODE (dynamic): {profile['label']}")
+            forced_profile = target_profile
+            safe_push_log(f"🔒 FORCED MODE (dynamic): {forced_profile['label']}")
         else:
             # Static profile name
-            profile = get_profile_by_name(target_profile)
-            if not profile:
+            forced_profile = get_profile_by_name(target_profile)
+            if not forced_profile:
                 return 1, f"Unknown profile: {target_profile}"
-            safe_push_log(f"🔒 FORCED MODE (static): {profile['label']}")
+            safe_push_log(f"🔒 FORCED MODE (static): {forced_profile['label']}")
 
-        profiles_to_try = [profile]
-        safe_push_log("⚠️ No fallback - will fail if this profile doesn't work")
+        # Generate combinations for this specific profile only
+        safe_push_log("🔍 Matching forced profile with available formats...")
+
+        # Generate combinations only for the forced profile
+        forced_combinations = generate_profile_combinations(
+            [forced_profile], available_formats
+        )
+
+        if forced_combinations:
+            safe_push_log(
+                f"✅ Found {len(forced_combinations)} compatible combination(s) for forced profile"
+            )
+
+            # Convert combinations to profile-like structures
+            profiles_to_try = []
+            for combination in forced_combinations:
+                profile_compat = {
+                    "name": combination["profile_name"],
+                    "label": combination["profile_label"],
+                    "format": combination["format_spec"],
+                    "format_sort": f"res:{combination['video_format']['resolution']},fps,+size,br",
+                    "extra_args": combination["extra_args"],
+                    "container": combination["container"],
+                    "priority": combination["priority"],
+                    "_dynamic_combination": combination,  # Store original for reference
+                }
+                profiles_to_try.append(profile_compat)
+        else:
+            safe_push_log(
+                f"❌ Forced profile '{forced_profile['label']}' is not compatible with available formats!"
+            )
+            return (
+                1,
+                f"Forced profile '{forced_profile['label']}' has no compatible formats",
+            )
+
+        safe_push_log("⚠️ No fallback - will fail if these combinations don't work")
 
     else:
         # Auto mode - dynamic profile generation based on available formats
@@ -1228,18 +1403,18 @@ DEFAULT_CONFIG = {
     "UI_LANGUAGE": "en",
     "SUBTITLES_CHOICES": "en",
     # === Quality & Download Preferences ===
-    "DEFAULT_DOWNLOAD_MODE": "auto",  # auto (try all profiles) or forced (single profile)
+    "DOWNLOAD_MODE": "auto",  # auto (try all profiles) or forced (single profile)
     "VIDEO_QUALITY_MAX": "max",  # Maximum video resolution: "max" for highest available, or "2160", "1440", "1080", "720", "480", "360"
-    "DEFAULT_QUALITY_PROFILE": "",  # mkv_av1_opus, mkv_vp9_opus, mp4_av1_aac, mp4_h264_aac
-    "DEFAULT_REFUSE_QUALITY_DOWNGRADE": "false",  # Stop at first failure instead of trying lower quality
-    "DEFAULT_EMBED_CHAPTERS": "true",  # Embed chapters by default
-    "DEFAULT_EMBED_SUBS": "true",  # Embed subtitles by default
+    "QUALITY_PROFILE": "",  # mkv_av1_opus, mkv_vp9_opus, mp4_av1_aac, mp4_h264_aac
+    "REFUSE_QUALITY_DOWNGRADE": "false",  # Stop at first failure instead of trying lower quality
+    "EMBED_CHAPTERS": "true",  # Embed chapters by default
+    "EMBED_SUBTITLES": "true",  # Embed subtitles by default
     # === Debug Options ===
     "REMOVE_TMP_FILES": "true",  # Remove temporary files after processing (set to false for debugging)
     # === Advanced Options ===
     "YTDLP_CUSTOM_ARGS": "",
-    "DEFAULT_CUTTING_MODE": "keyframes",  # keyframes or precise
-    "DEFAULT_BROWSER_SELECT": "chrome",  # Default browser for cookie extraction
+    "CUTTING_MODE": "keyframes",  # keyframes or precise
+    "BROWSER_SELECT": "chrome",  # Default browser for cookie extraction
     # === System ===
     "DEBUG": "false",
 }
@@ -1430,11 +1605,27 @@ def is_valid_browser(browser_name: str) -> bool:
 
 # === STREAMLIT UI CONFIGURATION ===
 # Must be the first Streamlit command
-st.set_page_config(page_title=t("page_title"), page_icon="🎬", layout="centered")
+st.set_page_config(
+    page_title=t("page_title"),
+    page_icon="🎬",
+    layout="centered",
+    initial_sidebar_state="collapsed",
+)
+
+# === SIDEBAR ===
+with st.sidebar.expander("⚙️ System"):
+    if st.button("🔄 Check for updates", use_container_width=True):
+        check_and_show_updates()
+
+
 st.markdown(
     f"<h1 style='text-align: center;'>{t('page_header')}</h1>",
     unsafe_allow_html=True,
 )
+
+
+# === VERSION INFORMATION REMOVED ===
+# Version info is now only shown in update notifications when needed
 
 
 # === SESSION ===
@@ -3737,7 +3928,7 @@ with st.expander(f"{t('quality_title')}", expanded=False):
                             format_func=lambda x: next(
                                 p["label"] for p in QUALITY_PROFILES if p["name"] == x
                             ),
-                            index=0,
+                            index=get_default_profile_index(),
                             help="Using static profiles as fallback. Try 'Detect Available Profiles' for better options.",
                             key="quality_profile",
                         )
@@ -3760,7 +3951,7 @@ with st.expander(f"{t('quality_title')}", expanded=False):
                         format_func=lambda x: next(
                             p["label"] for p in QUALITY_PROFILES if p["name"] == x
                         ),
-                        index=0,
+                        index=get_default_profile_index(),
                         help="No formats detected. Try 'Detect Available Profiles' for better options.",
                         key="quality_profile",
                     )
@@ -3783,7 +3974,7 @@ with st.expander(f"{t('quality_title')}", expanded=False):
                     format_func=lambda x: next(
                         p["label"] for p in QUALITY_PROFILES if p["name"] == x
                     ),
-                    index=0,
+                    index=get_default_profile_index(),
                     help="Use 'Detect Available Profiles' to see real matched profiles for this video.",
                     key="quality_profile",
                 )
@@ -3802,7 +3993,7 @@ with st.expander(f"{t('quality_title')}", expanded=False):
                 format_func=lambda x: next(
                     p["label"] for p in QUALITY_PROFILES if p["name"] == x
                 ),
-                index=0,
+                index=get_default_profile_index(),
                 help="Enter a URL above and use 'Detect Available Profiles' to see real matched profiles.",
                 key="quality_profile",
             )
@@ -4933,12 +5124,28 @@ if submitted:
         st.session_state.download_finished = True
         st.stop()
 
-    # Search for the final file in TMP subfolder
+    # Search for the final file in TMP subfolder (prioritize profile container format)
     final_tmp = None
-    for ext in (".mkv", ".mp4", ".webm"):
+
+    # Get the expected container format from current profile
+    preferred_ext = None
+    if "current_attempting_profile" in st.session_state:
+        for profile in QUALITY_PROFILES:
+            if profile["label"] == st.session_state["current_attempting_profile"]:
+                preferred_ext = f".{profile.get('container', 'mkv').lower()}"
+                break
+
+    # Search order: preferred extension first, then others
+    search_extensions = [".mkv", ".mp4", ".webm"]
+    if preferred_ext and preferred_ext in search_extensions:
+        search_extensions.remove(preferred_ext)
+        search_extensions.insert(0, preferred_ext)
+
+    for ext in search_extensions:
         p = tmp_subfolder_dir / f"{base_output}{ext}"
         if p.exists():
             final_tmp = p
+            safe_push_log(f"📄 Found output file: {p.name}")
             break
 
     if not final_tmp:

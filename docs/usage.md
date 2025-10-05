@@ -730,19 +730,19 @@ HomeTube supports comprehensive environment variable configuration for all its f
 
 | Variable | Default | Description | Options |
 |----------|---------|-------------|---------|
-| `DEFAULT_DOWNLOAD_MODE` | `auto` | Download strategy | `auto`, `forced` |
-| `DEFAULT_QUALITY_PROFILE` | *(empty)* | Default quality profile | `mkv_av1_opus`, `mkv_vp9_opus`, `mp4_av1_aac`, `mp4_h264_aac` |
+| `DOWNLOAD_MODE` | `auto` | Download strategy | `auto`, `forced` |
+| `QUALITY_PROFILE` | *(empty)* | Default quality profile | `mkv_av1_opus`, `mkv_vp9_opus`, `mp4_av1_aac`, `mp4_h264_aac` |
 | `VIDEO_QUALITY_MAX` | `max` | Maximum video resolution limit | `max`, `2160`, `1440`, `1080`, `720`, `480`, `360` |
-| `DEFAULT_REFUSE_QUALITY_DOWNGRADE` | `false` | Stop at first failure | `true`, `false` |
-| `DEFAULT_EMBED_CHAPTERS` | `true` | Embed chapters by default | `true`, `false` |  
-| `DEFAULT_EMBED_SUBS` | `true` | Embed subtitles by default | `true`, `false` |
-| `DEFAULT_CUTTING_MODE` | `keyframes` | Video cutting precision | `keyframes`, `precise` |
+| `REFUSE_QUALITY_DOWNGRADE` | `false` | Stop at first failure | `true`, `false` |
+| `EMBED_CHAPTERS` | `true` | Embed chapters by default | `true`, `false` |  
+| `EMBED_SUBTITLES` | `true` | Embed subtitles by default | `true`, `false` |
+| `CUTTING_MODE` | `keyframes` | Video cutting precision | `keyframes`, `precise` |
 
 #### 🌐 Browser Configuration
 
 | Variable | Default | Description | Options |
 |----------|---------|-------------|---------|
-| `DEFAULT_BROWSER_SELECT` | `chrome` | Default browser for cookies | `chrome`, `firefox`, `edge`, `safari`, `chromium` |
+| `BROWSER_SELECT` | `chrome` | Default browser for cookies | `chrome`, `firefox`, `edge`, `safari`, `chromium` |
 
 #### 🎯 Core Configuration
 
@@ -752,6 +752,7 @@ HomeTube supports comprehensive environment variable configuration for all its f
 | `TMP_DOWNLOAD_FOLDER` | `/data/tmp` | Temporary processing folder | `/tmp/hometube` |
 | `HOMETUBE_LANGUAGE` | `en` | Interface language | `en`, `fr` |
 | `YTDLP_CUSTOM_ARGS` | *(empty)* | Default yt-dlp arguments | `--max-filesize 100M` |
+| `DEBUG` | `false` | Enable debug mode | `true`, `false` |
 
 #### 🛠️ Custom yt-dlp Arguments
 
@@ -803,48 +804,48 @@ YTDLP_CUSTOM_ARGS=--write-info-json --write-description --write-thumbnail --writ
 YTDLP_CUSTOM_ARGS=--verbose --print-json --simulate
 ```
 
-#### �🔧 Usage Examples
+#### 🔧 Usage Examples
 
 **Batch Processing Setup**:
 
 ```bash
 # High-quality archival configuration
-DEFAULT_DOWNLOAD_MODE=auto
-DEFAULT_QUALITY_PROFILE=mkv_av1_opus
+DOWNLOAD_MODE=auto
+QUALITY_PROFILE=mkv_av1_opus
 VIDEO_QUALITY_MAX=max
-DEFAULT_REFUSE_QUALITY_DOWNGRADE=false
-DEFAULT_EMBED_CHAPTERS=true
-DEFAULT_EMBED_SUBS=true
-DEFAULT_CUTTING_MODE=precise
+REFUSE_QUALITY_DOWNGRADE=false
+EMBED_CHAPTERS=true
+EMBED_SUBTITLES=true
+CUTTING_MODE=precise
 ```
 
 **Fast Download Setup**:
 
 ```bash
 # Quick downloads with fallbacks
-DEFAULT_DOWNLOAD_MODE=auto
-DEFAULT_QUALITY_PROFILE=mp4_h264_aac
+DOWNLOAD_MODE=auto
+QUALITY_PROFILE=mp4_h264_aac
 VIDEO_QUALITY_MAX=1080
-DEFAULT_REFUSE_QUALITY_DOWNGRADE=false
-DEFAULT_CUTTING_MODE=keyframes
+REFUSE_QUALITY_DOWNGRADE=false
+CUTTING_MODE=keyframes
 ```
 
 **Strict Quality Control**:
 
 ```bash
 # No quality compromises
-DEFAULT_DOWNLOAD_MODE=forced
-DEFAULT_QUALITY_PROFILE=mkv_av1_opus
+DOWNLOAD_MODE=forced
+QUALITY_PROFILE=mkv_av1_opus
 VIDEO_QUALITY_MAX=2160
-DEFAULT_REFUSE_QUALITY_DOWNGRADE=true
+REFUSE_QUALITY_DOWNGRADE=true
 ```
 
 #### 📝 Configuration Notes
 
 - **Priority**: UI selections always override environment defaults
-- **Profile Selection**: Empty `DEFAULT_QUALITY_PROFILE` enables automatic selection
+- **Profile Selection**: Empty `QUALITY_PROFILE` enables automatic selection
 - **Mode Impact**: `auto` mode tries all profiles, `forced` uses only the specified profile
-- **Fallback Behavior**: `DEFAULT_REFUSE_QUALITY_DOWNGRADE=false` allows trying lower quality profiles
+- **Fallback Behavior**: `REFUSE_QUALITY_DOWNGRADE=false` allows trying lower quality profiles
 - **Resolution Limit**: `VIDEO_QUALITY_MAX` caps the maximum resolution (e.g., `1080` limits to 1080p even if 4K is available)
 
 ## 🔧 Troubleshooting

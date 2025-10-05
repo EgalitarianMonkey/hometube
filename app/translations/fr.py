@@ -254,6 +254,16 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
     "premium_cookies_required": "🍪 **Cette stratégie exige des cookies** pour accéder aux formats premium.",
     "premium_manual_format": "🔧 Sélection manuelle de format (optionnel)",
     "premium_manual_help": "Remplace la stratégie premium si sélectionné",
+    # === MISE À JOUR VERSION ===
+    "update_current_version": "Version actuelle",
+    "update_latest_version": "Dernière version",
+    "update_docker_title": "🐳 &nbsp; Pour Docker",
+    "update_docker_instruction": "Redémarrez avec la dernière image",
+    "update_docker_command": "`docker compose down && docker compose pull && docker compose up -d`",
+    "update_local_title": "🖥️ &nbsp; Pour installation locale",
+    "update_local_instruction": "`pip install -U yt-dlp`",
+    "update_git_title": "🖥️ &nbsp; Pour installation Git",
+    "update_git_instruction": "`git pull origin main && pip install -e .`",
 }
 
 # Accès direct aux valeurs de traduction (pour la compatibilité ascendante)
