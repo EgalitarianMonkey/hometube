@@ -208,12 +208,12 @@ Update your file cookies or try using **browser cookies** instead of file cookie
     "log_cleanup_warning": "[warn] Could not cleanup original file: {error}",
     "log_temp_download_folder": "[INFO] Temporary download folder: {folder}",
     # Enhanced metrics labels
-    "metrics_speed": "📊 Speed",
-    "metrics_eta": "⏰ ETA",
+    "metrics_status": "✅ Status",
+    "metrics_speed": "🚀 Speed",
+    "metrics_eta": "⏱️ ETA",
     "metrics_size": "📦 Size",
     "metrics_progress": "🧩 Progress",
-    "metrics_elapsed": "⏱️ Elapsed",
-    "metrics_total": "⏱️ Total",
+    "metrics_duration": "⏲️ Duration",
     # Folder management
     "folder_selection_method": "Folder selection method:",
     "folder_selection_existing": "📁 Choose from existing folders",

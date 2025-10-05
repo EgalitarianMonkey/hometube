@@ -3311,6 +3311,7 @@ class DownloadMetrics:
         self.file_size = ""
         self.fragments_info = ""
         self.last_progress = 0
+        self.start_time = time.time()
 
     def update_speed(self, speed: str):
         self.speed = speed
@@ -3324,14 +3325,39 @@ class DownloadMetrics:
     def update_fragments(self, fragments: str):
         self.fragments_info = fragments
 
+    def mark_step_complete(self, step_name: str, size: str = ""):
+        """Mark a processing step as complete and clear ETA"""
+        self.speed = step_name
+        self.eta = ""  # Clear ETA for completed steps
+        if size:
+            self.file_size = size
+
     def display(self, info_placeholder):
-        """Display current metrics in the UI"""
+        """Display current metrics in the UI with intelligent fragment display"""
+        # Show fragments only during active downloads (when we have meaningful fragment info)
+        show_frags = bool(self.fragments_info and "/" in str(self.fragments_info))
+
+        # Don't show ETA for completed processes
+        display_eta = self.eta
+        if any(
+            complete in self.speed.lower()
+            for complete in ["complete", "downloaded", "cut", "metadata"]
+            if self.speed
+        ):
+            display_eta = ""
+
+        # Calculate elapsed time
+        elapsed_seconds = int(time.time() - self.start_time)
+        elapsed_str = fmt_hhmmss(elapsed_seconds) if elapsed_seconds > 0 else ""
+
         update_download_metrics(
             info_placeholder,
             speed=self.speed,
-            eta=self.eta,
+            eta=display_eta,
             size=self.file_size,
             fragments=self.fragments_info,
+            show_fragments=show_frags,
+            elapsed=elapsed_str,
         )
 
     def reset(self):
@@ -3341,6 +3367,7 @@ class DownloadMetrics:
         self.file_size = ""
         self.fragments_info = ""
         self.last_progress = 0
+        self.start_time = time.time()
 
 
 # Progress parsing patterns and utility functions
@@ -4623,31 +4650,85 @@ def push_log(line: str):
 # Pending analysis logs system removed - using direct synchronous logging instead
 
 
-def update_download_metrics(info_placeholder, speed="", eta="", size="", fragments=""):
-    """Update the download metrics display"""
+def update_download_metrics(
+    info_placeholder,
+    speed="",
+    eta="",
+    size="",
+    fragments="",
+    show_fragments=True,
+    elapsed="",
+):
+    """Update the download metrics display with clean, predictable layout"""
     if info_placeholder is None:
         return
 
-    # Collect available metrics
-    metrics_parts = []
-    if speed:
-        metrics_parts.append(f"🚀 **Speed:** {speed}")
-    if eta:
-        metrics_parts.append(f"⏱️ **ETA:** {eta}")
-    if size:
-        metrics_parts.append(f"📦 **Size:** {size}")
-    if fragments:
-        metrics_parts.append(f"🧩 **Fragments:** {fragments}")
+    # Determine if this is a completed process
+    is_completed = speed and (
+        any(icon in speed for icon in ["✅", "✂️", "📝"]) or "complete" in speed.lower()
+    )
 
-    # Always show something - either metrics or a status message
-    if metrics_parts:
+    metrics_parts = []
+
+    if is_completed:
+        # COMPLETED PROCESS: Clean 3-column layout
+        # Status (clean up icons)
+        if speed:
+            clean_status = speed.replace("✅ ", "").replace("✂️ ", "").replace("📝 ", "")
+            metrics_parts.append(f"{t('metrics_status')}: {clean_status}")
+
+        # Size (always show for completed)
+        if size:
+            metrics_parts.append(f"{t('metrics_size')}: {size}")
+
+        # Duration (total time taken - only if meaningful)
+        if elapsed and elapsed != "Completed":
+            metrics_parts.append(f"{t('metrics_duration')}: {elapsed}")
+
+        # Display in clean 3-column layout for completed processes
         with info_placeholder.container():
-            cols = st.columns(len(metrics_parts))
-            for i, metric in enumerate(metrics_parts):
-                cols[i].markdown(metric)
+            if len(metrics_parts) >= 2:
+                # Always use 3 columns for consistent layout
+                cols = st.columns(3)
+                for i in range(3):
+                    if i < len(metrics_parts):
+                        cols[i].markdown(metrics_parts[i])
+                    # Empty columns are left blank naturally
+
     else:
-        # Show a subtle status when no specific metrics are available
-        info_placeholder.info("📊 Download in progress...")
+        # ACTIVE DOWNLOAD: Dynamic layout with ETA
+        # Speed
+        if speed:
+            metrics_parts.append(f"{t('metrics_speed')}: {speed}")
+
+        # Size
+        if size:
+            metrics_parts.append(f"{t('metrics_size')}: {size}")
+
+        # ETA (estimated time remaining - only for active downloads)
+        if eta and eta not in ["00:00", "00:01"]:
+            metrics_parts.append(f"{t('metrics_eta')}: {eta}")
+
+        # Duration (time elapsed so far - only if different from ETA)
+        if elapsed and (not eta or eta in ["00:00", "00:01"]):
+            metrics_parts.append(f"{t('metrics_duration')}: {elapsed}")
+
+        # Progress/Fragments (only when actively downloading)
+        if fragments and show_fragments and "/" in str(fragments):
+            metrics_parts.append(f"{t('metrics_progress')}: {fragments}")
+
+        # Display with dynamic columns (prioritize most important info)
+        with info_placeholder.container():
+            if metrics_parts:
+                # Limit to 4 columns max for readability
+                display_metrics = metrics_parts[:4]
+                cols = st.columns(len(display_metrics))
+                for i, metric in enumerate(display_metrics):
+                    cols[i].markdown(metric)
+
+    # Fallback if no metrics at all
+    if not metrics_parts:
+        info_placeholder.info("📊 Processing...")
 
 
 def create_command_summary(cmd: List[str]) -> str:
@@ -5314,6 +5395,23 @@ if submitted:
         status_placeholder.error(t("error_download_failed"))
         st.stop()
 
+    # === Measure downloaded file size ===
+    downloaded_size = final_tmp.stat().st_size
+    downloaded_size_mb = downloaded_size / (1024 * 1024)
+    downloaded_size_str = f"{downloaded_size_mb:.2f}MiB"
+
+    # Update metrics with accurate downloaded file size
+    if info_placeholder:
+        update_download_metrics(
+            info_placeholder,
+            speed="✅ Downloaded",
+            eta="",  # Clear ETA for completed download
+            size=downloaded_size_str,
+            show_fragments=False,
+        )
+
+    push_log(f"📊 Downloaded file size: {downloaded_size_str} (actual measurement)")
+
     # === Post-processing according to scenario ===
     final_source = final_tmp
 
@@ -5537,6 +5635,24 @@ if submitted:
         # The renamed cut file becomes our final source
         final_source = final_cut_name
 
+        # Measure cut file size
+        if final_source.exists():
+            cut_size = final_source.stat().st_size
+            cut_size_mb = cut_size / (1024 * 1024)
+            cut_size_str = f"{cut_size_mb:.2f}MiB"
+
+            # Update metrics with cut file size
+            if info_placeholder:
+                update_download_metrics(
+                    info_placeholder,
+                    speed="✂️ Cut complete",
+                    eta="",  # Clear ETA for completed cutting
+                    size=cut_size_str,
+                    show_fragments=False,
+                )
+
+            push_log(f"📊 Cut file size: {cut_size_str} (after cutting)")
+
         # Delete the original complete file to save space
         try:
             if final_tmp.exists() and final_tmp != final_source:
@@ -5563,6 +5679,24 @@ if submitted:
             # Apply custom metadata with user title
             if not customize_video_metadata(final_source, filename, original_title):
                 push_log("⚠️ Metadata customization failed, using original metadata")
+            else:
+                # Measure file size after metadata customization
+                if final_source.exists():
+                    metadata_size = final_source.stat().st_size
+                    metadata_size_mb = metadata_size / (1024 * 1024)
+                    metadata_size_str = f"{metadata_size_mb:.2f}MiB"
+
+                    # Update metrics with post-metadata size
+                    if info_placeholder:
+                        update_download_metrics(
+                            info_placeholder,
+                            speed="📝 Metadata added",
+                            eta="",  # Clear ETA for completed metadata step
+                            size=metadata_size_str,
+                            show_fragments=False,
+                        )
+
+                    push_log(f"📊 File size after metadata: {metadata_size_str}")
 
         except Exception as e:
             push_log(f"⚠️ Error during metadata customization: {e}")
@@ -5619,9 +5753,34 @@ if submitted:
     # Clean up temporary files now that cutting and metadata are complete
     cleanup_temp_files(base_output, tmp_subfolder_dir, "subtitles")
 
+    # Measure final processed file size before moving
+    if final_source.exists():
+        processed_size = final_source.stat().st_size
+        processed_size_mb = processed_size / (1024 * 1024)
+        push_log(f"📊 Processed file size: {processed_size_mb:.2f}MiB (before move)")
+
     try:
         final_moved = move_file(final_source, dest_dir)
         progress_placeholder.progress(100, text=t("status_completed"))
+
+        # Get final file size for accurate display
+        final_file_size = final_moved.stat().st_size
+        final_size_mb = final_file_size / (1024 * 1024)
+        final_size_str = f"{final_size_mb:.2f}MiB"
+
+        # Update metrics with final accurate file size (no duration for now)
+        if info_placeholder:
+            update_download_metrics(
+                info_placeholder,
+                speed="✅ Complete",
+                eta="",  # Explicitly clear ETA
+                size=final_size_str,
+                show_fragments=False,
+                elapsed="",  # No duration for final display until we implement proper tracking
+            )
+
+        # Log the final file size for accuracy
+        push_log(f"📊 Final file size: {final_size_str} (accurate measurement)")
 
         # Format full file path properly for display
         if video_subfolder == "/":
