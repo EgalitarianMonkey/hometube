@@ -30,9 +30,11 @@ try:
         fmt_hhmmss,
     )
     from .quality_profiles import QUALITY_PROFILES
-    from .subtitle_utils import (
-        has_embedded_subtitles,
+    from .subtitles_utils import (
         embed_subtitles_manually,
+        process_subtitles_for_cutting,
+        check_required_subtitles_embedded,
+        find_subtitle_files_optimized,
     )
     from .profile_utils import (
         match_profiles_to_formats,
@@ -57,9 +59,11 @@ except ImportError:
         fmt_hhmmss,
     )
     from quality_profiles import QUALITY_PROFILES
-    from subtitle_utils import (
-        has_embedded_subtitles,
+    from subtitles_utils import (
         embed_subtitles_manually,
+        process_subtitles_for_cutting,
+        check_required_subtitles_embedded,
+        find_subtitle_files_optimized,
     )
     from profile_utils import (
         match_profiles_to_formats,
@@ -5384,118 +5388,17 @@ if submitted:
 
         duration = actual_end - actual_start
 
-        # === NEW 3-STEP CUTTING PROCESS FOR PERFECT SUBTITLES ===
+        # Process subtitles for cutting using dedicated utility function
         push_log("")
-        push_log("🎯 Using 3-step cutting process for perfect subtitle synchronization")
-        push_log("   1. TRIM: Cut subtitles with original timestamps")
-        push_log("   2. REBASE: Shift subtitle timestamps to start at 00:00")
-        push_log("   3. MUX: Cut video and add processed subtitles")
-        push_log("")
-
-        # Find subtitle files to process
         processed_subtitle_files = []
         if subs_selected:
-            for lang in subs_selected:
-                # Try multiple possible subtitle file patterns
-                possible_srt_files = [
-                    tmp_subfolder_dir / f"{base_output}.{lang}.srt",
-                    tmp_subfolder_dir / f"{base_output}.srt",
-                    tmp_subfolder_dir / f"{base_output}.{lang}.vtt",
-                    tmp_subfolder_dir / f"{base_output}.vtt",
-                ]
-
-                srt_file = None
-                for possible_file in possible_srt_files:
-                    push_log(f"🔍 Checking for subtitle file: {possible_file}")
-                    if possible_file.exists():
-                        srt_file = possible_file
-                        push_log(f"✅ Found subtitle file: {srt_file}")
-                        break
-                    else:
-                        push_log(f"❌ Not found: {possible_file}")
-
-                if srt_file:
-                    push_log(f"📝 Processing subtitle file: {srt_file.name} ({lang})")
-
-                    # STEP 1: TRIM - Cut subtitle with original timestamps
-                    cut_srt_file = tmp_subfolder_dir / f"{base_output}-cut.{lang}.srt"
-                    cmd_trim = [
-                        "ffmpeg",
-                        "-y",
-                        "-loglevel",
-                        "warning",
-                        "-i",
-                        str(srt_file),
-                        "-ss",
-                        str(actual_start),
-                        "-t",
-                        str(duration),
-                        "-c:s",
-                        "srt",
-                        str(cut_srt_file),
-                    ]
-
-                    push_log(
-                        f"   📝 Step 1 - TRIM: Cutting {lang} subtitles ({actual_start:.3f}s + {duration:.3f}s)"
-                    )
-                    ret_trim = run_cmd(
-                        cmd_trim,
-                        progress_placeholder,
-                        status_placeholder,
-                        info_placeholder,
-                    )
-                    if ret_trim != 0 or not cut_srt_file.exists():
-                        push_log(f"   ⚠️ Failed to trim subtitles for {lang}, skipping")
-                        continue
-
-                    # STEP 2: REBASE - Shift timestamps to start at 00:00
-                    final_srt_file = (
-                        tmp_subfolder_dir / f"{base_output}-cut-final.{lang}.srt"
-                    )
-                    cmd_rebase = [
-                        "ffmpeg",
-                        "-y",
-                        "-loglevel",
-                        "warning",
-                        "-itsoffset",
-                        f"-{actual_start}",
-                        "-i",
-                        str(cut_srt_file),
-                        "-c:s",
-                        "srt",
-                        str(final_srt_file),
-                    ]
-
-                    push_log(
-                        f"   🔄 Step 2 - REBASE: Shifting {lang} timestamps by -{actual_start:.3f}s"
-                    )
-                    ret_rebase = run_cmd(
-                        cmd_rebase,
-                        progress_placeholder,
-                        status_placeholder,
-                        info_placeholder,
-                    )
-                    if ret_rebase != 0 or not final_srt_file.exists():
-                        push_log(
-                            f"   ⚠️ Failed to rebase subtitles for {lang}, skipping"
-                        )
-                        continue
-
-                    # Clean up intermediate file
-                    try:
-                        if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
-                            cut_srt_file.unlink()
-                        else:
-                            push_log(
-                                f"🔍 Debug mode: Keeping intermediate subtitle file {cut_srt_file.name}"
-                            )
-                    except Exception:
-                        pass
-
-                    processed_subtitle_files.append((lang, final_srt_file))
-                    push_log(f"   ✅ Successfully processed {lang} subtitles")
-                else:
-                    push_log(f"   ⚠️ Subtitle file not found for {lang}")
+            processed_subtitle_files = process_subtitles_for_cutting(
+                base_output=base_output,
+                tmp_subfolder_dir=tmp_subfolder_dir,
+                subtitle_languages=subs_selected,
+                start_time=actual_start,
+                duration=duration,
+            )
 
         # STEP 3: MUX - Cut video and optionally add processed subtitles
         if processed_subtitle_files:
@@ -5667,38 +5570,20 @@ if submitted:
     # === SUBTITLE VERIFICATION & MANUAL EMBEDDING ===
     # Check if subtitles were requested and verify they are properly embedded
     if subs_selected:
-        safe_push_log("🔍 Checking if subtitles are properly embedded...")
+        safe_push_log("🔍 Checking if all required subtitles are properly embedded...")
 
-        if not has_embedded_subtitles(final_source):
+        if not check_required_subtitles_embedded(final_source, subs_selected):
             safe_push_log(
-                "⚠️ No embedded subtitles detected, attempting manual embedding..."
+                "⚠️ Some or all required subtitles are missing, attempting manual embedding..."
             )
 
-            # Find available subtitle files
-            subtitle_files_to_embed = []
-            for lang in subs_selected:
-                # Try multiple possible subtitle file patterns
-                if do_cut:
-                    # For cut videos, look for the final processed subtitle files
-                    possible_srt_files = [
-                        tmp_subfolder_dir / f"{base_output}-cut-final.{lang}.srt",
-                        tmp_subfolder_dir / f"{base_output}-cut.{lang}.srt",
-                        tmp_subfolder_dir / f"{base_output}.{lang}.srt",
-                    ]
-                else:
-                    # For uncut videos, use original subtitle files
-                    possible_srt_files = [
-                        tmp_subfolder_dir / f"{base_output}.{lang}.srt",
-                        tmp_subfolder_dir / f"{base_output}.srt",
-                    ]
-
-                for possible_file in possible_srt_files:
-                    if possible_file.exists():
-                        subtitle_files_to_embed.append(possible_file)
-                        safe_push_log(
-                            f"📝 Found subtitle file: {possible_file.name} ({lang})"
-                        )
-                        break
+            # Find available subtitle files using optimized search
+            subtitle_files_to_embed = find_subtitle_files_optimized(
+                base_output=base_output,
+                tmp_subfolder_dir=tmp_subfolder_dir,
+                subtitle_languages=subs_selected,
+                is_cut=do_cut,
+            )
 
             # Attempt manual embedding
             if subtitle_files_to_embed:
@@ -5728,7 +5613,7 @@ if submitted:
             else:
                 safe_push_log("⚠️ No subtitle files found for manual embedding")
         else:
-            safe_push_log("✅ Subtitles are already properly embedded")
+            safe_push_log("✅ All required subtitles are already properly embedded")
 
     # === CLEANUP EXTRA FILES ===
     # Clean up temporary files now that cutting and metadata are complete
