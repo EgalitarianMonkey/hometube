@@ -206,12 +206,12 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
     "log_cleanup_warning": "[warn] Could not cleanup original file: {error}",
     "log_temp_download_folder": "[INFO] Temporary download folder: {folder}",
     # Enhanced metrics labels
-    "metrics_speed": "📊 Vitesse",
-    "metrics_eta": "⏰ Temps restant",
+    "metrics_status": "✅ Statut",
+    "metrics_speed": "🚀 Vitesse",
+    "metrics_eta": "⏱️ Temps restant",
     "metrics_size": "📦 Taille",
     "metrics_progress": "🧩 Progression",
-    "metrics_elapsed": "⏱️ Écoulé",
-    "metrics_total": "⏱️ Total",
+    "metrics_duration": "⏲️ Durée",
     # Folder management
     "folder_selection_method": "Méthode de sélection de dossier:",
     "folder_selection_existing": "📁 Choisir parmi les dossiers existants",
