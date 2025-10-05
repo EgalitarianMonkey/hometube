@@ -256,6 +256,16 @@ Update your file cookies or try using **browser cookies** instead of file cookie
     "premium_cookies_required": "🍪 **This strategy requires cookies** to access premium formats.",
     "premium_manual_format": "🔧 Manual format selection (optional)",
     "premium_manual_help": "Overrides premium strategy if selected",
+    # === UPDATE VERSION CHECK ===
+    "update_current_version": "Current version",
+    "update_latest_version": "Latest version",
+    "update_docker_title": "🐳 &nbsp; For Docker",
+    "update_docker_instruction": "Pull and restart with the latest image",
+    "update_docker_command": "`docker compose down && docker compose pull && docker compose up -d`",
+    "update_local_title": "🖥️ &nbsp; For local installation",
+    "update_local_instruction": "`pip install -U yt-dlp`",
+    "update_git_title": "🖥️ &nbsp; For Git installation",
+    "update_git_instruction": "`git pull origin main && pip install -e .`",
 }
 
 # Direct access to translation values (for backward compatibility)

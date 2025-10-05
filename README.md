@@ -458,15 +458,15 @@ HomeTube configuration is managed through the `.env` file:
 | **Authentication & Cookies** | | | |
 | `YOUTUBE_COOKIES_FILE_PATH` | Authentication for private videos | **Must be defined** (or `COOKIES_FROM_BROWSER`) | `/config/youtube_cookies.txt` |
 | `COOKIES_FROM_BROWSER` | Cookies auth directly from active local browser |  | `chrome,firefox,brave,chromium,edge,opera,safari,vivaldi,whale` |
-| `DEFAULT_BROWSER_SELECT` | Default browser for cookie extraction | `chrome` | `chrome,firefox,edge,safari` |
+| `BROWSER_SELECT` | Default browser for cookie extraction | `chrome` | `chrome,firefox,edge,safari` |
 | **Quality & Download Preferences** | | | |
-| `DEFAULT_DOWNLOAD_MODE` | Download strategy | `auto` | `auto,forced` |
-| `DEFAULT_QUALITY_PROFILE` | Default quality profile. Following best quality strategy by default | *auto-selection* | `mkv_av1_opus,mkv_vp9_opus,mp4_av1_aac,mp4_h264_aac` |
+| `DOWNLOAD_MODE` | Download strategy | `auto` | `auto,forced` |
+| `QUALITY_PROFILE` | Default quality profile. Following best quality strategy by default | *auto-selection* | `mkv_av1_opus,mkv_vp9_opus,mp4_av1_aac,mp4_h264_aac` |
 | `VIDEO_QUALITY_MAX` | Maximum video resolution limit | `max` | `max,2160,1440,1080,720,480,360` |
-| `DEFAULT_REFUSE_QUALITY_DOWNGRADE` | Stop at first failure vs fallback | `false` | `true,false` |
-| `DEFAULT_EMBED_CHAPTERS` | Embed chapters by default | `true` | `true,false` |
-| `DEFAULT_EMBED_SUBS` | Embed subtitles by default | `true` | `true,false` |
-| `DEFAULT_CUTTING_MODE` | Video cutting precision | `keyframes` | `keyframes,precise` |
+| `REFUSE_QUALITY_DOWNGRADE` | Stop at first failure vs fallback | `false` | `true,false` |
+| `EMBED_CHAPTERS` | Embed chapters by default | `true` | `true,false` |
+| `EMBED_SUBTITLES` | Embed subtitles by default | `true` | `true,false` |
+| `CUTTING_MODE` | Video cutting precision | `keyframes` | `keyframes,precise` |
 | **Localization** | | | |
 | `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` | `en,fr` |
 | `SUBTITLES_CHOICES` | Subtitles' languages proposals | `en` | `en,fr,es` |
