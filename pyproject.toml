@@ -1,30 +1,26 @@
 [project]
 name = "hometube"
-version = "0.10.1"
+version = "0.11.0"
 description = "HomeTube development workspace"
 requires-python = ">=3.10"
 
-# Pin with lower-bounds at current stable; leave headroom for patches
 dependencies = [
-    "streamlit>=1.49.0",
+    "streamlit>=1.49,<1.51",
     "requests>=2.32.5",
     "python-dotenv>=1.1.1",
 ]
 
 [project.optional-dependencies]
-# For running locally (outside Docker)
 local = [
     "yt-dlp>=2025.9.23",
 ]
 
-# For image builds; keep only what runtime needs
 docker = [
-    "streamlit>=1.49.0",
+    "streamlit>=1.49,<1.51",
     "requests>=2.32.5",
     "python-dotenv>=1.1.1",
 ]
 
-# Test-only deps
 test = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
@@ -33,17 +29,14 @@ test = [
     "pytest-xdist>=3.8.0",
 ]
 
-# Dev tools
 dev = [
     "black>=25.9.0",
     "ruff>=0.13.2",
     "watchdog>=6.0.0",
-    # Optional: keep flake8 only if you rely on plugins Ruff doesn't cover
     # "flake8>=7.3.0",
 ]
 
 [build-system]
-# Conservative, stable baselines
 requires = ["setuptools>=80.8.0", "wheel>=0.45.1"]
 build-backend = "setuptools.build_meta"
 
@@ -52,7 +45,6 @@ where = ["."]
 include = ["app*"]
 exclude = ["tests*", "docs*", "tmp*", "cookies*", "downloads*", "htmlcov*"]
 
-# uv's dev-deps can mirror [project.optional-dependencies].dev if you use uv
 [tool.uv]
 dev-dependencies = [
     "pytest>=8.4.2",
@@ -62,8 +54,6 @@ dev-dependencies = [
     "pytest-xdist>=3.8.0",
     "black>=25.9.0",
     "watchdog>=3.0.0",
-    # Keep flake8 only if needed:
-    # "flake8>=7.3.0",
 ]
 
 [tool.pytest.ini_options]
