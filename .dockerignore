@@ -28,7 +28,6 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
 eggs/
 .eggs/
 lib/
@@ -43,14 +42,23 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.pyi
+
 # Virtual environments
 .env
 .venv
-env/
 venv/
+env/
+.envrc
 ENV/
 env.bak/
 venv.bak/
+tmp*
+data
 
 # IDE
 .vscode
@@ -70,6 +78,7 @@ Thumbs.db
 # Project specific
 downloads/
 tmp/
+tmp*
 cookies/
 *.log
 
