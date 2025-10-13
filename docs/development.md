@@ -248,6 +248,13 @@ pre-commit run --all-files
 - Creates: GitHub releases with changelog
 - Includes: Documentation artifacts
 
+**4. Automatic yt-dlp Updates** (`.github/workflows/refresh-ytdlp.yml`):
+
+- Triggered on: Daily schedule (06:00 UTC), Manual dispatch
+- Monitors: Latest yt-dlp version from base image
+- Rebuilds: Docker images when new yt-dlp versions are detected
+- See: [Automatic yt-dlp Updates](automatic-ytdlp-updates.md) for details
+
 ### Local CI Testing
 
 ```bash
