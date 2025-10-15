@@ -91,14 +91,22 @@ make pre-commit         # Full quality checks
 - Concurrency simulation
 - Baseline performance metrics
 
-### 6. Robust translation tests (`test_translations.py`)
+### 6. yt-dlp Version detection tests (`test_ytdlp_version_detection.py`)
+- **14 tests** for automated version tracking system
+- **Unit tests**: Version comparison logic (no dependencies)
+- **Network tests**: Crane-based version detection from registries
+- **Integration tests**: Local build consistency validation
+- Version coherence between upstream and HomeTube
+- See [yt-dlp Version Management](ytdlp-version-management.md) for details
+
+### 7. Robust translation tests (`test_translations.py`)
 - Cross-language consistency verification
 - Translation quality tests
 - File structure validation
 - Translation function tests
 - Edge case handling (special characters, etc.)
 
-### 6. Automation and tools
+### 8. Automation and tools
 
 #### Enhanced Makefile
 ```bash

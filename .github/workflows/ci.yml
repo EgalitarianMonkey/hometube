@@ -2,14 +2,14 @@ name: CI
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pytest tests/ -v --tb=short -m "not slow and not external" --cov=app.utils --cov=app.translations --cov-report=xml --cov-report=term-missing
+          python -m pytest tests/ -v --tb=short -m "not slow and not external and not network" --cov=app.utils --cov=app.translations --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12'
