@@ -1,11 +1,18 @@
 # Makefile for HomeTube testing and development
 # Supports both UV (fast) and standard Python (universal) workflows
 
-.PHONY: help install test test-unit test-integration test-performance test-coverage clean lint format type-check dev-setup
+.PHONY: help install test test-unit test-integration test-performance test-coverage clean lint format type-check dev-setup docker-build docker-up docker-down docker-logs docker-test
 
 # Default target
 help:
 	@echo "🏠 HomeTube Development Commands"
+	@echo ""
+	@echo "🐳 Docker Commands:"
+	@echo "  docker-build     - Build image with auto-detected yt-dlp version"
+	@echo "  docker-up        - Start containers (builds if needed)"
+	@echo "  docker-down      - Stop and remove containers"
+	@echo "  docker-logs      - Follow container logs"
+	@echo "  docker-test      - Build and verify labels"
 	@echo ""
 	@echo "📦 Setup:"
 	@echo "  install          - Install dependencies (universal)"
@@ -22,6 +29,7 @@ help:
 	@echo "  test-unit        - Run unit tests only"
 	@echo "  test-integration - Run integration tests only"
 	@echo "  test-slow        - Run slow tests (includes real download E2E)"
+	@echo "  test-with-network - Run tests requiring crane (for local dev)"
 	@echo "  test-e2e-functions - Run E2E test with real HomeTube functions (fast, no download)"
 	@echo "  test-e2e-real-download    - Run REAL download E2E test (slow, downloads actual video)"
 	@echo "  test-performance - Run performance tests"
@@ -86,9 +94,9 @@ update-deps:
 update-reqs:
 	./scripts/update-requirements.sh
 # === UNIVERSAL TESTING COMMANDS (work with any Python environment) ===
-# Run basic tests (fast)
+# Run basic tests (fast, no network)
 test:
-	python -m pytest tests/ -v --tb=short -m "not slow and not external"
+	python -m pytest tests/ -v --tb=short -m "not slow and not external and not network"
 
 # Run fast tests including E2E functions test
 test-fast-with-e2e:
@@ -102,9 +110,18 @@ test-fast-with-e2e:
 test-all:
 	python -m pytest tests/ -v --tb=short
 
+# Run tests with network access (requires crane for version detection tests)
+test-with-network:
+	@echo "🌐 Running tests with network access (requires crane)..."
+	@if ! command -v crane >/dev/null 2>&1; then \
+		echo "⚠️  crane not found - network tests will be skipped"; \
+		echo "💡 Install crane: brew install crane (macOS)"; \
+	fi
+	python -m pytest tests/ -v --tb=short -m "not slow and not external"
+
 # Run unit tests only (specific test files)
 test-unit:
-	python -m pytest tests/test_core_functions.py tests/test_translations.py tests/test_utils.py -v -m "not slow and not external"
+	python -m pytest tests/test_core_functions.py tests/test_translations.py tests/test_utils.py -v -m "not slow and not external and not network"
 
 # Run integration tests only 
 test-integration:
@@ -241,3 +258,62 @@ config-check:
 	@echo "🧪 Pytest version: $$(python -m pytest --version 2>/dev/null || echo 'Not installed')"
 	@echo "⚡ UV version: $$(uv --version 2>/dev/null || echo 'Not installed')"
 	@echo "🏠 Current directory: $$(pwd)"
+
+# === DOCKER COMMANDS ===
+# Helper: Detect yt-dlp version (exported for docker-compose)
+define detect_ytdlp_version
+	$(eval YTDLP_VERSION := $(shell \
+		if command -v crane >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then \
+			crane config jauderho/yt-dlp:latest 2>/dev/null | jq -r '.config.Labels["org.opencontainers.image.version"] // empty' 2>/dev/null || echo ""; \
+		fi \
+	))
+	$(if $(YTDLP_VERSION), \
+		$(info ✅ Detected yt-dlp version: $(YTDLP_VERSION)), \
+		$(info ⚠️  Could not detect yt-dlp version (crane/jq not found or failed)) \
+		$(if $(shell command -v crane 2>/dev/null),, $(info 💡 Install crane: brew install crane)) \
+	)
+endef
+
+# Build with auto-detected yt-dlp version
+docker-build:
+	@echo "🔍 Detecting yt-dlp version..."
+	@$(call detect_ytdlp_version)
+	@YTDLP_VERSION="$(YTDLP_VERSION)" docker-compose build
+
+# Start services with build
+docker-up:
+	@echo "🚀 Starting HomeTube..."
+	@$(call detect_ytdlp_version)
+	@YTDLP_VERSION="$(YTDLP_VERSION)" docker-compose up --build -d
+	@echo "✅ HomeTube started at http://localhost:8501"
+
+# Stop services
+docker-down:
+	@echo "🛑 Stopping HomeTube..."
+	@docker-compose down
+
+# View logs
+docker-logs:
+	@docker-compose logs -f
+
+# Build and verify labels
+docker-test: docker-build
+	@echo ""
+	@echo "🔍 Verifying image labels..."
+	@IMAGE_NAME=$$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "hometube.*:latest" | head -1); \
+	if [ -n "$$IMAGE_NAME" ]; then \
+		echo "� Image: $$IMAGE_NAME"; \
+		echo ""; \
+		echo "📋 Labels:"; \
+		docker inspect $$IMAGE_NAME --format '{{ json .Config.Labels }}' | jq '{ \
+			"app.version": .["org.opencontainers.image.version"], \
+			"ytdlp.version": .["io.hometube.ytdlp.version"], \
+			"build.trigger": .["io.hometube.build.trigger"], \
+			"created": .["org.opencontainers.image.created"] \
+		}'; \
+		echo ""; \
+		echo "🔍 yt-dlp version in container:"; \
+		docker run --rm $$IMAGE_NAME yt-dlp --version || echo "⚠️  Could not verify"; \
+	else \
+		echo "❌ No hometube image found"; \
+	fi

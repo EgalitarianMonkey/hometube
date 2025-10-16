@@ -4,33 +4,41 @@ This directory contains utility scripts for the HomeTube project.
 
 ## Available Scripts
 
-### `check_tests.py`
-Comprehensive test verification and execution script.
+### `update-requirements.sh`
+
+Automates dependency updates using uv.
 
 **Usage:**
 ```bash
 # Run from project root
-python scripts/check_tests.py
-
-# Or make it executable
-chmod +x scripts/check_tests.py
-./scripts/check_tests.py
+./scripts/update-requirements.sh
 ```
 
-**Features:**
-- Verifies test file structure
-- Executes all test categories
-- Provides detailed summary report
-- Validates project integrity
+**What it does:**
+1. Updates `uv.lock` lockfile
+2. Regenerates `requirements/requirements.txt` (production)
+3. Regenerates `requirements/requirements-dev.txt` (development)
 
-**Output:**
-- ✅ SUCCESS indicators for passing tests
-- ❌ FAILED indicators with error codes
-- 📈 Summary score and statistics
-- 🎉 Celebration message when all tests pass
+**When to use:**
+- After updating dependencies in `pyproject.toml`
+- Before committing dependency changes
+- During dependency maintenance
 
-This script is particularly useful for:
-- CI/CD pipeline validation
-- Pre-commit testing
-- Development environment verification
-- Test refactoring validation
+## Testing
+
+For running tests, use the Makefile commands instead:
+
+```bash
+# Run all tests
+make test
+
+# Run specific test categories
+make test-unit          # Unit tests only
+make test-integration   # Integration tests only
+make test-all          # All tests with coverage
+
+# Quick development testing
+make dev-test          # Fast unit tests for development
+```
+
+See the [Testing Documentation](../docs/testing.md) for more details.

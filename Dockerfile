@@ -1,11 +1,16 @@
 # Pin base by digest for reproducibility (arm64 digest shown)
-FROM jauderho/yt-dlp:latest@sha256:2eab888f0972103513ed0c64d331883c7863689cad5e6c2fa4bf25055e97d374
+FROM jauderho/yt-dlp:latest
 
+# Static labels (common to all builds)
 LABEL org.opencontainers.image.title="HomeTube" \
-    org.opencontainers.image.description="🎬 HomeTube is a simple web UI for downloading single videos..." \
+    org.opencontainers.image.description="🎬 HomeTube is a simple web UI for videos downloading" \
     org.opencontainers.image.url="https://github.com/EgalitarianMonkey/hometube" \
     org.opencontainers.image.source="https://github.com/EgalitarianMonkey/hometube" \
     org.opencontainers.image.licenses="AGPL-3.0-or-later"
+
+# Dynamic yt-dlp version label - will be set by build args
+ARG YTDLP_VERSION
+LABEL io.hometube.ytdlp.version="${YTDLP_VERSION}"
 
 # Minimal runtime deps
 RUN apk add --no-cache tini ca-certificates curl

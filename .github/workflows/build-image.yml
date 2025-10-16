@@ -1,0 +1,158 @@
+name: Build and Push Docker Image
+
+on:
+    workflow_call:
+        inputs:
+            platforms:
+                description: "Target platforms for the build"
+                required: false
+                default: "linux/amd64,linux/arm64"
+                type: string
+            push:
+                description: "Whether to push the image"
+                required: false
+                default: true
+                type: boolean
+            tags:
+                description: "Docker tags to apply (JSON array or newline-separated)"
+                required: true
+                type: string
+            labels:
+                description: "Additional Docker labels"
+                required: false
+                default: ""
+                type: string
+            cache-key:
+                description: "Cache key suffix"
+                required: false
+                default: "main"
+                type: string
+        outputs:
+            image-digest:
+                description: "The digest of the built image"
+                value: ${{ jobs.build.outputs.digest }}
+            ytdlp-version:
+                description: "The yt-dlp version used in the build"
+                value: ${{ jobs.build.outputs.ytdlp-version }}
+
+permissions:
+    contents: read
+    packages: write
+    id-token: write
+    attestations: write
+
+env:
+    REGISTRY: ghcr.io
+    IMAGE_NAME: egalitarianmonkey/hometube
+    BASE_IMAGE: jauderho/yt-dlp:latest
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        outputs:
+            digest: ${{ steps.build.outputs.digest }}
+            ytdlp-version: ${{ steps.ytdlp-version.outputs.version }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Install crane
+              run: |
+                  echo "📥 Installing crane for container registry operations..."
+                  curl -sL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz" | tar xz
+                  sudo mv crane /usr/local/bin/
+                  crane version
+
+            - name: Get yt-dlp version from base image with crane
+              id: ytdlp-version
+              run: |
+                  set -euo pipefail
+
+                  echo "🔍 Detecting yt-dlp version from base image using crane..."
+                  echo "📦 Base image: ${{ env.BASE_IMAGE }}"
+
+                  # Get the version from the base image label using crane (fast, no pull)
+                  ytdlp_version=$(crane config ${{ env.BASE_IMAGE }} | jq -r '.config.Labels["org.opencontainers.image.version"] // empty')
+
+                  if [[ -z "$ytdlp_version" || "$ytdlp_version" == "null" ]]; then
+                    echo "❌ Could not determine yt-dlp version from base image label"
+                    exit 1
+                  fi
+
+                  # Validate version format (YYYY.MM.DD)
+                  if [[ ! "$ytdlp_version" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}$ ]]; then
+                    echo "⚠️  Warning: Unexpected version format: $ytdlp_version"
+                  fi
+
+                  echo "✅ Detected yt-dlp version (from label): $ytdlp_version"
+                  echo "version=$ytdlp_version" >> "$GITHUB_OUTPUT"
+
+            - name: Set up QEMU
+              uses: docker/setup-qemu-action@v3
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            - name: Log in to Container Registry
+              uses: docker/login-action@v3
+              with:
+                  registry: ${{ env.REGISTRY }}
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Prepare build labels
+              id: labels
+              run: |
+                  # Base labels that are always included
+                  base_labels=$(cat << 'EOF'
+                  org.opencontainers.image.revision=${{ github.sha }}
+                  org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+                  io.hometube.ytdlp.version=${{ steps.ytdlp-version.outputs.version }}
+                  io.hometube.build.trigger=${{ github.event_name }}
+                  io.hometube.build.run=${{ github.run_id }}
+                  EOF
+                  )
+
+                  # Combine with additional labels if provided
+                  additional_labels="${{ inputs.labels }}"
+                  if [[ -n "$additional_labels" ]]; then
+                    all_labels=$(printf "%s\n%s" "$base_labels" "$additional_labels")
+                  else
+                    all_labels="$base_labels"
+                  fi
+
+                  # Output for the build step
+                  {
+                    echo 'all-labels<<LABELS_EOF'
+                    echo "$all_labels"
+                    echo 'LABELS_EOF'
+                  } >> "$GITHUB_OUTPUT"
+
+            - name: Build and push Docker image
+              id: build
+              uses: docker/build-push-action@v6
+              with:
+                  context: .
+                  file: ./Dockerfile
+                  platforms: ${{ inputs.platforms }}
+                  push: ${{ inputs.push }}
+                  tags: ${{ inputs.tags }}
+                  labels: ${{ steps.labels.outputs.all-labels }}
+                  build-args: |
+                      YTDLP_VERSION=${{ steps.ytdlp-version.outputs.version }}
+                      BUILDKIT_INLINE_CACHE=1
+                  cache-from: |
+                      type=gha,scope=hometube-${{ inputs.cache-key }}
+                      type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+                  cache-to: |
+                      type=gha,scope=hometube-${{ inputs.cache-key }},mode=max
+                      type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+            - name: Generate attestation
+              if: inputs.push
+              uses: actions/attest-build-provenance@v1
+              with:
+                  subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+                  subject-digest: ${{ steps.build.outputs.digest }}
+                  push-to-registry: true

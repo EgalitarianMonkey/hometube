@@ -1,21 +1,16 @@
-name: Refresh yt-dlp & Rebuild Docker
+name: Refresh yt-dlp
 
 on:
   schedule:
-    # Run daily at 06:00 UTC to check for new yt-dlp versions
+    # Check daily at 06:00 UTC for new yt-dlp versions
     - cron: "0 6 * * *"
   workflow_dispatch:
     inputs:
       force_rebuild:
-        description: "Force rebuild even if yt-dlp version exists"
+        description: "Force rebuild even if versions match"
         required: false
         default: false
         type: boolean
-      platforms:
-        description: "Target platforms (comma-separated)"
-        required: false
-        default: "linux/amd64,linux/arm64"
-        type: string
 
 permissions:
   contents: read
@@ -27,349 +22,165 @@ env:
   BASE_IMAGE: jauderho/yt-dlp:latest
 
 jobs:
-  check-and-build:
+  check-versions:
+    name: Compare yt-dlp versions
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-
     outputs:
-      should-build: ${{ steps.decision.outputs.should-build }}
-      build-reason: ${{ steps.decision.outputs.reason }}
-      ytdlp-version: ${{ steps.ytdlp.outputs.version }}
-      current-ytdlp-version: ${{ steps.current-ytdlp.outputs.version }}
-      app-version: ${{ steps.appver.outputs.version }}
-      tags: ${{ steps.tags.outputs.all-tags }}
+      should-build: ${{ steps.compare.outputs.should-build }}
+      reason: ${{ steps.compare.outputs.reason }}
+      latest-ytdlp: ${{ steps.latest.outputs.version }}
+      current-ytdlp: ${{ steps.current.outputs.version }}
+      app-version: ${{ steps.app.outputs.version }}
+      tags: ${{ steps.tags.outputs.tags }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            network=host
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get yt-dlp version from base image
-        id: ytdlp
+      - name: Install crane
         run: |
-          set -euo pipefail
+          echo "📥 Installing crane..."
+          curl -sL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz" | tar xz
+          sudo mv crane /usr/local/bin/
+          crane version
 
-          echo "🔍 Checking yt-dlp version from base image..."
-
-          # Pull latest base image to ensure we have the most recent version
-          docker pull ${{ env.BASE_IMAGE }}
-
-          # Get yt-dlp version with error handling and retries
-          for attempt in {1..3}; do
-            if version=$(docker run --rm ${{ env.BASE_IMAGE }} yt-dlp --version 2>/dev/null | tr -d '\r\n'); then
-              break
-            else
-              echo "⚠️  Attempt $attempt failed, retrying..."
-              sleep 5
-            fi
-          done
-
-          if [[ -z "${version:-}" ]]; then
-            echo "❌ Failed to get yt-dlp version after 3 attempts"
-            exit 1
-          fi
-
-          # Validate version format (should be date-based like 2024.01.07)
-          if [[ ! "$version" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}$ ]]; then
-            echo "⚠️  Warning: Unexpected version format: $version"
-          fi
-
+      - name: Get app version
+        id: app
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "✅ Detected yt-dlp version: $version"
+          echo "✅ App version: $version"
 
-      - name: Read HomeTube app version from pyproject.toml
-        id: appver
+      - name: Get latest yt-dlp version from jauderho/yt-dlp
+        id: latest
         run: |
-          set -euo pipefail
+          echo "🔍 Checking latest yt-dlp version from jauderho/yt-dlp..."
 
-          echo "📖 Reading app version from pyproject.toml..."
+          # Get version from label using crane (no pull needed)
+          version=$(crane config ${{ env.BASE_IMAGE }} | jq -r '.config.Labels["org.opencontainers.image.version"] // empty')
 
-          # Use Python to safely parse TOML
-          version=$(python3 -c "
-          import tomllib
-          with open('pyproject.toml', 'rb') as f:
-              data = tomllib.load(f)
-          print(data['project']['version'])
-          ")
-
-          if [[ -z "$version" ]]; then
-            echo "❌ Failed to read app version"
+          if [[ -z "$version" || "$version" == "null" ]]; then
+            echo "❌ Could not get yt-dlp version from base image"
             exit 1
           fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "✅ Detected app version: $version"
+          echo "✅ Latest yt-dlp: $version"
 
-      - name: Generate Docker tags
-        id: tags
+      - name: Get current yt-dlp version from HomeTube
+        id: current
         run: |
-          set -euo pipefail
+          echo "🔍 Checking current yt-dlp version in HomeTube..."
 
-          YTDLP_VER="${{ steps.ytdlp.outputs.version }}"
-          APP_VER="${{ steps.appver.outputs.version }}"
-          BASE_NAME="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
 
-          # Generate tags
-          TAG_LATEST="${BASE_NAME}:latest"
-          TAG_APP_VERSION="${BASE_NAME}:v${APP_VER}"
-          TAG_YTDLP_VERSION="${BASE_NAME}:yt-dlp-${YTDLP_VER}"
-          TAG_COMBINED="${BASE_NAME}:v${APP_VER}-yt-dlp-${YTDLP_VER}"
-
-          # Output individual tags
-          echo "latest=$TAG_LATEST" >> "$GITHUB_OUTPUT"
-          echo "app-version=$TAG_APP_VERSION" >> "$GITHUB_OUTPUT"
-          echo "ytdlp-version=$TAG_YTDLP_VERSION" >> "$GITHUB_OUTPUT"
-          echo "combined=$TAG_COMBINED" >> "$GITHUB_OUTPUT"
-
-          # Output all tags as multi-line string for docker build
-          cat >> "$GITHUB_OUTPUT" << EOF
-          all-tags<<TAGS_EOF
-          $TAG_LATEST
-          $TAG_APP_VERSION
-          $TAG_YTDLP_VERSION
-          $TAG_COMBINED
-          TAGS_EOF
-          EOF
-
-          echo "🏷️  Generated tags:"
-          echo "  - $TAG_LATEST"
-          echo "  - $TAG_APP_VERSION"
-          echo "  - $TAG_YTDLP_VERSION"
-          echo "  - $TAG_COMBINED"
-
-      - name: Get current yt-dlp version in HomeTube
-        id: current-ytdlp
-        run: |
-          set -euo pipefail
-
-          echo "🔍 Checking current yt-dlp version in HomeTube image..."
-
-          # Try to get the current yt-dlp version from the latest HomeTube image
-          LATEST_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-
-          # Pull the current latest image (if it exists)
-          if docker pull "$LATEST_TAG" >/dev/null 2>&1; then
-            echo "📦 Found existing HomeTube image"
-            
-            # Extract yt-dlp version from the current image
-            for attempt in {1..3}; do
-              if current_version=$(docker run --rm "$LATEST_TAG" yt-dlp --version 2>/dev/null | tr -d '\r\n'); then
-                break
-              else
-                echo "⚠️  Attempt $attempt failed to get current version, retrying..."
-                sleep 3
-              fi
-            done
-            
-            if [[ -n "${current_version:-}" ]]; then
-              echo "version=$current_version" >> "$GITHUB_OUTPUT"
-              echo "✅ Current HomeTube yt-dlp version: $current_version"
-            else
-              echo "version=" >> "$GITHUB_OUTPUT"
-              echo "⚠️  Failed to get current yt-dlp version, will trigger rebuild"
-            fi
-          else
+          # Check if image exists
+          if ! crane manifest "$IMAGE" >/dev/null 2>&1; then
+            echo "📦 No existing HomeTube image"
             echo "version=" >> "$GITHUB_OUTPUT"
-            echo "📦 No existing HomeTube image found, will trigger initial build"
-          fi
-
-      - name: Check if rebuild is needed
-        id: decision
-        run: |
-          set -euo pipefail
-
-          FORCE_REBUILD="${{ github.event.inputs.force_rebuild }}"
-          NEW_YTDLP_VERSION="${{ steps.ytdlp.outputs.version }}"
-          CURRENT_YTDLP_VERSION="${{ steps.current-ytdlp.outputs.version }}"
-
-          echo "🤔 Determining if rebuild is needed..."
-          echo "  📈 New yt-dlp version available: $NEW_YTDLP_VERSION"
-          echo "  📦 Current yt-dlp version in HomeTube: ${CURRENT_YTDLP_VERSION:-none}"
-
-          if [[ "$FORCE_REBUILD" == "true" ]]; then
-            echo "🔧 Force rebuild requested via workflow_dispatch"
-            echo "should-build=true" >> "$GITHUB_OUTPUT"
-            echo "reason=Force rebuild requested" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Compare yt-dlp versions
-          if [[ -z "$CURRENT_YTDLP_VERSION" ]]; then
-            echo "✅ No existing HomeTube image or version detection failed - initial build needed"
-            echo "should-build=true" >> "$GITHUB_OUTPUT"
-            echo "reason=Initial build or version detection failed" >> "$GITHUB_OUTPUT"
-          elif [[ "$NEW_YTDLP_VERSION" != "$CURRENT_YTDLP_VERSION" ]]; then
-            echo "✅ yt-dlp version update detected: $CURRENT_YTDLP_VERSION → $NEW_YTDLP_VERSION"
-            echo "should-build=true" >> "$GITHUB_OUTPUT"
-            echo "reason=yt-dlp version update: $CURRENT_YTDLP_VERSION → $NEW_YTDLP_VERSION" >> "$GITHUB_OUTPUT"
+          # Get version from io.hometube.ytdlp.version label
+          version=$(crane config "$IMAGE" | jq -r '.config.Labels["io.hometube.ytdlp.version"] // empty')
+
+          if [[ -n "$version" && "$version" != "null" ]]; then
+            echo "version=$version" >> "$GITHUB_OUTPUT"
+            echo "✅ Current yt-dlp: $version"
           else
-            echo "⏭️  yt-dlp versions are identical ($CURRENT_YTDLP_VERSION), no rebuild needed"
-            echo "should-build=false" >> "$GITHUB_OUTPUT"
-            echo "reason=yt-dlp versions are identical ($CURRENT_YTDLP_VERSION)" >> "$GITHUB_OUTPUT"
+            echo "⚠️  No yt-dlp version label found"
+            echo "version=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Extract metadata for Docker
-        if: steps.decision.outputs.should-build == 'true'
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          labels: |
-            org.opencontainers.image.title=HomeTube
-            org.opencontainers.image.description=Universal Video Downloader for HomeLab
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.documentation=${{ github.server_url }}/${{ github.repository }}/blob/main/README.md
-            org.opencontainers.image.version=v${{ steps.appver.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ github.event.repository.updated_at }}
-            io.hometube.app.version=${{ steps.appver.outputs.version }}
-            io.hometube.ytdlp.version=${{ steps.ytdlp.outputs.version }}
-            io.hometube.build.trigger=${{ github.event_name }}
-
-      - name: Build and push Docker image
-        if: steps.decision.outputs.should-build == 'true'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          platforms: ${{ github.event.inputs.platforms || 'linux/amd64,linux/arm64' }}
-          push: true
-          tags: ${{ steps.tags.outputs.all-tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha,scope=hometube-main
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: |
-            type=gha,scope=hometube-main,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-
-  verify-build:
-    needs: check-and-build
-    if: needs.check-and-build.outputs.should-build == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify built image
+      - name: Decide if rebuild needed
+        id: compare
         run: |
-          set -euo pipefail
+          FORCE="${{ github.event.inputs.force_rebuild }}"
+          CURRENT="${{ steps.current.outputs.version }}"
+          LATEST="${{ steps.latest.outputs.version }}"
 
-          echo "🔍 Verifying built image..."
-          LATEST_TAG="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "📊 Version comparison:"
+          echo "  Current: ${CURRENT:-none}"
+          echo "  Latest:  $LATEST"
+          echo "  Force:   $FORCE"
 
-          # Pull the image
-          docker pull "$LATEST_TAG"
-
-          # Basic health checks
-          echo "📋 Running basic verification tests..."
-
-          # Check that the image contains yt-dlp
-          docker run --rm "$LATEST_TAG" yt-dlp --version
-
-          # Check that Python and app dependencies are working
-          docker run --rm "$LATEST_TAG" python -c "import streamlit; print('✅ Streamlit import OK')"
-
-          # Verify the expected yt-dlp version
-          ACTUAL_VERSION=$(docker run --rm "$LATEST_TAG" yt-dlp --version | tr -d '\r\n')
-          EXPECTED_VERSION="${{ needs.check-and-build.outputs.ytdlp-version }}"
-
-          if [[ "$ACTUAL_VERSION" == "$EXPECTED_VERSION" ]]; then
-            echo "✅ yt-dlp version verified: $ACTUAL_VERSION"
+          if [[ "$FORCE" == "true" ]]; then
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            echo "reason=Force rebuild requested" >> "$GITHUB_OUTPUT"
+            echo "🔧 Force rebuild"
+          elif [[ -z "$CURRENT" ]]; then
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            echo "reason=No existing image" >> "$GITHUB_OUTPUT"
+            echo "✅ Initial build needed"
+          elif [[ "$CURRENT" != "$LATEST" ]]; then
+            echo "should-build=true" >> "$GITHUB_OUTPUT"
+            echo "reason=yt-dlp update: $CURRENT → $LATEST" >> "$GITHUB_OUTPUT"
+            echo "✅ Update detected"
           else
-            echo "❌ Version mismatch! Expected: $EXPECTED_VERSION, Got: $ACTUAL_VERSION"
-            exit 1
+            echo "should-build=false" >> "$GITHUB_OUTPUT"
+            echo "reason=Versions match ($CURRENT)" >> "$GITHUB_OUTPUT"
+            echo "⏭️  No update needed"
           fi
 
-  notify:
-    needs: [check-and-build, verify-build]
+      - name: Generate tags
+        if: steps.compare.outputs.should-build == 'true'
+        id: tags
+        run: |
+          APP="${{ steps.app.outputs.version }}"
+          YTDLP="${{ steps.latest.outputs.version }}"
+          BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          TAGS=$(cat <<EOF
+          ${BASE}:latest
+          ${BASE}:v${APP}
+          ${BASE}:yt-dlp-${YTDLP}
+          ${BASE}:v${APP}-yt-dlp-${YTDLP}
+          EOF
+          )
+
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$TAGS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          echo "🏷️  Tags:"
+          echo "$TAGS" | sed 's/^/  /'
+
+  build:
+    name: Build and push image
+    needs: check-versions
+    if: needs.check-versions.outputs.should-build == 'true'
+    uses: ./.github/workflows/build-image.yml
+    with:
+      platforms: "linux/amd64,linux/arm64"
+      push: true
+      tags: ${{ needs.check-versions.outputs.tags }}
+      labels: |
+        org.opencontainers.image.version=v${{ needs.check-versions.outputs.app-version }}
+        io.hometube.app.version=${{ needs.check-versions.outputs.app-version }}
+      cache-key: "refresh"
+
+  summary:
+    name: Summary
+    needs: [check-versions, build]
     if: always()
     runs-on: ubuntu-latest
-
     steps:
-      - name: Prepare notification
-        id: prepare
+      - name: Create summary
         run: |
-          set -euo pipefail
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # 🔄 yt-dlp Version Check
 
-          APP_VER="${{ needs.check-and-build.outputs.app-version }}"
-          YTDLP_VER="${{ needs.check-and-build.outputs.ytdlp-version }}"
-          CURRENT_YTDLP_VER="${{ needs.check-and-build.outputs.current-ytdlp-version }}"
-          SHOULD_BUILD="${{ needs.check-and-build.outputs.should-build }}"
-          BUILD_REASON="${{ needs.check-and-build.outputs.build-reason }}"
+          **Status:** ${{ needs.check-versions.outputs.should-build == 'true' && '✅ Built' || '⏭️  Skipped' }}
 
-          if [[ "$SHOULD_BUILD" == "false" ]]; then
-            STATUS="⏭️  SKIPPED"
-            COLOR="warning"
-            MESSAGE="No build needed: $BUILD_REASON"
-          elif [[ "${{ needs.verify-build.result }}" == "success" ]]; then
-            STATUS="✅ SUCCESS"
-            COLOR="good"
-            MESSAGE="HomeTube Docker image successfully built and verified with yt-dlp $YTDLP_VER. Reason: $BUILD_REASON"
-          else
-            STATUS="❌ FAILED"
-            COLOR="danger"
-            MESSAGE="Failed to build or verify HomeTube Docker image with yt-dlp $YTDLP_VER. Reason: $BUILD_REASON"
-          fi
+          **Reason:** ${{ needs.check-versions.outputs.reason }}
 
-          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-          echo "color=$COLOR" >> "$GITHUB_OUTPUT"
-          echo "message=$MESSAGE" >> "$GITHUB_OUTPUT"
+          | Version | Current | Latest |
+          |---------|---------|--------|
+          | **App** | v${{ needs.check-versions.outputs.app-version }} | - |
+          | **yt-dlp** | ${{ needs.check-versions.outputs.current-ytdlp || 'none' }} | ${{ needs.check-versions.outputs.latest-ytdlp }} |
 
-      - name: Create GitHub summary
-        run: |
-          cat >> $GITHUB_STEP_SUMMARY << EOF
-          # 🐳 HomeTube Docker Build Results
+          ${{ needs.check-versions.outputs.should-build == 'true' && format('**Image:** `{0}/{1}:latest`', env.REGISTRY, env.IMAGE_NAME) || '' }}
 
-          **Status:** ${{ steps.prepare.outputs.status }}
-
-          **Details:**
-          - **App Version:** v${{ needs.check-and-build.outputs.app-version }}
-          - **Available yt-dlp Version:** ${{ needs.check-and-build.outputs.ytdlp-version }}
-          - **Current yt-dlp Version:** ${{ needs.check-and-build.outputs.current-ytdlp-version || 'none' }}
-          - **Decision Reason:** ${{ needs.check-and-build.outputs.build-reason }}
-          - **Trigger:** ${{ github.event_name }}
-          - **Check Time:** $(date -u)
-
-          ${{ needs.check-and-build.outputs.should-build == 'true' && '**Tags Built:**' || '**No Build Performed**' }}
-          ${{ needs.check-and-build.outputs.should-build == 'true' && format('```{0}```', needs.check-and-build.outputs.tags) || '' }}
-
-          **Repository:** [\`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\`](https://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }})
+          ---
+          *Powered by crane 🏗️*
           EOF
-
-      # Uncomment and configure if you want Slack notifications
-      # - name: Slack notification
-      #   if: vars.SLACK_WEBHOOK_URL
-      #   uses: 8398a7/action-slack@v3
-      #   with:
-      #     status: custom
-      #     custom_payload: |
-      #       {
-      #         "text": "${{ steps.prepare.outputs.message }}",
-      #         "color": "${{ steps.prepare.outputs.color }}"
-      #       }
-      #   env:
-      #     SLACK_WEBHOOK_URL: ${{ vars.SLACK_WEBHOOK_URL }}

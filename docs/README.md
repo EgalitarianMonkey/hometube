@@ -38,6 +38,7 @@ Welcome to the Universal Video Downloader documentation! This index will guide y
 - **[Deployment Guide](deployment.md)** - Production deployment and monitoring
 - **[Development Guide](development.md#ci-cd-pipeline)** - CI/CD configuration
 - **[Docker Guide](docker.md)** - Container orchestration
+- **[yt-dlp Version Management](ytdlp-version-management.md)** - Automated updates and version tracking
 
 ## 🎯 Quick Navigation
 
