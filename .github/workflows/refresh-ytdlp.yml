@@ -149,6 +149,11 @@ jobs:
     name: Build and push image
     needs: check-versions
     if: needs.check-versions.outputs.should-build == 'true'
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
     uses: ./.github/workflows/build-image.yml
     with:
       platforms: "linux/amd64,linux/arm64"
