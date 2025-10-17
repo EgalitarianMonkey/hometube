@@ -302,7 +302,7 @@ docker-test: docker-build
 	@echo "🔍 Verifying image labels..."
 	@IMAGE_NAME=$$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "hometube.*:latest" | head -1); \
 	if [ -n "$$IMAGE_NAME" ]; then \
-		echo "� Image: $$IMAGE_NAME"; \
+		echo "🎆 Image: $$IMAGE_NAME"; \
 		echo ""; \
 		echo "📋 Labels:"; \
 		docker inspect $$IMAGE_NAME --format '{{ json .Config.Labels }}' | jq '{ \

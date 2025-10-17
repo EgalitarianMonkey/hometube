@@ -2673,6 +2673,230 @@ def get_video_title(url: str, cookies_part: List[str]) -> str:
     return "video"
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def url_analysis(url: str) -> Optional[Dict]:
+    """
+    Analyze URL and fetch comprehensive video/playlist information using yt-dlp.
+    Cached for 1 hour to avoid repeated API calls.
+    Saves JSON to tmp/url_info.json for use with yt-dlp's --load-info-json.
+
+    Args:
+        url: Video or playlist URL to analyze
+
+    Returns:
+        Dict with video/playlist information or None if error
+    """
+    if not url or not url.strip():
+        return None
+
+    try:
+        # Prepare output path for JSON file
+        json_output_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+
+        # Run yt-dlp with JSON output, skip download, flat playlist mode
+        cmd = [
+            "yt-dlp",
+            "-J",  # JSON output
+            "--skip-download",  # Don't download
+            "--flat-playlist",  # For playlists, get basic info without extracting all videos
+            "--playlist-end",
+            "1",  # Only first video for quick playlist detection
+            sanitize_url(url),
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
+        if result.returncode != 0:
+            return {"error": f"yt-dlp failed: {result.stderr[:200]}"}
+
+        # Parse JSON output
+        try:
+            info = json.loads(result.stdout)
+
+            # Save JSON to file for later use with yt-dlp --load-info-json
+            try:
+                with open(json_output_path, "w", encoding="utf-8") as f:
+                    json.dump(info, f, indent=2, ensure_ascii=False)
+                safe_push_log(f"💾 URL info saved to {json_output_path}")
+            except Exception as e:
+                # Non-critical error - continue even if file write fails
+                safe_push_log(f"⚠️ Could not save URL info to file: {e}")
+
+            # Store in session state for global access
+            st.session_state["url_info"] = info
+            st.session_state["url_info_path"] = str(json_output_path)
+
+            return info
+        except json.JSONDecodeError as e:
+            return {"error": f"Failed to parse JSON: {str(e)}"}
+
+    except subprocess.TimeoutExpired:
+        return {"error": "Request timed out after 30 seconds"}
+    except Exception as e:
+        return {"error": f"Unexpected error: {str(e)}"}
+
+
+def display_url_info(url_info: Dict) -> None:
+    """
+    Display URL analysis information in a user-friendly, visually appealing format.
+
+    Args:
+        url_info: Dict from url_analysis() containing video/playlist info
+    """
+    if not url_info:
+        return
+
+    # Check for errors first
+    if "error" in url_info:
+        st.error(f"❌ &nbsp; {t('error_analyzing_url')}: {url_info['error']}")
+        return
+
+    # Get extractor info for platform-specific display
+    extractor = url_info.get("extractor", "").lower()
+    extractor_key = url_info.get("extractor_key", "").lower()
+    media_id = url_info.get("id")
+
+    # Determine platform icon/emoji
+    platform_emoji = "🎬"
+    platform_name = "Video"
+    if "youtube" in extractor or "youtube" in extractor_key:
+        platform_emoji = "▶️"  # YouTube play button
+        platform_name = "YouTube"
+    elif "vimeo" in extractor:
+        platform_emoji = "🎬"
+        platform_name = "Vimeo"
+    elif "dailymotion" in extractor:
+        platform_emoji = "🎥"
+        platform_name = "Dailymotion"
+
+    # Determine if it's a playlist or single video
+    is_playlist = url_info.get("_type") == "playlist" or "entries" in url_info
+
+    if is_playlist:
+        # ===== PLAYLIST INFORMATION =====
+        title = url_info.get("title", "Unknown Playlist")
+        entries_count = len(url_info.get("entries", []))
+
+        # For flat-playlist mode, use playlist_count if available
+        if "playlist_count" in url_info:
+            entries_count = url_info["playlist_count"]
+
+        # Display with platform branding
+        st.success(f"📋 &nbsp; **{platform_name} {t('playlist_type')} _{media_id}_**")
+
+        # Title in a nice container
+        # st.markdown(f"&nbsp; &nbsp; 🎬 &nbsp; &nbsp; **{title}**")
+
+        # title = info.get("title", "Titre inconnu")
+        st.markdown(
+            f"""
+            <h2 style="font-weight:600; font-size:1.6em; margin-top:0;">
+                &nbsp; &nbsp; 🎬 &nbsp; {title}
+            </h2>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Video count with icon
+        st.markdown(
+            f"&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; **{t('playlist_type')}:** {entries_count} videos"
+        )
+
+        # Show first video info if available
+        if url_info.get("entries") and len(url_info["entries"]) > 0:
+            first_video = url_info["entries"][0]
+            if isinstance(first_video, dict) and "title" in first_video:
+                st.caption(
+                    f"&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 📹 {t('url_first_video')}: _{first_video['title']}_"
+                )
+
+    elif url_info.get("_type") == "video" or "duration" in url_info:
+        # ===== SINGLE VIDEO INFORMATION =====
+        title = url_info.get("title", "Unknown Video")
+        duration = url_info.get("duration", 0)
+        view_count = url_info.get("view_count")
+        like_count = url_info.get("like_count")
+        uploader = url_info.get("uploader", url_info.get("channel", ""))
+
+        # Display with platform branding
+        st.success(
+            f"{platform_emoji} &nbsp; **{platform_name} {t('video_type')} _{media_id}_**"
+        )
+
+        # Title in a nice container
+        # st.markdown(f"#### {title}")
+        # st.markdown(f"**{title}**")
+
+        # title = info.get("title", "Titre inconnu")
+        st.markdown(
+            f"""
+            <h2 style="font-weight:600; font-size:1.6em; margin-top:0;">
+                &nbsp; &nbsp; 🎬 &nbsp; {title}
+            </h2>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Author/Channel
+        if uploader:
+            st.markdown(f"**{t('url_author')}:** {uploader}")
+
+        # Stats on one line (duration, views, likes)
+        stats_parts = []
+
+        # Duration
+        if duration and duration > 0:
+            duration_str = fmt_hhmmss(int(duration))
+            stats_parts.append(f"⏱️ &nbsp; {duration_str}")
+
+        # Views
+        if view_count is not None and view_count > 0:
+            views_formatted = f"{view_count:,}".replace(",", " ")
+            stats_parts.append(f"👁️ &nbsp; {views_formatted} {t('url_views')}")
+
+        # Likes
+        if like_count is not None and like_count > 0:
+            likes_formatted = f"{like_count:,}".replace(",", " ")
+            stats_parts.append(f"👍 &nbsp; {likes_formatted} {t('url_likes')}")
+
+        # Display all stats on one line
+        if stats_parts:
+            st.markdown(
+                "&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;"
+                + "&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;".join(
+                    stats_parts
+                )
+            )
+
+    else:
+        # Unknown format - not a video or playlist
+        st.error(f"❌ {t('error_invalid_url_type')}")
+        st.caption(t("url_invalid_content"))
+
+
+def get_url_info() -> Optional[Dict]:
+    """
+    Get the stored URL info from session state.
+
+    Returns:
+        Dict with URL information or None if not available
+    """
+    return st.session_state.get("url_info", None)
+
+
+def get_url_info_path() -> Optional[Path]:
+    """
+    Get the path to the saved URL info JSON file.
+
+    Returns:
+        Path to url_info.json or None if not available
+    """
+    path_str = st.session_state.get("url_info_path", None)
+    if path_str and Path(path_str).exists():
+        return Path(path_str)
+    return None
+
+
 def analyze_video_on_url_change(url: str) -> None:
     """
     SIMPLIFIED: Only store URL for later analysis.
@@ -3428,6 +3652,12 @@ url = st.text_input(
 # Store URL for manual analysis if needed
 if url and url.strip():
     analyze_video_on_url_change(url)
+
+    # Analyze URL and display information with spinner
+    with st.spinner(t("url_analysis_spinner")):
+        url_info = url_analysis(url.strip())
+        if url_info:
+            display_url_info(url_info)
 
 filename = st.text_input(t("video_name"), help=t("video_name_help"))
 
