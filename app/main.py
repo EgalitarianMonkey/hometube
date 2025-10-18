@@ -142,7 +142,7 @@ def get_current_ytdlp_version() -> Optional[str]:
 def get_latest_ytdlp_version() -> Optional[str]:
     """Get the latest yt-dlp version from GitHub API."""
     # Environment variable for testing
-    test_version = CONFIG.get("TEST_LATEST_YTDLP_VERSION")
+    test_version = os.getenv("TEST_LATEST_YTDLP_VERSION")
     if test_version:
         return test_version
 
@@ -192,7 +192,7 @@ def get_current_hometube_version() -> Optional[str]:
 def get_latest_hometube_version() -> Optional[str]:
     """Get the latest HomeTube version from GitHub API."""
     # Environment variable for testing
-    test_version = CONFIG.get("TEST_LATEST_HOMETUBE_VERSION")
+    test_version = os.getenv("TEST_LATEST_HOMETUBE_VERSION")
     if test_version:
         return test_version
 
@@ -516,7 +516,7 @@ def match_profiles_to_formats_auto(formats: List[Dict]) -> List[Dict]:
     )
 
     # Use utility function with VIDEO_QUALITY_MAX and all QUALITY_PROFILES
-    video_quality_max = CONFIG.get("VIDEO_QUALITY_MAX", "max")
+    video_quality_max = settings.VIDEO_QUALITY_MAX
     combinations = match_profiles_to_formats(
         formats, QUALITY_PROFILES, video_quality_max
     )
@@ -869,7 +869,7 @@ def get_default_profile_index() -> int:
     Returns:
         Index of the configured profile in QUALITY_PROFILES, or 0 if auto/not found
     """
-    default_profile_name = CONFIG.get("QUALITY_PROFILE", "auto").strip().lower()
+    default_profile_name = settings.QUALITY_PROFILE
 
     # Auto mode or empty - return first profile for UI display
     if default_profile_name in ["", "auto"]:
@@ -1008,7 +1008,7 @@ def resolve_download_profiles(
         - error_message: Error string if resolution failed, None if success
     """
     # Handle QUALITY_PROFILE environment configuration
-    configured_profile_name = CONFIG.get("QUALITY_PROFILE", "auto").strip().lower()
+    configured_profile_name = settings.QUALITY_PROFILE
 
     if not target_profile:  # Only apply config if no explicit target
         if configured_profile_name in ["", "auto"]:
@@ -1116,7 +1116,7 @@ def _match_single_profile(
     profile: Dict, available_formats: List[Dict], profile_type: str
 ) -> Tuple[str, List[Dict], Optional[str]]:
     """Match a single profile against available formats."""
-    video_quality_max = CONFIG.get("VIDEO_QUALITY_MAX", "max")
+    video_quality_max = settings.VIDEO_QUALITY_MAX
     forced_combinations = generate_profile_combinations(
         [profile], available_formats, video_quality_max
     )
@@ -1536,223 +1536,47 @@ LOGS_CONTAINER_STYLE = """
 """
 
 
-# === ENVIRONMENT CONFIGURATION ===
-def in_container() -> bool:
-    """Detect if we are running inside a container (Docker/Podman)"""
-    return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
+# === CONFIGURATION ===
+from app.config import get_settings, ensure_folders_exist, print_config_summary
 
-
-# Calculate once to avoid repeated filesystem checks
-IN_CONTAINER = in_container()
-
-
-# === DEFAULT CONFIGURATION ===
-# Exhaustive dictionary defining all configurable variables with default values
-DEFAULT_CONFIG = {
-    # === Core Paths ===
-    "VIDEOS_FOLDER": "/data/videos" if IN_CONTAINER else "./downloads",
-    "TMP_DOWNLOAD_FOLDER": "/data/tmp" if IN_CONTAINER else "./tmp",
-    # === Authentication ===
-    "YOUTUBE_COOKIES_FILE_PATH": "",
-    "COOKIES_FROM_BROWSER": "",
-    # === Localization ===
-    "UI_LANGUAGE": "en",
-    "SUBTITLES_CHOICES": "en",
-    # === Audio Language Preferences ===
-    "LANGUAGE_PRIMARY": "en",  # Primary audio language (e.g., "fr", "en", "es")
-    "LANGUAGES_SECONDARIES": "",  # Secondary languages, comma-separated (e.g., "en,es,de")
-    "LANGUAGE_PRIMARY_INCLUDE_SUBTITLES": "true",  # Include subtitles for primary language
-    "VO_FIRST": "true",  # Prioritize original voice (VO) first before primary language
-    # === Quality & Download Preferences ===
-    "VIDEO_QUALITY_MAX": "max",  # Maximum video resolution: "max" for highest available, or "2160", "1440", "1080", "720", "480", "360"
-    "QUALITY_PROFILE": "auto",  # auto, mkv_av1_opus, mkv_vp9_opus, mp4_av1_aac, mp4_h264_aac
-    "EMBED_CHAPTERS": "true",  # Embed chapters by default
-    "EMBED_SUBTITLES": "true",  # Embed subtitles by default
-    # === Debug Options ===
-    "REMOVE_TMP_FILES": "true",  # Remove temporary files after processing (set to false for debugging)
-    # === Advanced Options ===
-    "YTDLP_CUSTOM_ARGS": "",
-    "CUTTING_MODE": "keyframes",  # keyframes or precise
-    "BROWSER_SELECT": "chrome",  # Default browser for cookie extraction
-    # === System ===
-    "DEBUG": "false",
-}
-
-
-def load_environment_config() -> Dict[str, str]:
-    """
-    Load environment configuration with proper priority:
-    1. Default values from DEFAULT_CONFIG
-    2. Environment variables (os.getenv)
-    3. .env file (only in local/non-container mode if python-dotenv available)
-
-    Returns:
-        Dictionary with all configuration values
-    """
-    config = DEFAULT_CONFIG.copy()
-
-    # Get the directory where main.py is located for relative paths
-    app_dir = Path(__file__).parent
-    project_root = app_dir.parent
-
-    # Step 1: Start with default values (already in config)
-
-    # Step 2: Override with environment variables if they exist
-    for key in config:
-        env_value = os.getenv(key)
-        if env_value is not None:
-            config[key] = env_value
-
-    # Step 3: Load from .env file only if not in container
-    if not IN_CONTAINER:
-        env_file = project_root / ".env"
-        if env_file.exists():
-            try:
-                # Try to import and use python-dotenv if available
-                from dotenv import load_dotenv
-
-                # Load .env file values (don't override existing env vars)
-                load_dotenv(env_file, override=False)
-
-                # Update config with .env values that weren't already set by env vars
-                for key in config:
-                    new_env_value = os.getenv(key)
-                    if new_env_value is not None:
-                        config[key] = new_env_value
-
-            except ImportError:
-                # python-dotenv not available, skip .env file loading
-                pass
-            except Exception as e:
-                print(f"⚠️ Error reading .env file: {e}")
-
-    # Post-process configuration values
-
-    # Handle relative paths
-    if config["VIDEOS_FOLDER"] and not Path(config["VIDEOS_FOLDER"]).is_absolute():
-        config["VIDEOS_FOLDER"] = str(project_root / config["VIDEOS_FOLDER"])
-
-    if config["TMP_DOWNLOAD_FOLDER"]:
-        if not Path(config["TMP_DOWNLOAD_FOLDER"]).is_absolute():
-            config["TMP_DOWNLOAD_FOLDER"] = str(
-                project_root / config["TMP_DOWNLOAD_FOLDER"]
-            )
-    else:
-        # Default to VIDEOS_FOLDER/tmp if not specified
-        config["TMP_DOWNLOAD_FOLDER"] = str(Path(config["VIDEOS_FOLDER"]) / "tmp")
-
-    if (
-        config["YOUTUBE_COOKIES_FILE_PATH"]
-        and not Path(config["YOUTUBE_COOKIES_FILE_PATH"]).is_absolute()
-    ):
-        config["YOUTUBE_COOKIES_FILE_PATH"] = str(
-            project_root / config["YOUTUBE_COOKIES_FILE_PATH"]
-        )
-
-    return config
-
-
-# Load configuration
-CONFIG = load_environment_config()
+# Load settings once
+settings = get_settings()
 
 # Configure translations with the loaded UI language
-configure_language(CONFIG["UI_LANGUAGE"])
+configure_language(settings.UI_LANGUAGE)
 
-# === ENV VARIABLES ===
-# Determine the project root for robust default paths
-app_dir = Path(__file__).parent
-project_root = app_dir.parent
+# Ensure folders exist and get paths
+VIDEOS_FOLDER, TMP_DOWNLOAD_FOLDER = ensure_folders_exist()
 
-# Set up main configuration variables
-VIDEOS_FOLDER = Path(CONFIG["VIDEOS_FOLDER"])
-TMP_DOWNLOAD_FOLDER = Path(CONFIG["TMP_DOWNLOAD_FOLDER"])
-
-# Ensure the folders exist with proper error handling
-try:
-    VIDEOS_FOLDER.mkdir(parents=True, exist_ok=True)
-except Exception as e:
-    print(f"⚠️ Could not create videos folder {VIDEOS_FOLDER}: {e}")
-    # Fallback to a safe location
-    fallback_folder = Path.home() / "HomeTube_Downloads"
-    print(f"💡 Using fallback folder: {fallback_folder}")
-    VIDEOS_FOLDER = fallback_folder
-    try:
-        VIDEOS_FOLDER.mkdir(parents=True, exist_ok=True)
-    except Exception as e2:
-        print(f"❌ Could not create fallback folder: {e2}")
-        # Last resort: use current directory
-        VIDEOS_FOLDER = Path.cwd() / "downloads"
-
-# Ensure temp folder exists
-try:
-    TMP_DOWNLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
-except Exception as e:
-    print(f"⚠️ Could not create temp folder {TMP_DOWNLOAD_FOLDER}: {e}")
-
-# Cookies configuration
-YOUTUBE_COOKIES_FILE_PATH = CONFIG["YOUTUBE_COOKIES_FILE_PATH"] or None
-COOKIES_FROM_BROWSER = CONFIG["COOKIES_FROM_BROWSER"].strip().lower()
-
-# Parse subtitle choices from configuration
-SUBTITLES_CHOICES = [
-    x.strip().lower() for x in CONFIG["SUBTITLES_CHOICES"].split(",") if x.strip()
-]
-
-
-# === CONFIGURATION SUMMARY ===
-def print_config_summary():
-    """Print a summary of the current configuration for debugging"""
-    print("\n🔧 HomeTube Configuration Summary:")
-    print(f"🏃 Running mode: {'Container' if IN_CONTAINER else 'Local'}")
-    print(f"🌐 UI Language: {CONFIG['UI_LANGUAGE']}")
-    print(f"📁 Videos folder: {VIDEOS_FOLDER}")
-    print(f"📁 Temp folder: {TMP_DOWNLOAD_FOLDER}")
-
-    # Check folder accessibility
-    if not VIDEOS_FOLDER.exists():
-        print(f"⚠️ Videos folder does not exist: {VIDEOS_FOLDER}")
-    elif not os.access(VIDEOS_FOLDER, os.W_OK):
-        print(f"⚠️ Videos folder is not writable: {VIDEOS_FOLDER}")
-    else:
-        print(f"✅ Videos folder is ready: {VIDEOS_FOLDER}")
-
-    # Authentication status
-    if YOUTUBE_COOKIES_FILE_PATH and Path(YOUTUBE_COOKIES_FILE_PATH).exists():
-        print(f"🍪 Cookies file: {YOUTUBE_COOKIES_FILE_PATH}")
-    elif COOKIES_FROM_BROWSER:
-        print(f"🍪 Browser cookies: {COOKIES_FROM_BROWSER}")
-    else:
-        print("⚠️ No authentication configured (may limit video access)")
-
-    print(f"🔤 Subtitle languages: {', '.join(SUBTITLES_CHOICES)}")
-
-    # Environment file status (only relevant in local mode)
-    if not IN_CONTAINER:
-        # Check if python-dotenv is available
-        import importlib.util
-
-        if importlib.util.find_spec("dotenv") is not None:
-            print("✅ python-dotenv available: .env files supported")
-        else:
-            print("⚠️ python-dotenv not available - .env files will be ignored")
-
-        env_file = Path(__file__).parent.parent / ".env"
-        if env_file.exists():
-            print(f"✅ Configuration file: {env_file}")
-        else:
-            print("⚠️ No .env file found - using defaults")
-    else:
-        print("📦 Container mode - using environment variables only")
-
-    print()
-
+# Extract commonly used settings for backward compatibility
+YOUTUBE_COOKIES_FILE_PATH = settings.YOUTUBE_COOKIES_FILE_PATH
+COOKIES_FROM_BROWSER = settings.COOKIES_FROM_BROWSER
+SUBTITLES_CHOICES = settings.SUBTITLES_CHOICES
+IN_CONTAINER = settings.IN_CONTAINER
 
 # Print configuration summary in development mode
-if __name__ == "__main__" or CONFIG["DEBUG"].lower() in ("true", "1", "yes"):
+if __name__ == "__main__" or settings.DEBUG:
     print_config_summary()
 
 
 # === UTILITY FUNCTIONS ===
+
+
+def should_remove_tmp_files() -> bool:
+    """
+    Check if temporary files should be removed.
+
+    Checks both the settings default and the UI session state override.
+    The UI checkbox can override the default setting.
+
+    Returns:
+        bool: True if temp files should be removed, False otherwise
+    """
+    # Check if UI has overridden the setting
+    if "remove_tmp_files" in st.session_state:
+        return st.session_state.remove_tmp_files
+    # Otherwise use the configuration default
+    return settings.REMOVE_TMP_FILES
 
 
 def is_valid_browser(browser_name: str) -> bool:
@@ -2275,7 +2099,7 @@ def cleanup_temp_files(
         tmp_dir: Directory to clean (defaults to TMP_DOWNLOAD_FOLDER)
         cleanup_type: Type of cleanup - "all", "download", "subtitles", "cutting", "outputs"
     """
-    if not CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+    if not should_remove_tmp_files():
         safe_push_log(
             f"🔍 Debug mode: Skipping {cleanup_type} cleanup (REMOVE_TMP_FILES=false)"
         )
@@ -3980,7 +3804,7 @@ with st.expander(f"{t('cutting_title')}", expanded=False):
 
     # Cutting mode selection
     # st.markdown(f"**{t('cutting_mode_title')}**")
-    default_cutting_mode = CONFIG.get("CUTTING_MODE", "keyframes")
+    default_cutting_mode = settings.CUTTING_MODE
     cutting_mode_options = ["keyframes", "precise"]
     default_index = (
         cutting_mode_options.index(default_cutting_mode)
@@ -4606,7 +4430,7 @@ with st.expander(f"{t('embedding_title')}", expanded=False):
 
     embed_subs = st.checkbox(
         t("embed_subs"),
-        value=CONFIG.get("EMBED_SUBTITLES", "true").lower() == "true",
+        value=settings.EMBED_SUBTITLES,
         key="embed_subs",
         help=t("embed_subs_help"),
     )
@@ -4617,7 +4441,7 @@ with st.expander(f"{t('embedding_title')}", expanded=False):
 
     embed_chapters = st.checkbox(
         t("embed_chapters"),
-        value=CONFIG.get("EMBED_CHAPTERS", "true").lower() == "true",
+        value=settings.EMBED_CHAPTERS,
         key="embed_chapters",
         help=t("embed_chapters_help"),
     )
@@ -4753,7 +4577,7 @@ with st.expander(t("advanced_options"), expanded=False):
     # Custom yt-dlp arguments
     ytdlp_custom_args = st.text_input(
         t("ytdlp_custom_args"),
-        value=CONFIG.get("YTDLP_CUSTOM_ARGS", ""),
+        value=settings.YTDLP_CUSTOM_ARGS,
         placeholder=t("ytdlp_custom_args_placeholder"),
         help=t("ytdlp_custom_args_help"),
         key="ytdlp_custom_args",
@@ -4766,9 +4590,7 @@ with st.expander(t("advanced_options"), expanded=False):
 
     # Store current REMOVE_TMP_FILES setting in session state
     if "remove_tmp_files" not in st.session_state:
-        st.session_state.remove_tmp_files = (
-            CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true"
-        )
+        st.session_state.remove_tmp_files = should_remove_tmp_files()
 
     remove_tmp_files = st.checkbox(
         "Remove temporary files after processing",
@@ -4777,8 +4599,8 @@ with st.expander(t("advanced_options"), expanded=False):
         key="remove_tmp_files_checkbox",
     )
 
-    # Update CONFIG in real-time based on UI selection
-    CONFIG["REMOVE_TMP_FILES"] = "true" if remove_tmp_files else "false"
+    # Store in session state for UI state tracking
+    # Note: settings object is immutable, so we only track UI state here
     st.session_state.remove_tmp_files = remove_tmp_files
 
     if not remove_tmp_files:
@@ -5681,7 +5503,7 @@ if submitted:
 
         if cut_output.exists():
             try:
-                if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                if should_remove_tmp_files():
                     cut_output.unlink()
                     push_log("🗑️ Removed existing cut output file")
                 else:
@@ -5845,7 +5667,7 @@ if submitted:
 
         if final_cut_name.exists():
             try:
-                if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                if should_remove_tmp_files():
                     final_cut_name.unlink()
                     push_log("🗑️ Removed existing final file")
                 else:
@@ -5855,7 +5677,7 @@ if submitted:
             except Exception:
                 pass
         # In debug mode, copy instead of rename to preserve intermediate files
-        if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "false":
+        if not should_remove_tmp_files():
             push_log(
                 f"🔍 Debug mode: Copying cut file to preserve intermediate {cut_output.name}"
             )
@@ -5891,7 +5713,7 @@ if submitted:
         # Delete the original complete file to save space
         try:
             if final_tmp.exists() and final_tmp != final_source:
-                if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                if should_remove_tmp_files():
                     final_tmp.unlink()
                     push_log("🗑️ Removed original file after cutting")
                 else:
@@ -5962,7 +5784,7 @@ if submitted:
                     safe_push_log("✅ Subtitles successfully embedded manually")
 
                     # Clean up subtitle files after successful embedding
-                    if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                    if should_remove_tmp_files():
                         for sub_file in subtitle_files_to_embed:
                             try:
                                 sub_file.unlink()

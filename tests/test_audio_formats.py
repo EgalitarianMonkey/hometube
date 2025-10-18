@@ -25,6 +25,55 @@ def load_test_json(filename: str) -> Dict:
         return json.load(f)
 
 
+class TestInstagramVideo:
+    """Test suite for Instagram videos (video-instagram.json)"""
+
+    def setup_method(self):
+        """Load test data before each test"""
+        self.url_info = load_test_json("video-instagram.json")
+
+    def test_basic_analysis_no_preferences(self):
+        """Test Instagram video with no language preferences"""
+        vo_lang, ordered_audios, multiple_langs = analyze_audio_formats(
+            self.url_info,
+            language_primary="",
+            languages_secondaries="",
+            vo_first=True,
+        )
+
+        # Assertions
+        assert (
+            vo_lang is None
+        ), f"Instagram video should have no detected VO, got {vo_lang}"
+        assert (
+            len(ordered_audios) == 1
+        ), f"Instagram should have exactly 1 audio format, got {len(ordered_audios)}"
+        assert (
+            multiple_langs is False
+        ), "Instagram video should have multiple_langs=False"
+
+        # Check audio format is valid
+        audio = ordered_audios[0]
+        assert audio.get("vcodec") == "none", "Audio format should have vcodec='none'"
+        assert audio.get("acodec") != "none", "Audio format should have a valid acodec"
+        assert "format_id" in audio, "Audio format should have format_id"
+
+    def test_with_language_preferences(self):
+        """Test Instagram video with language preferences (should not affect result)"""
+        vo_lang, ordered_audios, multiple_langs = analyze_audio_formats(
+            self.url_info,
+            language_primary="fr",
+            languages_secondaries="es,de",
+            vo_first=True,
+        )
+
+        # Assertions - preferences should not matter for single audio
+        assert len(ordered_audios) == 1, "Should have exactly one audio format"
+        assert (
+            multiple_langs is False
+        ), "Instagram video should have multiple_langs=False"
+
+
 class TestMonoLanguageVideo:
     """Test suite for single-language videos (video-mono-lang-stressedout.json)"""
 
@@ -394,6 +443,7 @@ def run_tests():
     import traceback
 
     test_classes = [
+        TestInstagramVideo,
         TestMonoLanguageVideo,
         TestMultiLanguageVideo,
         TestLanguagePreferences,
