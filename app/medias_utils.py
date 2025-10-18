@@ -217,23 +217,23 @@ def get_formats_id_to_download(
     url_info_path: Path, multiple_langs: bool, audio_formats: List[Dict] = None
 ) -> List[Dict]:
     """
-    Détermine les profils de téléchargement optimaux (max 2 profils: AV1 et VP9).
+    Determine optimal download profiles (max 2 profiles: AV1 and VP9).
 
-    Stratégie:
-    - Si multiple_langs=False: récupère les paires vidéo+audio (bv*+ba/b)
-    - Si multiple_langs=True: récupère uniquement les vidéos (bv*), on ajoutera les audios après
+    Strategy:
+    - If multiple_langs=False: fetch video+audio pairs (bv*+ba/b)
+    - If multiple_langs=True: fetch video only (bv*), audio tracks will be added after
 
-    Pour chaque cas, on cherche 2 profils:
-    1. Meilleur avec AV1 first
-    2. Meilleur avec VP9 first
+    For each case, we search for 2 profiles:
+    1. Best with AV1 first
+    2. Best with VP9 first
 
     Args:
-        url_info_path: Chemin vers le fichier JSON yt-dlp
-        multiple_langs: True si plusieurs pistes audio de langues différentes
-        audio_formats: Liste des formats audio à combiner (si multiple_langs=True)
+        url_info_path: Path to yt-dlp JSON file
+        multiple_langs: True if multiple audio tracks in different languages
+        audio_formats: List of audio formats to combine (if multiple_langs=True)
 
     Returns:
-        Liste de dictionnaires de profils (max 2):
+        List of profile dictionaries (max 2):
         [
             {"format_id": "399+251", "ext": "webm", "height": 1080, "vcodec": "vp9", "protocol": "https"},
             {"format_id": "616+251", "ext": "webm", "height": 1080, "vcodec": "av1", "protocol": "https"}
@@ -242,13 +242,13 @@ def get_formats_id_to_download(
 
     profiles = []
 
-    # Déterminer le format arg selon multiple_langs
+    # Determine format arg based on multiple_langs
     if multiple_langs:
         format_arg = ytdlp_formats_only_video_arg
     else:
         format_arg = ytdlp_formats_video_audio_arg
 
-    # Préparer les deux variantes de tri (AV1 first, VP9 first)
+    # Prepare the two sorting variants (AV1 first, VP9 first)
     sort_variants = [
         ("av1", YTDLP_FORMATS_SORT_AV1_FIRST_ARG),
         ("vp9", YTDLP_FORMATS_SORT_VP9_FIRST_ARG),
@@ -256,7 +256,7 @@ def get_formats_id_to_download(
 
     for codec_pref, sort_arg in sort_variants:
         try:
-            # Construire la commande yt-dlp
+            # Build yt-dlp command
             cmd = [
                 "yt-dlp",
                 "--load-info-json",
@@ -264,13 +264,13 @@ def get_formats_id_to_download(
                 "--simulate",
             ]
 
-            # Ajouter les arguments de format (avec shlex pour gérer les guillemets)
+            # Add format arguments (using shlex to handle quotes)
             cmd.extend(shlex.split(format_arg))
 
-            # Ajouter les arguments de tri
+            # Add sorting arguments
             cmd.extend(shlex.split(sort_arg))
 
-            # Ajouter l'argument print
+            # Add print argument
             cmd.extend(
                 [
                     "--print",
@@ -278,7 +278,7 @@ def get_formats_id_to_download(
                 ]
             )
 
-            # Exécuter la commande
+            # Execute command
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -290,29 +290,29 @@ def get_formats_id_to_download(
                 print(f"⚠️ yt-dlp error for {codec_pref}: {result.stderr}")
                 continue
 
-            # Parser la sortie (première ligne = meilleur format)
+            # Parse output (first line = best format)
             output_lines = result.stdout.strip().split("\n")
             if not output_lines or not output_lines[0]:
                 continue
 
-            # Prendre uniquement la première ligne (meilleur format)
+            # Take only the first line (best format)
             best_format_line = output_lines[0]
 
             try:
                 format_info = json.loads(best_format_line)
 
-                # Si multiple_langs, ajouter les pistes audio aux vidéos
+                # If multiple_langs, add audio tracks to videos
                 if multiple_langs and audio_formats:
-                    # Récupérer l'ID vidéo uniquement
+                    # Get video ID only
                     video_id = format_info["format_id"]
 
-                    # Créer un profil pour chaque combinaison vidéo + audios
+                    # Create a profile for each video + audios combination
                     audio_ids = "+".join(
                         [a.get("format_id", "") for a in audio_formats]
                     )
                     format_info["format_id"] = f"{video_id}+{audio_ids}"
 
-                # Ajouter à la liste des profils
+                # Add to profiles list
                 profiles.append(format_info)
 
             except json.JSONDecodeError as e:
@@ -326,7 +326,7 @@ def get_formats_id_to_download(
             print(f"⚠️ Error getting format for {codec_pref}: {e}")
             continue
 
-    # Dédupliquer les profils (si AV1 et VP9 donnent le même résultat)
+    # Deduplicate profiles (if AV1 and VP9 give the same result)
     unique_profiles = []
     seen_format_ids = set()
 
@@ -336,7 +336,7 @@ def get_formats_id_to_download(
             unique_profiles.append(profile)
             seen_format_ids.add(format_id)
 
-    return unique_profiles[:2]  # Maximum 2 profils
+    return unique_profiles[:2]  # Maximum 2 profiles
 
 
 def get_audio_format_summary(audio_format: Dict) -> str:
