@@ -29,13 +29,13 @@ def test_mono_lang_video():
 
     vo_lang, audio_formats, multiple_langs = analyze_audio_formats(url_info)
 
-    print(f"\n📊 Analyse audio:")
+    print("\n📊 Analyse audio:")
     print(f"   VO: {vo_lang}")
     print(f"   Nombre d'audios: {len(audio_formats)}")
     print(f"   Multiple langs: {multiple_langs}")
 
     # Récupérer les profils de téléchargement
-    print(f"\n🔍 Récupération des profils de téléchargement...")
+    print("\n🔍 Récupération des profils de téléchargement...")
     profiles = get_formats_id_to_download(json_path, multiple_langs, audio_formats)
 
     print(f"\n✅ Profils trouvés: {len(profiles)}")
@@ -66,14 +66,14 @@ def test_multi_lang_video():
         url_info, language_primary="fr", languages_secondaries="en,es", vo_first=True
     )
 
-    print(f"\n📊 Analyse audio:")
+    print("\n📊 Analyse audio:")
     print(f"   VO: {vo_lang}")
     print(f"   Nombre d'audios: {len(audio_formats)}")
     print(f"   Multiple langs: {multiple_langs}")
     print(f"   Langues (top 5): {[a.get('language') for a in audio_formats[:5]]}")
 
     # Récupérer les profils de téléchargement
-    print(f"\n🔍 Récupération des profils de téléchargement...")
+    print("\n🔍 Récupération des profils de téléchargement...")
     profiles = get_formats_id_to_download(json_path, multiple_langs, audio_formats)
 
     print(f"\n✅ Profils trouvés: {len(profiles)}")
@@ -102,13 +102,13 @@ def test_instagram_video():
 
     vo_lang, audio_formats, multiple_langs = analyze_audio_formats(url_info)
 
-    print(f"\n📊 Analyse audio:")
+    print("\n📊 Analyse audio:")
     print(f"   VO: {vo_lang}")
     print(f"   Nombre d'audios: {len(audio_formats)}")
     print(f"   Multiple langs: {multiple_langs}")
 
     # Récupérer les profils de téléchargement
-    print(f"\n🔍 Récupération des profils de téléchargement...")
+    print("\n🔍 Récupération des profils de téléchargement...")
     profiles = get_formats_id_to_download(json_path, multiple_langs, audio_formats)
 
     print(f"\n✅ Profils trouvés: {len(profiles)}")

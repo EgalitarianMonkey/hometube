@@ -239,7 +239,6 @@ def get_formats_id_to_download(
             {"format_id": "616+251", "ext": "webm", "height": 1080, "vcodec": "av1", "protocol": "https"}
         ]
     """
-    import subprocess
 
     profiles = []
 

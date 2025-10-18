@@ -71,6 +71,9 @@ except ImportError:
         parse_format_line,
     )
 
+# Configuration import (must be after translations for configure_language)
+from app.config import get_settings, ensure_folders_exist, print_config_summary
+
 
 # === CONSTANTS ===
 
@@ -1537,8 +1540,6 @@ LOGS_CONTAINER_STYLE = """
 
 
 # === CONFIGURATION ===
-from app.config import get_settings, ensure_folders_exist, print_config_summary
-
 # Load settings once
 settings = get_settings()
 

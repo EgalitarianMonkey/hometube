@@ -250,48 +250,48 @@ def print_config_summary() -> None:
     print(f"🐞 Debug mode: {'ON' if s.DEBUG else 'OFF'}")
 
     # Paths
-    print(f"\n📁 Paths:")
+    print("\n📁 Paths:")
     print(f"   Videos: {s.VIDEOS_FOLDER}")
     if s.VIDEOS_FOLDER.exists():
         if os.access(s.VIDEOS_FOLDER, os.W_OK):
-            print(f"   ✅ Videos folder is ready and writable")
+            print("   ✅ Videos folder is ready and writable")
         else:
-            print(f"   ⚠️ Videos folder exists but is not writable!")
+            print("   ⚠️ Videos folder exists but is not writable!")
     else:
-        print(f"   ⚠️ Videos folder does not exist yet (will be created)")
+        print("   ⚠️ Videos folder does not exist yet (will be created)")
 
     print(f"   Temp: {s.TMP_DOWNLOAD_FOLDER}")
 
     # Authentication
-    print(f"\n🍪 Authentication:")
+    print("\n🍪 Authentication:")
     if s.YOUTUBE_COOKIES_FILE_PATH and Path(s.YOUTUBE_COOKIES_FILE_PATH).exists():
         print(f"   Cookies file: {s.YOUTUBE_COOKIES_FILE_PATH} ✅")
     elif s.COOKIES_FROM_BROWSER:
         print(f"   Browser cookies: {s.COOKIES_FROM_BROWSER} ✅")
     else:
-        print(f"   ⚠️ No authentication configured (may limit video access)")
+        print("   ⚠️ No authentication configured (may limit video access)")
 
     # Localization
-    print(f"\n🌐 Localization:")
+    print("\n🌐 Localization:")
     print(f"   UI Language: {s.UI_LANGUAGE}")
     print(f"   Subtitle languages: {', '.join(s.SUBTITLES_CHOICES) or '(none)'}")
 
     # Audio preferences
-    print(f"\n🎵 Audio Language Preferences:")
+    print("\n🎵 Audio Language Preferences:")
     print(f"   Primary: {s.LANGUAGE_PRIMARY or '(none)'}")
     print(f"   Secondaries: {', '.join(s.LANGUAGES_SECONDARIES) or '(none)'}")
     print(f"   VO first: {s.VO_FIRST}")
     print(f"   Include subtitles for primary: {s.LANGUAGE_PRIMARY_INCLUDE_SUBTITLES}")
 
     # Quality
-    print(f"\n🎬 Video Quality:")
+    print("\n🎬 Video Quality:")
     print(f"   Max resolution: {s.VIDEO_QUALITY_MAX}")
     print(f"   Quality profile: {s.QUALITY_PROFILE}")
     print(f"   Embed chapters: {s.EMBED_CHAPTERS}")
     print(f"   Embed subtitles: {s.EMBED_SUBTITLES}")
 
     # Advanced
-    print(f"\n⚙️ Advanced:")
+    print("\n⚙️ Advanced:")
     print(f"   Cutting mode: {s.CUTTING_MODE}")
     print(f"   Browser select: {s.BROWSER_SELECT}")
     print(f"   Remove temp files: {s.REMOVE_TMP_FILES}")
@@ -300,21 +300,21 @@ def print_config_summary() -> None:
 
     # Environment file (only in local mode)
     if not s.IN_CONTAINER:
-        print(f"\n📄 Configuration file:")
+        print("\n📄 Configuration file:")
         import importlib.util
 
         if importlib.util.find_spec("dotenv") is not None:
-            print(f"   ✅ python-dotenv available: .env files supported")
+            print("   ✅ python-dotenv available: .env files supported")
         else:
             print(
-                f"   ⚠️ python-dotenv not available - install with: pip install python-dotenv"
+                "   ⚠️ python-dotenv not available - install with: pip install python-dotenv"
             )
 
         env_file = Path(__file__).parent.parent / ".env"
         if env_file.exists():
             print(f"   ✅ Configuration file found: {env_file}")
         else:
-            print(f"   ⚠️ No .env file found - using defaults and environment variables")
+            print("   ⚠️ No .env file found - using defaults and environment variables")
 
     print("=" * 80 + "\n")
 
