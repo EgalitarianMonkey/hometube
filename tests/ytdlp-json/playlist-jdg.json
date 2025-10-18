@@ -1,0 +1,112 @@
+{
+    "id": "PLGbut4pdSxUOiO5bOUryKgE9jtVUlgFz4",
+    "title": "Papy Grenier",
+    "availability": null,
+    "channel_follower_count": null,
+    "description": "",
+    "tags": [],
+    "thumbnails": [
+        {
+            "url": "https://i.ytimg.com/vi/WTwGj63He0o/hqdefault.jpg?sqp=-oaymwEWCKgBEF5IWvKriqkDCQgBFQAAiEIYAQ==&rs=AOn4CLCKyhJzpyvCY-mAzPL0WSqOYIFDLg",
+            "height": 94,
+            "width": 168,
+            "id": "0",
+            "resolution": "168x94"
+        },
+        {
+            "url": "https://i.ytimg.com/vi/WTwGj63He0o/hqdefault.jpg?sqp=-oaymwEWCMQBEG5IWvKriqkDCQgBFQAAiEIYAQ==&rs=AOn4CLAMPLlWP7XkJpf1Qe-GkTiPHkJS3A",
+            "height": 110,
+            "width": 196,
+            "id": "1",
+            "resolution": "196x110"
+        },
+        {
+            "url": "https://i.ytimg.com/vi/WTwGj63He0o/hqdefault.jpg?sqp=-oaymwEXCPYBEIoBSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLB4puZLQFRpgiB-rb910bko9btNPQ",
+            "height": 138,
+            "width": 246,
+            "id": "2",
+            "resolution": "246x138"
+        },
+        {
+            "url": "https://i.ytimg.com/vi/WTwGj63He0o/hqdefault.jpg?sqp=-oaymwEXCNACELwBSFryq4qpAwkIARUAAIhCGAE=&rs=AOn4CLDxgWLCl8HaO5p90C3M4xVojSQAhw",
+            "height": 188,
+            "width": 336,
+            "id": "3",
+            "resolution": "336x188"
+        }
+    ],
+    "modified_date": "20241221",
+    "view_count": 13148163,
+    "playlist_count": 20,
+    "channel": "Joueur Du Grenier",
+    "channel_id": "UC_yP2DpIgs5Y1uWC0T03Chw",
+    "uploader_id": "@joueurdugrenier",
+    "uploader": "Joueur Du Grenier",
+    "channel_url": "https://www.youtube.com/channel/UC_yP2DpIgs5Y1uWC0T03Chw",
+    "uploader_url": "https://www.youtube.com/@joueurdugrenier",
+    "_type": "playlist",
+    "entries": [
+        {
+            "_type": "url",
+            "ie_key": "Youtube",
+            "id": "WTwGj63He0o",
+            "url": "https://www.youtube.com/watch?v=WTwGj63He0o",
+            "title": "Papy grenier - Pokemon Rouge",
+            "description": null,
+            "duration": 342,
+            "channel_id": "UC_yP2DpIgs5Y1uWC0T03Chw",
+            "channel": "Joueur Du Grenier",
+            "channel_url": "https://www.youtube.com/channel/UC_yP2DpIgs5Y1uWC0T03Chw",
+            "uploader": "Joueur Du Grenier",
+            "uploader_id": "@joueurdugrenier",
+            "uploader_url": "https://www.youtube.com/@joueurdugrenier",
+            "thumbnails": [
+                {
+                    "url": "https://i.ytimg.com/vi/WTwGj63He0o/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLDlPN1_SOUEV_-26s4zE3SbpN9Wqw",
+                    "height": 94,
+                    "width": 168
+                },
+                {
+                    "url": "https://i.ytimg.com/vi/WTwGj63He0o/hqdefault.jpg?sqp=-oaymwEbCMQBEG5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBHR0ldLmfI-2FTGUyqIphcEpFXig",
+                    "height": 110,
+                    "width": 196
+                },
+                {
+                    "url": "https://i.ytimg.com/vi/WTwGj63He0o/hqdefault.jpg?sqp=-oaymwEcCPYBEIoBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLCNGpR2gSm4GpfOiqQTZX-SvHVzQw",
+                    "height": 138,
+                    "width": 246
+                },
+                {
+                    "url": "https://i.ytimg.com/vi/WTwGj63He0o/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLC4oO0YjaLkUotMEtpM7bfOBEKzLg",
+                    "height": 188,
+                    "width": 336
+                }
+            ],
+            "timestamp": null,
+            "release_timestamp": null,
+            "availability": null,
+            "view_count": 9600000,
+            "live_status": null,
+            "channel_is_verified": null,
+            "__x_forwarded_for_ip": null
+        }
+    ],
+    "extractor_key": "YoutubeTab",
+    "extractor": "youtube:tab",
+    "webpage_url": "https://www.youtube.com/playlist?list=PLGbut4pdSxUOiO5bOUryKgE9jtVUlgFz4",
+    "original_url": "https://www.youtube.com/watch?v=WTwGj63He0o&list=PLGbut4pdSxUOiO5bOUryKgE9jtVUlgFz4",
+    "webpage_url_basename": "playlist",
+    "webpage_url_domain": "youtube.com",
+    "release_year": null,
+    "requested_entries": [
+        1
+    ],
+    "epoch": 1760704193,
+    "__files_to_move": {},
+    "_version": {
+        "version": "2025.09.26",
+        "current_git_head": null,
+        "release_git_head": "12b57d2858845c0c7fb33bf9aa8ed7be6905535d",
+        "repository": "yt-dlp/yt-dlp"
+    }
+}

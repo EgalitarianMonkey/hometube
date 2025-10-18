@@ -1558,6 +1558,11 @@ DEFAULT_CONFIG = {
     # === Localization ===
     "UI_LANGUAGE": "en",
     "SUBTITLES_CHOICES": "en",
+    # === Audio Language Preferences ===
+    "LANGUAGE_PRIMARY": "en",  # Primary audio language (e.g., "fr", "en", "es")
+    "LANGUAGES_SECONDARIES": "",  # Secondary languages, comma-separated (e.g., "en,es,de")
+    "LANGUAGE_PRIMARY_INCLUDE_SUBTITLES": "true",  # Include subtitles for primary language
+    "VO_FIRST": "true",  # Prioritize original voice (VO) first before primary language
     # === Quality & Download Preferences ===
     "VIDEO_QUALITY_MAX": "max",  # Maximum video resolution: "max" for highest available, or "2160", "1440", "1080", "720", "480", "360"
     "QUALITY_PROFILE": "auto",  # auto, mkv_av1_opus, mkv_vp9_opus, mp4_av1_aac, mp4_h264_aac
