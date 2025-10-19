@@ -13,7 +13,8 @@ from urllib.parse import urlparse
 try:
     from .translations import t
     from .logs_utils import push_log_generic as push_log, safe_push_log
-    from .utils import video_id_from_url, fmt_hhmmss
+    from .medias_utils import video_id_from_url
+    from .display_utils import fmt_hhmmss
     from .core import (
         build_sponsorblock_params as core_build_sponsorblock_params,
         get_sponsorblock_config as core_get_sponsorblock_config,
@@ -21,7 +22,8 @@ try:
 except ImportError:
     from translations import t
     from logs_utils import push_log_generic as push_log, safe_push_log
-    from utils import video_id_from_url, fmt_hhmmss
+    from medias_utils import video_id_from_url
+    from display_utils import fmt_hhmmss
     from core import (
         build_sponsorblock_params as core_build_sponsorblock_params,
         get_sponsorblock_config as core_get_sponsorblock_config,

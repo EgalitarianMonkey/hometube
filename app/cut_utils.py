@@ -135,7 +135,16 @@ def merge_overlaps(segments: List[Dict], margin: float = 0.0) -> List[Dict]:
 def invert_segments(
     segments: List[Dict], total_duration: float
 ) -> List[Tuple[float, float]]:
-    """Returns the intervals [start,end) to keep when removing 'segments'."""
+    """
+    Returns the intervals [start,end) to keep when removing 'segments'.
+
+    Args:
+        segments: List of dicts with 'start' and 'end' keys
+        total_duration: Total duration in seconds
+
+    Returns:
+        List of tuples (start, end) representing segments to keep
+    """
     keep = []
     cur = 0.0
     for s in sorted(segments, key=lambda x: x["start"]):
@@ -146,6 +155,43 @@ def invert_segments(
     if cur < total_duration:
         keep.append((cur, total_duration))
     return keep
+
+
+def invert_segments_tuples(
+    segments: List[Tuple[int, int]], total_duration: int
+) -> List[Tuple[int, int]]:
+    """
+    LEGACY: Invert segments using tuple format (for backward compatibility).
+
+    Inverts segments (get the parts NOT in the segments).
+
+    Args:
+        segments: List of (start, end) tuples
+        total_duration: Total duration in seconds
+
+    Returns:
+        Inverted segments as list of (start, end) tuples
+    """
+    if not segments or total_duration <= 0:
+        return [(0, total_duration)] if total_duration > 0 else []
+
+    # Sort segments by start time
+    sorted_segments = sorted(segments, key=lambda x: x[0])
+
+    inverted = []
+    last_end = 0
+
+    for start, end in sorted_segments:
+        # Add gap before this segment
+        if start > last_end:
+            inverted.append((last_end, start))
+        last_end = max(last_end, end)
+
+    # Add final segment if needed
+    if last_end < total_duration:
+        inverted.append((last_end, total_duration))
+
+    return inverted
 
 
 # === TIME REMAPPING ===

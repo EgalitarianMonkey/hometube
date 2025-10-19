@@ -5,6 +5,7 @@ This module provides functions to analyze audio and video formats
 from yt-dlp JSON output to optimize download strategies.
 """
 
+import re
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 import json
@@ -14,6 +15,66 @@ import shlex
 from app.config import get_settings
 
 s = get_settings()
+
+
+# === URL UTILITIES ===
+
+
+def sanitize_url(url: str) -> str:
+    """
+    Clean and validate URL, removing YouTube timestamp parameters.
+
+    Args:
+        url: URL to sanitize
+
+    Returns:
+        Cleaned URL
+    """
+    if not url:
+        return ""
+
+    url = url.strip()
+
+    # Add protocol if missing
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
+    # Remove YouTube timestamp parameters (HomeTube specific)
+    url = url.split("&t=")[0]
+    url = url.split("?t=")[0]
+
+    return url
+
+
+def video_id_from_url(url: str) -> str:
+    """
+    Extract video ID from YouTube URL.
+
+    Args:
+        url: YouTube URL
+
+    Returns:
+        Video ID or empty string if not found
+    """
+    if not url:
+        return ""
+
+    # Standard YouTube URL patterns
+    patterns = [
+        r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})",
+        r"youtube\.com/v/([a-zA-Z0-9_-]{11})",
+        r"youtube\.com/shorts/([a-zA-Z0-9_-]{11})",  # Support for Shorts
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+
+    return ""
+
+
+# === AUDIO FORMAT ANALYSIS ===
 
 
 def analyze_audio_formats(
@@ -658,13 +719,8 @@ def get_video_title_from_json(json_path: Optional[Path] = None) -> str:
     try:
         # Import here to avoid circular imports
         from app.config import ensure_folders_exist
-
-        try:
-            from .utils import sanitize_filename
-            from .logs_utils import safe_push_log
-        except ImportError:
-            from utils import sanitize_filename
-            from logs_utils import safe_push_log
+        from app.file_system_utils import sanitize_filename
+        from app.logs_utils import safe_push_log
 
         # Get default path if not provided
         if json_path is None:
@@ -720,20 +776,12 @@ def get_video_title(url: str, cookies_part: List[str] = None) -> str:
     """
     try:
         # Import here to avoid circular imports
-        try:
-            from .logs_utils import (
-                safe_push_log,
-                is_authentication_error,
-                log_authentication_error_hint,
-            )
-            from .utils import sanitize_filename
-        except ImportError:
-            from logs_utils import (
-                safe_push_log,
-                is_authentication_error,
-                log_authentication_error_hint,
-            )
-            from utils import sanitize_filename
+        from app.logs_utils import (
+            safe_push_log,
+            is_authentication_error,
+            log_authentication_error_hint,
+        )
+        from app.file_system_utils import sanitize_filename
         import subprocess
 
         # Strategy 1: Try to get title from existing JSON (fastest)
@@ -821,12 +869,8 @@ def customize_video_metadata(
     """
     try:
         # Import here to avoid circular imports
-        try:
-            from .logs_utils import safe_push_log
-            from .process_utils import run_subprocess_safe
-        except ImportError:
-            from logs_utils import safe_push_log
-            from process_utils import run_subprocess_safe
+        from app.logs_utils import safe_push_log
+        from app.process_utils import run_subprocess_safe
 
         safe_push_log("📝 Customizing video metadata...")
 

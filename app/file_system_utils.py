@@ -5,16 +5,98 @@ Provides centralized file and directory management functionality
 including cleanup operations, directory listing, and file operations.
 """
 
+import re
 import shutil
 from pathlib import Path
 from typing import List
 
 import streamlit as st
 
-try:
-    from .logs_utils import safe_push_log
-except ImportError:
-    from logs_utils import safe_push_log
+
+# === FILE NAMING AND SANITIZATION ===
+
+
+def sanitize_filename(name: str) -> str:
+    """
+    Sanitize a string to be safe for use as a filename or folder name.
+
+    Args:
+        name: The string to sanitize
+
+    Returns:
+        Sanitized string safe for filesystem use
+    """
+    if not name:
+        return ""
+
+    # Remove or replace problematic characters
+    sanitized = re.sub(r'[<>:"/\\|?*]', "_", name.strip())
+    sanitized = re.sub(r"[^\w\s\-_\.]", "_", sanitized)
+    sanitized = re.sub(r"\s+", " ", sanitized).strip()
+
+    # Remove leading/trailing dots and spaces
+    sanitized = sanitized.strip(". ")
+
+    # Limit length to prevent filesystem issues
+    max_length = 200
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length].strip()
+
+    return sanitized or "unnamed"
+
+
+def is_valid_cookie_file(file_path: str) -> bool:
+    """
+    Check if cookie file exists and is valid.
+
+    Args:
+        file_path: Path to cookie file
+
+    Returns:
+        True if file exists and appears to be a valid cookie file
+    """
+    if not file_path:
+        return False
+
+    path = Path(file_path)
+
+    # Check if file exists
+    if not path.exists() or not path.is_file():
+        return False
+
+    # Check file size (should not be empty)
+    if path.stat().st_size == 0:
+        return False
+
+    # Check file extension
+    if path.suffix.lower() not in [".txt", ".cookies"]:
+        return False
+
+    return True
+
+
+def is_valid_browser(browser: str) -> bool:
+    """
+    Check if browser name is valid for cookie extraction.
+
+    Args:
+        browser: Browser name to check
+
+    Returns:
+        True if valid browser name
+    """
+    valid_browsers = {
+        "chrome",
+        "firefox",
+        "safari",
+        "edge",
+        "opera",
+        "brave",
+        "vivaldi",
+        "chromium",
+        "whale",
+    }
+    return browser.lower().strip() in valid_browsers
 
 
 # === DIRECTORY OPERATIONS ===
@@ -127,6 +209,12 @@ def cleanup_tmp_files(
         tmp_dir: Directory to clean (defaults to TMP_DOWNLOAD_FOLDER from global settings)
         cleanup_type: Type of cleanup - "all", "download", "subtitles", "cutting", "outputs"
     """
+    # Import logging here to avoid circular dependency
+    try:
+        from .logs_utils import safe_push_log
+    except ImportError:
+        from logs_utils import safe_push_log
+
     if not should_remove_tmp_files():
         safe_push_log(
             f"🔍 Debug mode: Skipping {cleanup_type} cleanup (REMOVE_TMP_FILES=false)"

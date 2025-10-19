@@ -43,14 +43,14 @@ def _get_main_functions():
 
 
 def sanitize_url(url: str) -> str:
-    """Stub for utils.sanitize_url"""
+    """Stub for medias_utils.sanitize_url"""
     try:
-        from .utils import sanitize_url as su
+        from .medias_utils import sanitize_url as su
 
         return su(url)
     except ImportError:
         try:
-            from utils import sanitize_url as su
+            from medias_utils import sanitize_url as su
 
             return su(url)
         except ImportError:

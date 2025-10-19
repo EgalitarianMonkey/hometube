@@ -12,7 +12,7 @@ class TestCoreFunctions:
 
     def test_sanitize_filename(self):
         """Test sanitize_filename function."""
-        from app.utils import sanitize_filename
+        from app.file_system_utils import sanitize_filename
 
         # Normal cases
         assert sanitize_filename("normal_file.txt") == "normal_file.txt"
@@ -30,7 +30,7 @@ class TestCoreFunctions:
 
     def test_parse_time_like(self):
         """Test parse_time_like function."""
-        from app.utils import parse_time_like
+        from app.display_utils import parse_time_like
 
         # Simple formats
         assert parse_time_like("60") == 60
@@ -46,7 +46,7 @@ class TestCoreFunctions:
 
     def test_fmt_hhmmss(self):
         """Test fmt_hhmmss function."""
-        from app.utils import fmt_hhmmss
+        from app.display_utils import fmt_hhmmss
 
         assert fmt_hhmmss(0) == "00:00:00"
         assert fmt_hhmmss(60) == "00:01:00"
@@ -55,7 +55,7 @@ class TestCoreFunctions:
 
     def test_is_valid_browser(self):
         """Test is_valid_browser function."""
-        from app.utils import is_valid_browser
+        from app.file_system_utils import is_valid_browser
 
         # Valid browsers
         assert is_valid_browser("chrome") is True
@@ -67,19 +67,11 @@ class TestCoreFunctions:
         assert is_valid_browser("") is False
         assert is_valid_browser("   ") is False
 
-    def test_extract_resolution_value(self):
-        """Test extract_resolution_value function."""
-        from app.utils import extract_resolution_value
-
-        assert extract_resolution_value("720p") == 720
-        assert extract_resolution_value("1080") == 1080
-        assert extract_resolution_value("4K") == 4
-        assert extract_resolution_value("") == 0
-        assert extract_resolution_value("invalid") == 0
+    # test_extract_resolution_value REMOVED - function deprecated and removed from codebase
 
     def test_video_id_from_url(self):
         """Test video_id_from_url function."""
-        from app.utils import video_id_from_url
+        from app.medias_utils import video_id_from_url
 
         # Valid YouTube URLs
         assert (
@@ -94,7 +86,7 @@ class TestCoreFunctions:
 
     def test_sanitize_url(self):
         """Test sanitize_url function."""
-        from app.utils import sanitize_url
+        from app.medias_utils import sanitize_url
 
         assert sanitize_url("example.com") == "https://example.com"
         assert sanitize_url("https://example.com") == "https://example.com"
@@ -103,33 +95,33 @@ class TestCoreFunctions:
 
     def test_invert_segments_basic(self):
         """Basic test of invert_segments function."""
-        from app.utils import invert_segments
+        from app.cut_utils import invert_segments_tuples
 
         # Simple test
         segments = [(10, 20), (30, 40)]
-        result = invert_segments(segments, 50)
+        result = invert_segments_tuples(segments, 50)
         expected = [(0, 10), (20, 30), (40, 50)]
         assert result == expected
 
         # Contiguous segments
         segments = [(0, 10), (10, 20)]
-        result = invert_segments(segments, 30)
+        result = invert_segments_tuples(segments, 30)
         expected = [(20, 30)]
         assert result == expected
 
     def test_invert_segments_empty(self):
         """Test invert_segments with edge cases."""
-        from app.utils import invert_segments
+        from app.cut_utils import invert_segments_tuples
 
         # Empty list
-        assert invert_segments([], 100) == [(0, 100)]
+        assert invert_segments_tuples([], 100) == [(0, 100)]
 
         # Zero duration
-        assert invert_segments([(10, 20)], 0) == []
+        assert invert_segments_tuples([(10, 20)], 0) == []
 
     def test_is_valid_cookie_file(self):
         """Test is_valid_cookie_file function."""
-        from app.utils import is_valid_cookie_file
+        from app.file_system_utils import is_valid_cookie_file
 
         # Basic cases
         assert is_valid_cookie_file("") is False
@@ -161,7 +153,7 @@ class TestCoreFunctions:
 
     def test_time_parsing_edge_cases_regression(self):
         """Test time parsing edge cases to prevent regressions."""
-        from app.utils import parse_time_like, fmt_hhmmss
+        from app.display_utils import parse_time_like, fmt_hhmmss
 
         # Test edge cases that could break
         edge_cases = [
@@ -189,7 +181,7 @@ class TestCoreFunctions:
 
     def test_filename_sanitization_edge_cases_regression(self):
         """Test filename sanitization edge cases to prevent regressions."""
-        from app.utils import sanitize_filename
+        from app.file_system_utils import sanitize_filename
 
         # Critical edge cases that could break file operations
         edge_cases = [

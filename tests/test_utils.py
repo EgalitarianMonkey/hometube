@@ -16,7 +16,7 @@ class TestProjectStructure:
         """Test that main files exist."""
         required_files = [
             "app/main.py",
-            "app/utils.py",
+            # app/utils.py removed - migrated to dedicated *_utils modules
             "tests/conftest.py",
             "pyproject.toml",
             "Makefile",

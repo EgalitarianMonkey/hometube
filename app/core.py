@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 
 try:
-    from .utils import is_valid_cookie_file
+    from .file_system_utils import is_valid_cookie_file
 except ImportError:
-    from utils import is_valid_cookie_file
+    from file_system_utils import is_valid_cookie_file
 
 
 def build_base_ytdlp_command(

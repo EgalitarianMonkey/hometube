@@ -18,24 +18,33 @@ try:
         build_base_ytdlp_command,
         build_cookies_params as core_build_cookies_params,
     )
-    from .utils import (
+    from .file_system_utils import (
         is_valid_cookie_file,
+        is_valid_browser,
         sanitize_filename,
-        sanitize_url,
-        parse_time_like,
+        list_subdirs_recursive,
+        ensure_dir,
+        cleanup_tmp_files,
+        should_remove_tmp_files,
+    )
+    from .display_utils import (
         fmt_hhmmss,
+        parse_time_like,
+    )
+    from .medias_utils import (
+        analyze_audio_formats,
+        get_formats_id_to_download,
+        get_available_formats,
+        get_video_title,
+        customize_video_metadata,
+        sanitize_url,
+        video_id_from_url,
     )
     from .subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
         check_required_subtitles_embedded,
         find_subtitle_files_optimized,
-    )
-    from .medias_utils import (
-        analyze_audio_formats,
-        get_formats_id_to_download,
-        get_video_title,
-        customize_video_metadata,
     )
     from .ytdlp_version_check import check_and_show_updates
     from .logs_utils import (
@@ -76,18 +85,19 @@ except ImportError:
         build_base_ytdlp_command,
         build_cookies_params as core_build_cookies_params,
     )
-    from utils import (
+    from file_system_utils import (
         is_valid_cookie_file,
+        is_valid_browser,
         sanitize_filename,
-        sanitize_url,
-        parse_time_like,
-        fmt_hhmmss,
+        list_subdirs_recursive,
+        ensure_dir,
+        cleanup_tmp_files,
+        should_remove_tmp_files,
+        move_file,
     )
-    from subtitles_utils import (
-        embed_subtitles_manually,
-        process_subtitles_for_cutting,
-        check_required_subtitles_embedded,
-        find_subtitle_files_optimized,
+    from display_utils import (
+        fmt_hhmmss,
+        parse_time_like,
     )
     from medias_utils import (
         analyze_audio_formats,
@@ -95,6 +105,14 @@ except ImportError:
         get_available_formats,
         get_video_title,
         customize_video_metadata,
+        sanitize_url,
+        video_id_from_url,
+    )
+    from subtitles_utils import (
+        embed_subtitles_manually,
+        process_subtitles_for_cutting,
+        check_required_subtitles_embedded,
+        find_subtitle_files_optimized,
     )
     from ytdlp_version_check import check_and_show_updates
     from logs_utils import (
@@ -107,14 +125,6 @@ except ImportError:
         log_authentication_error_hint,
         log_format_unavailable_error_hint,
         register_main_push_log,
-    )
-
-    from file_system_utils import (
-        list_subdirs_recursive,
-        cleanup_tmp_files,
-        should_remove_tmp_files,
-        ensure_dir,
-        move_file,
     )
     from cut_utils import (
         get_keyframes,
@@ -974,16 +984,6 @@ def _execute_profile_downloads(
     return 1, f"All {profiles_count} profiles failed after full client fallback"
 
 
-# === UTILITY FUNCTIONS ===
-
-
-def is_valid_browser(browser_name: str) -> bool:
-    """Check if browser name is supported"""
-    if not browser_name:
-        return False
-    return browser_name.lower().strip() in SUPPORTED_BROWSERS
-
-
 # === STREAMLIT UI CONFIGURATION ===
 
 # Must be the first Streamlit command
@@ -1021,27 +1021,6 @@ if "download_finished" not in st.session_state:
     )
 if "download_cancelled" not in st.session_state:
     st.session_state.download_cancelled = False
-
-
-def extract_resolution_value(resolution_str: str) -> int:
-    """Extract numeric value from resolution string for sorting"""
-    if not resolution_str:
-        return 0
-    try:
-        # Handle common resolution formats: "1920x1080", "1080p", "720p60", etc.
-        if "x" in resolution_str:
-            # Extract height from "1920x1080" format
-            height = int(resolution_str.split("x")[1].split("p")[0])
-            return height
-        elif "p" in resolution_str:
-            # Extract from "1080p", "720p60" format
-            height = int(resolution_str.split("p")[0])
-            return height
-        else:
-            # Unknown format, return 0 for lowest priority
-            return 0
-    except (ValueError, IndexError):
-        return 0
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
