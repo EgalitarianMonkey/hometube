@@ -274,7 +274,7 @@ YTDLP_FORMATS_SORT_VP9_FIRST_ARG = (
 )
 
 
-def get_formats_id_to_download(
+def get_profiles_with_formats_id_to_download(
     url_info_path: Path, multiple_langs: bool, audio_formats: List[Dict] = None
 ) -> List[Dict]:
     """

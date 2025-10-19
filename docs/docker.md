@@ -75,10 +75,57 @@ services:
 
 ## Environment Variables
 
+### Core System Variables
+
 | Variable | Default Value | Description |
 |----------|---------------|-------------|
 | `STREAMLIT_SERVER_PORT` | `8501` | Application listening port |
 | `STREAMLIT_SERVER_ADDRESS` | `0.0.0.0` | Listening address |
+| `TZ` | `UTC` | Container timezone (e.g., `America/New_York`, `Europe/Paris`) |
+| `DEBUG` | `false` | Enable debug logging mode |
+
+### Path Configuration
+
+| Variable | Default Value | Description |
+|----------|---------------|-------------|
+| `VIDEOS_FOLDER` | `/data/videos` | Output folder for downloaded videos |
+| `TMP_DOWNLOAD_FOLDER` | `/data/tmp` | Temporary processing folder |
+| `YOUTUBE_COOKIES_FILE_PATH` | `/config/youtube_cookies.txt` | Authentication cookie file path |
+
+### Quality & Download Preferences
+
+| Variable | Default Value | Description |
+|----------|---------------|-------------|
+| `QUALITY_PROFILE` | `auto` | Default quality profile (`mkv_av1_opus`, `mkv_vp9_opus`, `mp4_av1_aac`, `mp4_h264_aac`) |
+| `VIDEO_QUALITY_MAX` | `max` | Maximum video resolution (`max`, `2160`, `1440`, `1080`, `720`, `480`, `360`) |
+| `QUALITY_DOWNGRADE` | `true` | Allow quality downgrade on profile failure |
+| `EMBED_CHAPTERS` | `true` | Embed chapters by default |
+| `EMBED_SUBTITLES` | `true` | Embed subtitles by default |
+| `CUTTING_MODE` | `keyframes` | Video cutting precision (`keyframes`, `precise`) |
+
+### Audio Language Preferences
+
+| Variable | Default Value | Description |
+|----------|---------------|-------------|
+| `LANGUAGE_PRIMARY` | `en` | Primary audio language preference |
+| `LANGUAGES_SECONDARIES` | *(empty)* | Secondary audio languages (comma-separated) |
+| `LANGUAGE_PRIMARY_INCLUDE_SUBTITLES` | `true` | Include subtitles for primary language |
+| `VO_FIRST` | `true` | Prioritize original voice (VO) before primary language |
+
+### Localization
+
+| Variable | Default Value | Description |
+|----------|---------------|-------------|
+| `UI_LANGUAGE` | `en` | Interface language (`en`, `fr`) |
+| `SUBTITLES_CHOICES` | `en` | Subtitle languages proposals (comma-separated) |
+
+### Advanced Options
+
+| Variable | Default Value | Description |
+|----------|---------------|-------------|
+| `YTDLP_CUSTOM_ARGS` | *(empty)* | Custom yt-dlp arguments |
+| `BROWSER_SELECT` | `chrome` | Default browser for cookie extraction |
+| `REMOVE_TMP_FILES` | `true` | Remove temporary files after processing |
 
 ## Access
 

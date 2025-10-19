@@ -2,14 +2,14 @@
 Quality profiles configuration for HomeTube - LEGACY/ARCHIVED
 
 This module contains the OLD quality profiles system that has been replaced
-by the new dynamic strategy (get_formats_id_to_download in medias_utils.py).
+by the new dynamic strategy (get_profiles_with_formats_id_to_download in medias_utils.py).
 
 All functions here are kept for:
 1. Historical reference
 2. UI compatibility during migration
 3. Archive of previous profile-matching logic
 
-NEW CODE SHOULD USE: medias_utils.get_formats_id_to_download() instead!
+NEW CODE SHOULD USE: medias_utils.get_profiles_with_formats_id_to_download() instead!
 """
 
 # Standard library

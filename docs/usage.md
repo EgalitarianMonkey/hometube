@@ -732,9 +732,19 @@ HomeTube supports comprehensive environment variable configuration for all its f
 |----------|---------|-------------|---------|
 | `QUALITY_PROFILE` | `auto` | Default quality profile | `mkv_av1_opus`, `mkv_vp9_opus`, `mp4_av1_aac`, `mp4_h264_aac` |
 | `VIDEO_QUALITY_MAX` | `max` | Maximum video resolution limit | `max`, `2160`, `1440`, `1080`, `720`, `480`, `360` |
+| `QUALITY_DOWNGRADE` | `true` | Allow quality downgrade on profile failure | `true`, `false` |
 | `EMBED_CHAPTERS` | `true` | Embed chapters by default | `true`, `false` |  
 | `EMBED_SUBTITLES` | `true` | Embed subtitles by default | `true`, `false` |
 | `CUTTING_MODE` | `keyframes` | Video cutting precision | `keyframes`, `precise` |
+
+#### 🎵 Audio Language Preferences
+
+| Variable | Default | Description | Options |
+|----------|---------|-------------|---------|
+| `LANGUAGE_PRIMARY` | `en` | Primary audio language preference | `en`, `fr`, `es`, `de`, `ja`, etc. |
+| `LANGUAGES_SECONDARIES` | *(empty)* | Secondary audio languages (comma-separated) | `en,es,de` |
+| `LANGUAGE_PRIMARY_INCLUDE_SUBTITLES` | `true` | Include subtitles for primary language | `true`, `false` |
+| `VO_FIRST` | `true` | Prioritize original voice (VO) before primary language | `true`, `false` |
 
 #### 🌐 Browser Configuration
 

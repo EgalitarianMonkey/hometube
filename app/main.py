@@ -33,7 +33,7 @@ try:
     )
     from .medias_utils import (
         analyze_audio_formats,
-        get_formats_id_to_download,
+        get_profiles_with_formats_id_to_download,
         get_available_formats,
         get_video_title,
         customize_video_metadata,
@@ -101,7 +101,7 @@ except ImportError:
     )
     from medias_utils import (
         analyze_audio_formats,
-        get_formats_id_to_download,
+        get_profiles_with_formats_id_to_download,
         get_available_formats,
         get_video_title,
         customize_video_metadata,
@@ -323,7 +323,7 @@ def _process_quality_strategy(quality_strategy: str, url: str) -> None:
             )
 
             # Get optimal profiles
-            optimal_format_profiles = get_formats_id_to_download(
+            optimal_format_profiles = get_profiles_with_formats_id_to_download(
                 json_path, multiple_langs, audio_formats
             )
 
@@ -501,9 +501,9 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
 
 def _get_optimal_profiles_from_json() -> List[Dict]:
     """
-    Get optimal download profiles using get_formats_id_to_download().
+    Get optimal download profiles using get_profiles_with_formats_id_to_download().
 
-    This is a simple wrapper that calls get_formats_id_to_download() which now
+    This is a simple wrapper that calls get_profiles_with_formats_id_to_download() which now
     returns complete profiles with all necessary fields (label, name, container, etc.).
 
     Returns:
@@ -540,7 +540,7 @@ def _get_optimal_profiles_from_json() -> List[Dict]:
 
         # Get optimal profiles - now returns complete profiles with all fields
         safe_push_log("🎯 Selecting optimal video formats (AV1/VP9 priority)...")
-        optimal_profiles = get_formats_id_to_download(
+        optimal_profiles = get_profiles_with_formats_id_to_download(
             str(json_path), multiple_langs, audio_formats
         )
 
@@ -794,7 +794,7 @@ def _build_profile_command(
         "extra_args": [],
     }
 
-    # Use profile's container preference (always MKV from get_formats_id_to_download)
+    # Use profile's container preference (always MKV from get_profiles_with_formats_id_to_download)
     profile_container = profile.get("container", "mkv").lower()
     profile_force_mp4 = profile_container == "mp4"
 
@@ -2814,7 +2814,7 @@ if submitted:
     # The new strategy dynamically selects the best AV1/VP9 formats available
     push_log("🤖 Using new dynamic strategy with optimal format selection")
     quality_strategy_to_use = "auto_profiles"  # Always use the new strategy
-    format_spec = "bv*+ba/b"  # Placeholder - actual formats determined by get_formats_id_to_download()
+    format_spec = "bv*+ba/b"  # Placeholder - actual formats determined by get_profiles_with_formats_id_to_download()
 
     # --- yt-dlp base command construction
     # New strategy: Always use MKV container (better for modern codecs)

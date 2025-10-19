@@ -1,5 +1,5 @@
 """
-Test get_formats_id_to_download function with real yt-dlp JSON files.
+Test get_profiles_with_formats_id_to_download function with real yt-dlp JSON files.
 
 Tests cover:
 - Mono-language videos (single audio track)
@@ -15,7 +15,10 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.medias_utils import analyze_audio_formats, get_formats_id_to_download
+from app.medias_utils import (
+    analyze_audio_formats,
+    get_profiles_with_formats_id_to_download,
+)
 
 
 class TestGetFormatsMonoLang:
@@ -36,7 +39,7 @@ class TestGetFormatsMonoLang:
         """Test that function returns a list of profiles"""
         vo_lang, audio_formats, multiple_langs = analyze_audio_formats(self.url_info)
 
-        profiles = get_formats_id_to_download(
+        profiles = get_profiles_with_formats_id_to_download(
             self.json_path, multiple_langs, audio_formats
         )
 
@@ -48,7 +51,7 @@ class TestGetFormatsMonoLang:
         """Test that each profile has required fields"""
         vo_lang, audio_formats, multiple_langs = analyze_audio_formats(self.url_info)
 
-        profiles = get_formats_id_to_download(
+        profiles = get_profiles_with_formats_id_to_download(
             self.json_path, multiple_langs, audio_formats
         )
 
@@ -63,7 +66,7 @@ class TestGetFormatsMonoLang:
         """Test that mono-lang profiles include audio in format_id"""
         vo_lang, audio_formats, multiple_langs = analyze_audio_formats(self.url_info)
 
-        profiles = get_formats_id_to_download(
+        profiles = get_profiles_with_formats_id_to_download(
             self.json_path, multiple_langs, audio_formats
         )
 
@@ -84,7 +87,7 @@ class TestGetFormatsMonoLang:
         """Test that profiles use different codecs when available"""
         vo_lang, audio_formats, multiple_langs = analyze_audio_formats(self.url_info)
 
-        profiles = get_formats_id_to_download(
+        profiles = get_profiles_with_formats_id_to_download(
             self.json_path, multiple_langs, audio_formats
         )
 
@@ -123,7 +126,7 @@ class TestGetFormatsMultiLang:
             self.url_info, language_primary="fr", languages_secondaries="en,es"
         )
 
-        profiles = get_formats_id_to_download(
+        profiles = get_profiles_with_formats_id_to_download(
             self.json_path, multiple_langs, audio_formats
         )
 
@@ -136,7 +139,7 @@ class TestGetFormatsMultiLang:
             self.url_info, language_primary="fr", languages_secondaries="en,es"
         )
 
-        profiles = get_formats_id_to_download(
+        profiles = get_profiles_with_formats_id_to_download(
             self.json_path, multiple_langs, audio_formats
         )
 
@@ -168,7 +171,7 @@ class TestGetFormatsMultiLang:
             self.url_info, language_primary="fr", languages_secondaries="en,es"
         )
 
-        profiles = get_formats_id_to_download(
+        profiles = get_profiles_with_formats_id_to_download(
             self.json_path, multiple_langs, audio_formats
         )
 
@@ -186,7 +189,7 @@ class TestGetFormatsMultiLang:
             self.url_info, language_primary="fr", languages_secondaries="en,es"
         )
 
-        profiles = get_formats_id_to_download(
+        profiles = get_profiles_with_formats_id_to_download(
             self.json_path, multiple_langs, audio_formats
         )
 
@@ -214,7 +217,7 @@ class TestGetFormatsInstagram:
         """Test that Instagram video returns at least one profile"""
         vo_lang, audio_formats, multiple_langs = analyze_audio_formats(self.url_info)
 
-        profiles = get_formats_id_to_download(
+        profiles = get_profiles_with_formats_id_to_download(
             self.json_path, multiple_langs, audio_formats
         )
 
@@ -225,7 +228,7 @@ class TestGetFormatsInstagram:
         """Test that Instagram uses native format structure"""
         vo_lang, audio_formats, multiple_langs = analyze_audio_formats(self.url_info)
 
-        profiles = get_formats_id_to_download(
+        profiles = get_profiles_with_formats_id_to_download(
             self.json_path, multiple_langs, audio_formats
         )
 
@@ -255,7 +258,7 @@ class TestGetFormatsEdgeCases:
         )
 
         # Call with empty audio_formats
-        profiles = get_formats_id_to_download(json_path, False, [])
+        profiles = get_profiles_with_formats_id_to_download(json_path, False, [])
 
         # Should still work and return video+audio pairs
         assert isinstance(profiles, list)
@@ -272,7 +275,9 @@ class TestGetFormatsEdgeCases:
 
         vo_lang, audio_formats, multiple_langs = analyze_audio_formats(url_info)
 
-        profiles = get_formats_id_to_download(json_path, multiple_langs, audio_formats)
+        profiles = get_profiles_with_formats_id_to_download(
+            json_path, multiple_langs, audio_formats
+        )
 
         assert (
             len(profiles) <= 2
@@ -295,7 +300,7 @@ def run_tests():
     failed_tests = 0
 
     print("=" * 80)
-    print("🧪 Testing get_formats_id_to_download Function")
+    print("🧪 Testing get_profiles_with_formats_id_to_download Function")
     print("=" * 80)
 
     for test_class in test_classes:

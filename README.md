@@ -459,17 +459,24 @@ HomeTube configuration is managed through the `.env` file:
 | `YOUTUBE_COOKIES_FILE_PATH` | Authentication for private videos | **Must be defined** (or `COOKIES_FROM_BROWSER`) | `/config/youtube_cookies.txt` |
 | `COOKIES_FROM_BROWSER` | Cookies auth directly from active local browser |  | `chrome,firefox,brave,chromium,edge,opera,safari,vivaldi,whale` |
 | `BROWSER_SELECT` | Default browser for cookie extraction | `chrome` | `chrome,firefox,edge,safari` |
+| **Localization** | | | |
+| `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` | `en,fr` |
+| `SUBTITLES_CHOICES` | Subtitle languages proposals | `en` | `en,fr,es` |
+| **Audio Language Preferences** | | | |
+| `LANGUAGE_PRIMARY` | Primary audio language preference | `en` | `en,fr,es,de,ja` |
+| `LANGUAGES_SECONDARIES` | Secondary audio languages (comma-separated) | _(empty)_ | `en,es,de` |
+| `LANGUAGE_PRIMARY_INCLUDE_SUBTITLES` | Include subtitles for primary language | `true` | `true,false` |
+| `VO_FIRST` | Prioritize original voice (VO) before primary language | `true` | `true,false` |
 | **Quality & Download Preferences** | | | |
 | `QUALITY_PROFILE` | Download quality profiles to test. HomeTube proposes 4 main profiles. `auto`, by default, will strategically go through all of them and stop when success | `auto` | `auto,mkv_av1_opus,mkv_vp9_opus,mp4_av1_aac,mp4_h264_aac` |
 | `VIDEO_QUALITY_MAX` | Maximum video resolution limit | `max` | `max,2160,1440,1080,720,480,360` |
+| `QUALITY_DOWNGRADE` | Allow quality downgrade on profile failure (false = stop at first failure) | `true` | `true,false` |
 | `EMBED_CHAPTERS` | Embed chapters by default | `true` | `true,false` |
 | `EMBED_SUBTITLES` | Embed subtitles by default | `true` | `true,false` |
 | `CUTTING_MODE` | Video cutting precision | `keyframes` | `keyframes,precise` |
-| **Localization** | | | |
-| `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` | `en,fr` |
-| `SUBTITLES_CHOICES` | Subtitles' languages proposals | `en` | `en,fr,es` |
 | **Advanced Options** | | | |
 | `YTDLP_CUSTOM_ARGS` | Custom yt-dlp arguments |  | `--max-filesize 5M --write-info-json` |
+| `REMOVE_TMP_FILES` | Remove temporary files after processing | `true` | `true,false` (set to false for debugging) |
 | **Docker-specific Variables** | | | |
 | `VIDEOS_FOLDER_DOCKER_HOST` | Host videos folder in Docker context | **Must be defined** | `/mnt/data/videos` if in Docker container else `/downloads` |
 | `TMP_DOWNLOAD_FOLDER_DOCKER_HOST` | Host tmp download videos folder in Docker context | **Must be defined** | `/mnt/data/hometube/tmp` if in Docker container else `./tmp` |
