@@ -41,6 +41,10 @@ try:
         generate_profile_combinations,
         parse_format_line,
     )
+    from .medias_utils import (
+        analyze_audio_formats,
+        get_formats_id_to_download,
+    )
 except ImportError:
     # Fallback for direct execution from app directory
     from translations import t, configure_language
@@ -69,6 +73,10 @@ except ImportError:
         match_profiles_to_formats,
         generate_profile_combinations,
         parse_format_line,
+    )
+    from medias_utils import (
+        analyze_audio_formats,
+        get_formats_id_to_download,
     )
 
 # Configuration import (must be after translations for configure_language)
@@ -1071,13 +1079,139 @@ def _resolve_forced_profile(
         return _match_single_profile(forced_profile, available_formats, "static")
 
 
+def _get_optimal_profiles_from_json(available_formats: List[Dict]) -> List[Dict]:
+    """
+    Get optimal download profiles using new strategy with get_formats_id_to_download().
+
+    This function uses the intelligent format selection strategy that:
+    - Prioritizes AV1 and VP9 codecs over H.264
+    - Returns max 2 profiles (AV1-first and VP9-first)
+    - Handles multi-language audio tracks correctly
+    - Uses yt-dlp's format sorting directly
+
+    Args:
+        available_formats: List of available video formats from yt-dlp
+
+    Returns:
+        List of profile dicts ready for download, or empty list if error
+    """
+    try:
+        # Check if url_info.json exists
+        json_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+        if not json_path.exists():
+            safe_push_log("⚠️ url_info.json not found, cannot use new profile strategy")
+            return []
+
+        # Load url_info to analyze audio tracks
+        with open(json_path, "r", encoding="utf-8") as f:
+            url_info = json.load(f)
+
+        # Get language preferences from settings
+        language_primary = settings.LANGUAGE_PRIMARY or "en"
+        languages_secondaries = settings.LANGUAGES_SECONDARIES or ""
+        vo_first = settings.VO_FIRST
+
+        # Analyze audio formats
+        safe_push_log("🎵 Analyzing audio tracks...")
+        vo_lang, audio_formats, multiple_langs = analyze_audio_formats(
+            url_info,
+            language_primary=language_primary,
+            languages_secondaries=languages_secondaries,
+            vo_first=vo_first,
+        )
+
+        safe_push_log(f"   VO language: {vo_lang or 'unknown'}")
+        safe_push_log(f"   Audio tracks: {len(audio_formats)}")
+        safe_push_log(f"   Multi-language: {'Yes' if multiple_langs else 'No'}")
+
+        # Get optimal profiles using new strategy
+        safe_push_log("🎯 Selecting optimal video formats (AV1/VP9 priority)...")
+        optimal_format_profiles = get_formats_id_to_download(
+            str(json_path), multiple_langs, audio_formats
+        )
+
+        if not optimal_format_profiles:
+            safe_push_log("❌ No optimal profiles returned by new strategy")
+            return []
+
+        safe_push_log(f"✅ Found {len(optimal_format_profiles)} optimal profile(s):")
+
+        # Convert to HomeTube profile format
+        profiles_to_try = []
+        for idx, format_profile in enumerate(optimal_format_profiles, 1):
+            format_id = format_profile.get("format_id", "")
+            vcodec = format_profile.get("vcodec", "unknown")
+            height = format_profile.get("height", 0)
+
+            # Determine codec label for display
+            codec_label = "Unknown"
+            if "av01" in vcodec.lower() or "av1" in vcodec.lower():
+                codec_label = "AV1"
+            elif "vp9" in vcodec.lower() or "vp09" in vcodec.lower():
+                codec_label = "VP9"
+            elif "avc" in vcodec.lower() or "h264" in vcodec.lower():
+                codec_label = "H.264"
+
+            # Determine container (prefer mkv for multi-track, mp4 for single)
+            container = "mkv" if multiple_langs and len(audio_formats) > 1 else "mp4"
+
+            # Build profile name and label
+            profile_name = f"optimal_{codec_label.lower()}_{height}p"
+            profile_label = f"🎯 Optimal {codec_label} {height}p"
+
+            safe_push_log(f"   {idx}. {profile_label}")
+            safe_push_log(f"      Format: {format_id}")
+            safe_push_log(f"      Codec: {vcodec} ({codec_label})")
+            safe_push_log(f"      Resolution: {height}p")
+            safe_push_log(f"      Container: {container}")
+
+            # Create profile dict compatible with download system
+            profile_compat = {
+                "name": profile_name,
+                "label": profile_label,
+                "format": format_id,  # Direct format ID from yt-dlp
+                "format_sort": "",  # Not needed, format already selected
+                "extra_args": [],
+                "container": container,
+                "priority": idx,  # First profile has highest priority
+                "_new_strategy": True,  # Mark as new strategy profile
+                "_format_profile": format_profile,  # Keep original data
+            }
+
+            profiles_to_try.append(profile_compat)
+
+        return profiles_to_try
+
+    except FileNotFoundError:
+        safe_push_log("⚠️ url_info.json not found for new profile strategy")
+        return []
+    except Exception as e:
+        safe_push_log(f"⚠️ Error in new profile strategy: {e}")
+        import traceback
+
+        safe_push_log(f"   Traceback: {traceback.format_exc()}")
+        return []
+
+
 def _resolve_auto_profiles(
     available_formats: List[Dict], available_codecs: Dict[str, bool]
 ) -> Tuple[str, List[Dict], Optional[str]]:
-    """Resolve multiple profiles for auto mode."""
-    safe_push_log("🤖 Auto mode: Dynamic profile generation")
+    """Resolve multiple profiles for auto mode using new dynamic strategy."""
+    safe_push_log(
+        "🤖 Auto mode: Dynamic profile generation with optimal codec selection"
+    )
 
-    # Try dynamic profile generation first
+    # NEW STRATEGY: Use get_formats_id_to_download() for optimal AV1/VP9 selection
+    optimal_profiles = _get_optimal_profiles_from_json(available_formats)
+
+    if optimal_profiles:
+        safe_push_log(
+            f"✅ New strategy: {len(optimal_profiles)} optimal profile(s) selected (AV1/VP9 priority)"
+        )
+        return "auto", optimal_profiles, None
+
+    # FALLBACK 1: Try old dynamic profile generation
+    safe_push_log("🔄 Trying legacy dynamic profile generation...")
     optimal_combinations = get_optimal_profiles(available_formats, max_profiles=10)
 
     if optimal_combinations:
@@ -1098,21 +1232,21 @@ def _resolve_auto_profiles(
             }
             profiles_to_try.append(profile_compat)
         return "auto", profiles_to_try, None
+
+    # FALLBACK 2: Static profile filtering
+    safe_push_log("❌ No viable combinations found!")
+    safe_push_log("🔄 Falling back to static profile filtering...")
+
+    detected_codecs = [
+        codec for codec, available in available_codecs.items() if available
+    ]
+    safe_push_log(f"📋 Available codecs: {', '.join(detected_codecs)}")
+
+    profiles_to_try = filter_viable_profiles(available_codecs, "auto")
+    if profiles_to_try:
+        return "auto", profiles_to_try, None
     else:
-        # Fallback to static profile filtering
-        safe_push_log("❌ No viable combinations found!")
-        safe_push_log("🔄 Falling back to static profile filtering...")
-
-        detected_codecs = [
-            codec for codec, available in available_codecs.items() if available
-        ]
-        safe_push_log(f"📋 Available codecs: {', '.join(detected_codecs)}")
-
-        profiles_to_try = filter_viable_profiles(available_codecs, "auto")
-        if profiles_to_try:
-            return "auto", profiles_to_try, None
-        else:
-            return "auto", [], "No viable profiles found based on codec compatibility"
+        return "auto", [], "No viable profiles found based on codec compatibility"
 
 
 def _match_single_profile(
@@ -2669,7 +2803,9 @@ def display_url_info(url_info: Dict) -> None:
 
         # Author/Channel
         if uploader:
-            st.markdown(f"**{t('url_author')}:** {uploader}")
+            st.markdown(
+                f"&nbsp; &nbsp; &nbsp; &nbsp; **{t('url_author')}:** {uploader}"
+            )
 
         # Stats on one line (duration, views, likes)
         stats_parts = []
