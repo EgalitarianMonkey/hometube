@@ -5,6 +5,7 @@ Provides centralized logging functionality and error message analysis
 for better user experience and debugging.
 """
 
+import re
 import streamlit as st
 
 try:
@@ -28,6 +29,51 @@ AUTH_ERROR_PATTERNS = [
     "403",
     "forbidden",
 ]
+
+# ANSI escape pattern for log cleaning
+ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
+
+# === LOGGING FUNCTIONS ===
+
+
+def safe_push_log(message: str):
+    """
+    Safe logging function that works even if logs aren't initialized yet.
+
+    This is the primary safe logging function for all modules.
+    It attempts to use the main module's logging system if available,
+    otherwise falls back to console output.
+
+    Args:
+        message: Message to log safely
+    """
+    _safe_push_log_fallback(message)
+
+
+def push_log_generic(message: str):
+    """
+    Generic logging function for modules outside of main.py.
+    Attempts to use main's push_log if available, otherwise falls back to safe logging.
+
+    Args:
+        message: Log message to process
+    """
+    # Import here to avoid circular imports
+    import sys
+
+    # Try to get the main module's push_log function
+    main_module = sys.modules.get("__main__")
+    if main_module and hasattr(main_module, "push_log"):
+        # Use main's specialized push_log function
+        try:
+            main_module.push_log(message)
+            return
+        except Exception:
+            pass
+
+    # Fallback to safe logging
+    safe_push_log(message)
 
 
 # === MESSAGE CLASSIFICATION FUNCTIONS ===
@@ -145,11 +191,16 @@ def is_format_unavailable_error(error_message: str) -> bool:
     )
 
 
-# === LOGGING FUNCTIONS ===
+# === HELPER FUNCTIONS (INTERNAL) ===
 
 
-def safe_push_log(message: str):
-    """Safe logging function that works even if logs aren't initialized yet"""
+def _safe_push_log_fallback(message: str):
+    """
+    Internal fallback for safe logging when main module isn't available.
+
+    Args:
+        message: Message to log
+    """
     try:
         # Check if we're in the main module context with logging available
         import sys

@@ -535,3 +535,165 @@ def get_best_audio_for_language(url_info: Dict, language: str = "en") -> Optiona
 
     # Return the one with highest bitrate
     return max(matching_audios, key=lambda x: x.get("abr", 0))
+
+
+def get_video_title_from_json(json_path: Optional[Path] = None) -> str:
+    """
+    Get video title from local url_info.json file.
+
+    This is the modern approach that uses the JSON file already downloaded
+    by url_analysis(), avoiding additional yt-dlp calls.
+
+    Args:
+        json_path: Path to url_info.json file. If None, uses default TMP location.
+
+    Returns:
+        str: Sanitized video title suitable for filename, or "video" if unavailable
+    """
+    try:
+        # Import here to avoid circular imports
+        from app.config import ensure_folders_exist
+
+        try:
+            from .utils import sanitize_filename
+            from .logs_utils import safe_push_log
+        except ImportError:
+            from utils import sanitize_filename
+            from logs_utils import safe_push_log
+
+        # Get default path if not provided
+        if json_path is None:
+            _, tmp_folder = ensure_folders_exist()
+            json_path = tmp_folder / "url_info.json"
+
+        # Check if file exists
+        if not json_path.exists():
+            safe_push_log("⚠️ url_info.json not found, using default title")
+            return "video"
+
+        safe_push_log("📋 Retrieving video title from url_info.json...")
+
+        # Load and parse JSON
+        with open(json_path, "r", encoding="utf-8") as f:
+            url_info = json.load(f)
+
+        # Extract title
+        title = url_info.get("title", "")
+
+        if not title:
+            safe_push_log("⚠️ No title found in url_info.json")
+            return "video"
+
+        # Sanitize title for filename usage
+        sanitized = sanitize_filename(title)
+        safe_push_log(f"✅ Title retrieved from JSON: {title}")
+
+        return sanitized
+
+    except json.JSONDecodeError as e:
+        safe_push_log(f"❌ Invalid JSON in url_info.json: {e}")
+        return "video"
+    except Exception as e:
+        safe_push_log(f"⚠️ Error reading video title from JSON: {e}")
+        return "video"
+
+
+def get_video_title(url: str, cookies_part: List[str] = None) -> str:
+    """
+    Get video title with fallback strategy.
+
+    Modern approach:
+    1. First try to get title from url_info.json (fast, no network call)
+    2. Fallback to direct yt-dlp call if JSON not available
+
+    Args:
+        url: Video URL (used for fallback only)
+        cookies_part: Cookie parameters for fallback (optional)
+
+    Returns:
+        str: Sanitized video title suitable for filename
+    """
+    try:
+        # Import here to avoid circular imports
+        try:
+            from .logs_utils import (
+                safe_push_log,
+                is_authentication_error,
+                log_authentication_error_hint,
+            )
+            from .utils import sanitize_filename
+        except ImportError:
+            from logs_utils import (
+                safe_push_log,
+                is_authentication_error,
+                log_authentication_error_hint,
+            )
+            from utils import sanitize_filename
+        import subprocess
+
+        # Strategy 1: Try to get title from existing JSON (fastest)
+        title = get_video_title_from_json()
+        if title != "video":  # Successfully got title from JSON
+            return title
+
+        # Strategy 2: Fallback to direct yt-dlp call
+        safe_push_log("🔄 Fallback: Calling yt-dlp directly for title...")
+
+        # Build command strategies
+        strategies = []
+
+        # Try with cookies first if available
+        if cookies_part:
+            strategies.append(
+                {
+                    "name": "with cookies",
+                    "cmd": ["yt-dlp", "--print", "title", "--no-download"]
+                    + cookies_part
+                    + [url],
+                }
+            )
+
+        # Try without cookies
+        strategies.append(
+            {
+                "name": "without cookies",
+                "cmd": ["yt-dlp", "--print", "title", "--no-download", url],
+            }
+        )
+
+        # Try each strategy
+        for strategy in strategies:
+            try:
+                result = subprocess.run(
+                    strategy["cmd"], capture_output=True, text=True, timeout=30
+                )
+
+                if result.returncode == 0 and result.stdout.strip():
+                    title = result.stdout.strip()
+                    sanitized = sanitize_filename(title)
+                    safe_push_log(f"✅ Title retrieved via {strategy['name']}: {title}")
+                    return sanitized
+                else:
+                    safe_push_log(
+                        f"⚠️ Title extraction {strategy['name']} failed: {result.stderr.strip()[:50]}..."
+                    )
+                    # Only show auth hint for first failure with cookies
+                    if strategy["name"] == "with cookies" and is_authentication_error(
+                        result.stderr
+                    ):
+                        log_authentication_error_hint(result.stderr)
+
+            except subprocess.TimeoutExpired:
+                safe_push_log(f"⚠️ Title extraction {strategy['name']} timed out")
+                continue
+            except Exception as e:
+                safe_push_log(f"⚠️ Title extraction {strategy['name']} error: {e}")
+                continue
+
+        # All strategies failed
+        safe_push_log("⚠️ Could not retrieve video title, using default")
+        return "video"
+
+    except Exception as e:
+        safe_push_log(f"❌ Error in get_video_title: {e}")
+        return "video"

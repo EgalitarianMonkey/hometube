@@ -38,6 +38,7 @@ try:
     from .medias_utils import (
         analyze_audio_formats,
         get_formats_id_to_download,
+        get_video_title,
     )
     from .ytdlp_version_check import check_and_show_updates
     from .logs_utils import (
@@ -50,12 +51,17 @@ try:
         log_authentication_error_hint,
         log_format_unavailable_error_hint,
     )
+    from .process_utils import run_subprocess_safe
     from .file_system_utils import (
         list_subdirs_recursive,
         cleanup_tmp_files,
         should_remove_tmp_files,
         ensure_dir,
         move_file,
+    )
+    from .cut_utils import (
+        get_keyframes,
+        find_nearest_keyframes,
     )
 except ImportError:
     # Fallback for direct execution from app directory
@@ -83,6 +89,7 @@ except ImportError:
     from medias_utils import (
         analyze_audio_formats,
         get_formats_id_to_download,
+        get_video_title,
     )
     from ytdlp_version_check import check_and_show_updates
     from logs_utils import (
@@ -95,12 +102,17 @@ except ImportError:
         log_authentication_error_hint,
         log_format_unavailable_error_hint,
     )
+    from process_utils import run_subprocess_safe
     from file_system_utils import (
         list_subdirs_recursive,
         cleanup_tmp_files,
         should_remove_tmp_files,
         ensure_dir,
         move_file,
+    )
+    from cut_utils import (
+        get_keyframes,
+        find_nearest_keyframes,
     )
 
 # Configuration import (must be after translations for configure_language)
@@ -1002,116 +1014,7 @@ def customize_video_metadata(
         return False
 
 
-def run_subprocess_safe(
-    cmd: List[str], timeout: int = 60, error_context: str = ""
-) -> subprocess.CompletedProcess:
-    """Run subprocess with standardized error handling and timeout"""
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return result
-    except subprocess.TimeoutExpired:
-        error_msg = f"Command timed out after {timeout} seconds"
-        if error_context:
-            error_msg = f"{error_context}: {error_msg}"
-        safe_push_log(f"⚠️ {error_msg}")
-        # Return a fake result object for consistency
-        return subprocess.CompletedProcess(cmd, 1, "", error_msg)
-    except Exception as e:
-        error_msg = f"Command failed: {str(e)}"
-        if error_context:
-            error_msg = f"{error_context}: {error_msg}"
-        safe_push_log(f"❌ {error_msg}")
-        return subprocess.CompletedProcess(cmd, 1, "", error_msg)
-
-
-def get_keyframes(video_path: Path) -> list[float]:
-    """
-    Extract keyframe timestamps from a video using ffprobe.
-    Returns a list of keyframe timestamps in seconds.
-    """
-    try:
-        push_log(t("log_keyframes_extraction"))
-
-        cmd_keyframes = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_packets",
-            "-show_entries",
-            "packet=pts_time,flags",
-            "-of",
-            "csv=p=0",
-            str(video_path),
-        ]
-
-        result = run_subprocess_safe(
-            cmd_keyframes, timeout=120, error_context="Keyframes extraction"
-        )
-
-        if result.returncode != 0:
-            push_log(t("log_keyframes_failed", error=result.stderr))
-            return []
-
-        keyframes = []
-        for line in result.stdout.strip().split("\n"):
-            if line and "," in line:
-                parts = line.split(",")
-                if len(parts) >= 2 and "K" in parts[1]:
-                    try:
-                        timestamp = float(parts[0])
-                        keyframes.append(timestamp)
-                    except ValueError:
-                        continue
-
-        keyframes.sort()
-        push_log(t("log_keyframes_count", count=len(keyframes)))
-        return keyframes
-
-    except Exception as e:
-        push_log(t("log_keyframes_error", error=e))
-        return []
-
-
-def find_nearest_keyframes(
-    keyframes: list[float], start_sec: int, end_sec: int
-) -> tuple[float, float]:
-    """
-    Find the nearest keyframes to the requested start and end times.
-    Returns (nearest_start_keyframe, nearest_end_keyframe).
-    """
-    if not keyframes:
-        return float(start_sec), float(end_sec)
-
-    # Find nearest keyframe to start_sec (can be before or after)
-    start_kf = start_sec
-    min_start_diff = float("inf")
-    for kf in keyframes:
-        diff = abs(kf - start_sec)
-        if diff < min_start_diff:
-            min_start_diff = diff
-            start_kf = kf
-
-    # Find nearest keyframe to end_sec (can be before or after)
-    end_kf = end_sec
-    min_end_diff = float("inf")
-    for kf in keyframes:
-        diff = abs(kf - end_sec)
-        if diff < min_end_diff:
-            min_end_diff = diff
-            end_kf = kf
-
-    push_log(t("log_keyframes_selected", start=start_kf, end=end_kf))
-    push_log(
-        t(
-            "log_keyframes_offset",
-            start_offset=abs(start_kf - start_sec),
-            end_offset=abs(end_kf - end_sec),
-        )
-    )
-
-    return start_kf, end_kf
+# Subprocess and logging functions moved to logs_utils.py
 
 
 def safe_push_log(message: str):
@@ -1162,67 +1065,7 @@ def extract_resolution_value(resolution_str: str) -> int:
         return 0
 
 
-def get_video_title(url: str, cookies_part: List[str]) -> str:
-    """
-    Get the title of the video using yt-dlp with retry strategy.
-    Returns sanitized title suitable for filename
-    """
-    safe_push_log("📋 Retrieving video title...")
-
-    # Simple retry strategies for title extraction
-    strategies = []
-
-    # Try with cookies first if available
-    if cookies_part:
-        strategies.append(
-            {
-                "name": "with cookies",
-                "cmd": ["yt-dlp", "--print", "title", "--no-download"]
-                + cookies_part
-                + [url],
-            }
-        )
-
-    # Try without cookies
-    strategies.append(
-        {
-            "name": "without cookies",
-            "cmd": ["yt-dlp", "--print", "title", "--no-download", url],
-        }
-    )
-
-    # Try each strategy
-    for strategy in strategies:
-        try:
-            result = run_subprocess_safe(
-                strategy["cmd"],
-                timeout=30,
-                error_context=f"Title extraction ({strategy['name']})",
-            )
-
-            if result.returncode == 0 and result.stdout.strip():
-                title = result.stdout.strip()
-                # Sanitize title for filename
-                sanitized = sanitize_filename(title)
-                safe_push_log(f"✅ Title retrieved {strategy['name']}: {title}")
-                return sanitized
-            else:
-                safe_push_log(
-                    f"⚠️ Title extraction {strategy['name']} failed: {result.stderr.strip()[:50]}..."
-                )
-                # Only show auth hint for first failure with cookies
-                if strategy["name"] == "with cookies" and is_authentication_error(
-                    result.stderr
-                ):
-                    log_authentication_error_hint(result.stderr)
-
-        except Exception as e:
-            safe_push_log(f"⚠️ Title extraction {strategy['name']} error: {e}")
-            continue
-
-    # All strategies failed
-    safe_push_log("⚠️ Could not retrieve video title, using default")
-    return "video"
+# get_video_title moved to medias_utils.py
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -1743,75 +1586,7 @@ def fetch_sponsorblock_segments(
         return []
 
 
-# --- 3) Cleanup/sort/merge (optional) ---
-def merge_overlaps(segments, margin=0.0):
-    """Merge overlapping segments (keeping main 'sponsor' category as priority)."""
-    segs = sorted(
-        [
-            (max(0.0, s["start"] - margin), s["end"] + margin, s["category"])
-            for s in segments
-        ]
-    )
-    merged = []
-    for a, b, cat in segs:
-        if not merged or a > merged[-1][1]:
-            merged.append([a, b, {cat}])
-        else:
-            merged[-1][1] = max(merged[-1][1], b)
-            merged[-1][2].add(cat)
-    return [{"start": a, "end": b, "categories": sorted(cats)} for a, b, cats in merged]
-
-
-# --- 4) Build intervals to keep + map timecodes after removal ---
-def invert_segments(segments, total_duration):
-    """Returns the intervals [start,end) to keep when removing 'segments'."""
-    keep = []
-    cur = 0.0
-    for s in sorted(segments, key=lambda x: x["start"]):
-        a, b = max(0.0, s["start"]), min(total_duration, s["end"])
-        if a > cur:
-            keep.append((cur, a))
-        cur = max(cur, b)
-    if cur < total_duration:
-        keep.append((cur, total_duration))
-    return keep
-
-
-def build_time_remap(segments, total_duration):
-    """
-    Builds a mapping original_time -> time_after_cut.
-    Returns a `remap(t)` function + a list of cumulative jumps.
-    """
-    keep = invert_segments(segments, total_duration)
-    # Build pairs (orig_start, orig_end, new_start)
-    mapping = []
-    new_t = 0.0
-    for a, b in keep:
-        mapping.append((a, b, new_t))
-        new_t += b - a
-
-    def remap(t: float):
-        for a, b, ns in mapping:
-            if t < a:
-                # We're in a cut zone before this block
-                return ns
-            if a <= t <= b:
-                return ns + (t - a)
-        # t beyond or in a final cut zone -> clamp to final duration
-        return mapping[-1][2] if mapping else 0.0
-
-    return remap, mapping
-
-
-# --- 5) Helper to recalculate an interval (start,end) after cutting ---
-def remap_interval(start, end, remap):
-    s2 = remap(start)
-    e2 = remap(end)
-    # If start/end fall WITHIN a removed segment, remap returns to the useful edge.
-    # We protect against s2>e2: we clamp and possibly signal an empty interval.
-    if e2 < s2:
-        e2 = s2
-    return (s2, e2)
+# SponsorBlock segment manipulation functions moved to cut_utils.py
 
 
 def get_sponsorblock_segments(

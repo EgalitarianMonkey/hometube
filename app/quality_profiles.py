@@ -17,6 +17,12 @@ import time
 import streamlit as st
 from typing import Dict, List, Optional, Tuple, Union
 
+# Import centralized utilities
+try:
+    from .process_utils import run_subprocess_safe
+except ImportError:
+    from process_utils import run_subprocess_safe
+
 
 # Lazy imports to avoid circular dependencies
 def _get_main_functions():
@@ -71,13 +77,7 @@ def get_cached_video_analysis(url: str):
     return {}, []
 
 
-def run_subprocess_safe(*args, **kwargs):
-    """Stub for main.run_subprocess_safe"""
-    try:
-        main = _get_main_functions()
-        return main.run_subprocess_safe(*args, **kwargs)
-    except (ImportError, AttributeError):
-        raise NotImplementedError("run_subprocess_safe not available")
+# run_subprocess_safe is now imported from logs_utils
 
 
 def parse_format_line(line: str) -> Optional[Dict]:
