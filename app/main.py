@@ -50,6 +50,13 @@ try:
         log_authentication_error_hint,
         log_format_unavailable_error_hint,
     )
+    from .file_system_utils import (
+        list_subdirs_recursive,
+        cleanup_tmp_files,
+        should_remove_tmp_files,
+        ensure_dir,
+        move_file,
+    )
 except ImportError:
     # Fallback for direct execution from app directory
     from translations import t, configure_language
@@ -87,6 +94,13 @@ except ImportError:
         log_title,
         log_authentication_error_hint,
         log_format_unavailable_error_hint,
+    )
+    from file_system_utils import (
+        list_subdirs_recursive,
+        cleanup_tmp_files,
+        should_remove_tmp_files,
+        ensure_dir,
+        move_file,
     )
 
 # Configuration import (must be after translations for configure_language)
@@ -740,23 +754,6 @@ def _execute_profile_downloads(
 # === UTILITY FUNCTIONS ===
 
 
-def should_remove_tmp_files() -> bool:
-    """
-    Check if temporary files should be removed.
-
-    Checks both the settings default and the UI session state override.
-    The UI checkbox can override the default setting.
-
-    Returns:
-        bool: True if temp files should be removed, False otherwise
-    """
-    # Check if UI has overridden the setting
-    if "remove_tmp_files" in st.session_state:
-        return st.session_state.remove_tmp_files
-    # Otherwise use the configuration default
-    return settings.REMOVE_TMP_FILES
-
-
 def is_valid_browser(browser_name: str) -> bool:
     """Check if browser name is supported"""
     if not browser_name:
@@ -803,293 +800,135 @@ if "download_cancelled" not in st.session_state:
     st.session_state.download_cancelled = False
 
 
-# === Helpers FS ===
-def list_subdirs(root: Path) -> List[str]:
-    """List immediate subdirectories in root folder"""
-    if not root.exists():
-        return []
-    return sorted([p.name for p in root.iterdir() if p.is_dir()])
+# File system utilities moved to file_system_utils.py
 
 
-def list_subdirs_recursive(root: Path, max_depth: int = 2) -> List[str]:
-    """
-    List subdirectories recursively up to max_depth levels.
-    Returns paths relative to root, formatted for display.
-    """
-    if not root.exists():
-        return []
+# def smart_download_with_fallback(
+#     base_cmd: List[str],
+#     url: str,
+#     progress_placeholder=None,
+#     status_placeholder=None,
+#     info_placeholder=None,
+# ) -> Tuple[int, str]:
+#     """
+#     Intelligent download with progressive fallback strategies
 
-    subdirs = []
+#     Returns:
+#         Tuple[int, str]: (return_code, error_message)
+#     """
+#     cookies_available = False
+#     cookies_part = []
 
-    def scan_directory(current_path: Path, current_depth: int, relative_path: str = ""):
-        if current_depth > max_depth:
-            return
+#     # Check if cookies are configured
+#     cookies_method = st.session_state.get("cookies_method", "none")
+#     if cookies_method != "none":
+#         cookies_part = build_cookies_params()
+#         cookies_available = len(cookies_part) > 0
 
-        try:
-            for item in sorted(current_path.iterdir()):
-                if item.is_dir():
-                    # Build the relative path for display
-                    if relative_path:
-                        full_relative = f"{relative_path}/{item.name}"
-                    else:
-                        full_relative = item.name
+#     # Strategy 1: Try without cookies first (fastest)
+#     if status_placeholder:
+#         status_placeholder.info(t("status_trying_no_auth"))
+#     safe_push_log("🚀 Strategy 1: Trying without cookies (fastest)")
 
-                    subdirs.append(full_relative)
+#     cmd = base_cmd + [url]
+#     ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
 
-                    # Recurse if we haven't reached max depth
-                    if current_depth < max_depth:
-                        scan_directory(item, current_depth + 1, full_relative)
-        except PermissionError:
-            # Skip directories we can't access
-            pass
+#     if ret == 0:
+#         safe_push_log("✅ Success without authentication!")
+#         return ret, ""
 
-    scan_directory(root, 0)
-    return subdirs
+#     # Check if we got an authentication-related error
+#     last_error = st.session_state.get("last_error", "").lower()
+#     if not any(
+#         error in last_error
+#         for error in ["403", "forbidden", "signature", "unavailable"]
+#     ):
+#         return ret, "Non-authentication error"
 
+#     safe_push_log("⚠️ Authentication error detected, trying fallback strategies...")
 
-# Logging and error handling functions moved to logs_utils.py
+#     # Strategy 2: Try different YouTube clients
+#     for i, client in enumerate(
+#         YOUTUBE_CLIENT_FALLBACKS[1:], 2
+#     ):  # Skip default (already tried)
+#         client_name = client["name"]
+#         if status_placeholder:
+#             if client_name == "android":
+#                 status_placeholder.info(t("status_retry_android"))
+#             elif client_name == "ios":
+#                 status_placeholder.info(t("status_retry_ios"))
+#             elif client_name == "web":
+#                 status_placeholder.info(t("status_retry_web"))
+#             else:
+#                 status_placeholder.info(f"🔄 Retry {i}: Using {client_name} client...")
 
+#         safe_push_log(f"🔄 Strategy {i}: Trying with {client_name} client")
 
-def smart_download_with_fallback(
-    base_cmd: List[str],
-    url: str,
-    progress_placeholder=None,
-    status_placeholder=None,
-    info_placeholder=None,
-) -> Tuple[int, str]:
-    """
-    Intelligent download with progressive fallback strategies
+#         cmd = base_cmd + client["args"] + [url]
+#         ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
 
-    Returns:
-        Tuple[int, str]: (return_code, error_message)
-    """
-    cookies_available = False
-    cookies_part = []
+#         if ret == 0:
+#             safe_push_log(f"✅ Success with {client_name} client!")
+#             return ret, ""
 
-    # Check if cookies are configured
-    cookies_method = st.session_state.get("cookies_method", "none")
-    if cookies_method != "none":
-        cookies_part = build_cookies_params()
-        cookies_available = len(cookies_part) > 0
+#     # Strategy 3: Try with cookies if available
+#     if cookies_available:
+#         if status_placeholder:
+#             status_placeholder.info(t("status_retry_cookies"))
+#         safe_push_log("🍪 Strategy: Trying with authentication cookies")
 
-    # Strategy 1: Try without cookies first (fastest)
-    if status_placeholder:
-        status_placeholder.info(t("status_trying_no_auth"))
-    safe_push_log("🚀 Strategy 1: Trying without cookies (fastest)")
+#         # Try each client with cookies
+#         for client in YOUTUBE_CLIENT_FALLBACKS:
+#             client_name = client["name"]
+#             safe_push_log(f"🔄 Trying {client_name} client + cookies")
 
-    cmd = base_cmd + [url]
-    ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
+#             cmd = base_cmd + client["args"] + cookies_part + [url]
+#             ret = run_cmd(
+#                 cmd, progress_placeholder, status_placeholder, info_placeholder
+#             )
 
-    if ret == 0:
-        safe_push_log("✅ Success without authentication!")
-        return ret, ""
+#             if ret == 0:
+#                 safe_push_log(f"✅ Success with {client_name} client + cookies!")
+#                 return ret, ""
 
-    # Check if we got an authentication-related error
-    last_error = st.session_state.get("last_error", "").lower()
-    if not any(
-        error in last_error
-        for error in ["403", "forbidden", "signature", "unavailable"]
-    ):
-        return ret, "Non-authentication error"
+#     # All strategies failed - show comprehensive error message
+#     if status_placeholder:
+#         status_placeholder.error("❌ Download failed after all retry attempts")
 
-    safe_push_log("⚠️ Authentication error detected, trying fallback strategies...")
+#     safe_push_log("❌ All fallback strategies failed")
+#     safe_push_log("")
+#     log_title("🚫 Download failed - Comprehensive troubleshooting:")
 
-    # Strategy 2: Try different YouTube clients
-    for i, client in enumerate(
-        YOUTUBE_CLIENT_FALLBACKS[1:], 2
-    ):  # Skip default (already tried)
-        client_name = client["name"]
-        if status_placeholder:
-            if client_name == "android":
-                status_placeholder.info(t("status_retry_android"))
-            elif client_name == "ios":
-                status_placeholder.info(t("status_retry_ios"))
-            elif client_name == "web":
-                status_placeholder.info(t("status_retry_web"))
-            else:
-                status_placeholder.info(f"🔄 Retry {i}: Using {client_name} client...")
+#     # Show specific error based on what was tried
+#     if not cookies_available:
+#         safe_push_log("🔑 PRIMARY ISSUE: No authentication configured")
+#         safe_push_log("💡 IMMEDIATE SOLUTION:")
+#         safe_push_log("   1. ⚠️  CONFIGURE COOKIES below")
+#         safe_push_log("   2. 🌐 Use 'Browser Cookies' (easiest)")
+#         safe_push_log("   3. 📁 Or export cookies from browser to file")
+#         safe_push_log("")
+#         safe_push_log(
+#             "🎯 KEY INSIGHT: Even public videos need cookies for signature verification!"
+#         )
+#     else:
+#         safe_push_log("🔑 AUTHENTICATION ISSUE: Cookies configured but not working")
+#         safe_push_log("💡 SOLUTIONS TO TRY:")
+#         safe_push_log("   1. 🔄 Update your cookies (they may be expired)")
+#         safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
+#         safe_push_log("   3. 🔁 Try different browser or re-export cookies")
+#         safe_push_log(f"   4. 📋 Current method: {cookies_method}")
 
-        safe_push_log(f"🔄 Strategy {i}: Trying with {client_name} client")
+#     safe_push_log("")
+#     safe_push_log(
+#         "📺 Technical context: YouTube uses encrypted signatures that require"
+#     )
+#     safe_push_log("    fresh authentication tokens to decrypt video URLs.")
+#     safe_push_log("─" * 50)  # Static separator for end of troubleshooting section
 
-        cmd = base_cmd + client["args"] + [url]
-        ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
-
-        if ret == 0:
-            safe_push_log(f"✅ Success with {client_name} client!")
-            return ret, ""
-
-    # Strategy 3: Try with cookies if available
-    if cookies_available:
-        if status_placeholder:
-            status_placeholder.info(t("status_retry_cookies"))
-        safe_push_log("🍪 Strategy: Trying with authentication cookies")
-
-        # Try each client with cookies
-        for client in YOUTUBE_CLIENT_FALLBACKS:
-            client_name = client["name"]
-            safe_push_log(f"🔄 Trying {client_name} client + cookies")
-
-            cmd = base_cmd + client["args"] + cookies_part + [url]
-            ret = run_cmd(
-                cmd, progress_placeholder, status_placeholder, info_placeholder
-            )
-
-            if ret == 0:
-                safe_push_log(f"✅ Success with {client_name} client + cookies!")
-                return ret, ""
-
-    # All strategies failed - show comprehensive error message
-    if status_placeholder:
-        status_placeholder.error("❌ Download failed after all retry attempts")
-
-    safe_push_log("❌ All fallback strategies failed")
-    safe_push_log("")
-    log_title("🚫 Download failed - Comprehensive troubleshooting:")
-
-    # Show specific error based on what was tried
-    if not cookies_available:
-        safe_push_log("🔑 PRIMARY ISSUE: No authentication configured")
-        safe_push_log("💡 IMMEDIATE SOLUTION:")
-        safe_push_log("   1. ⚠️  CONFIGURE COOKIES below")
-        safe_push_log("   2. 🌐 Use 'Browser Cookies' (easiest)")
-        safe_push_log("   3. 📁 Or export cookies from browser to file")
-        safe_push_log("")
-        safe_push_log(
-            "🎯 KEY INSIGHT: Even public videos need cookies for signature verification!"
-        )
-    else:
-        safe_push_log("🔑 AUTHENTICATION ISSUE: Cookies configured but not working")
-        safe_push_log("💡 SOLUTIONS TO TRY:")
-        safe_push_log("   1. 🔄 Update your cookies (they may be expired)")
-        safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
-        safe_push_log("   3. 🔁 Try different browser or re-export cookies")
-        safe_push_log(f"   4. 📋 Current method: {cookies_method}")
-
-    safe_push_log("")
-    safe_push_log(
-        "📺 Technical context: YouTube uses encrypted signatures that require"
-    )
-    safe_push_log("    fresh authentication tokens to decrypt video URLs.")
-    safe_push_log("─" * 50)  # Static separator for end of troubleshooting section
-
-    return ret, "Authentication failed after all strategies"
+#     return ret, "Authentication failed after all strategies"
 
 
-def cleanup_tmp_files(
-    base_filename: str, tmp_dir: Path = None, cleanup_type: str = "all"
-) -> None:
-    """
-    Centralized cleanup function for temporary files
-
-    Args:
-        base_filename: Base filename for targeted cleanup
-        tmp_dir: Directory to clean (defaults to TMP_DOWNLOAD_FOLDER)
-        cleanup_type: Type of cleanup - "all", "download", "subtitles", "cutting", "outputs"
-    """
-    if not should_remove_tmp_files():
-        safe_push_log(
-            f"🔍 Debug mode: Skipping {cleanup_type} cleanup (REMOVE_TMP_FILES=false)"
-        )
-        return
-
-    if tmp_dir is None:
-        tmp_dir = TMP_DOWNLOAD_FOLDER
-
-    safe_push_log(f"🧹 Cleaning {cleanup_type} temporary files...")
-
-    try:
-        files_cleaned = 0
-
-        if cleanup_type in ("all", "download"):
-            # Download temporary files
-            patterns = [f"{base_filename}.*", "*.part", "*.ytdl", "*.temp", "*.tmp"]
-            for pattern in patterns:
-                for file_path in tmp_dir.glob(pattern):
-                    if file_path.is_file() and _should_remove_file(
-                        file_path, cleanup_type
-                    ):
-                        try:
-                            file_path.unlink()
-                            files_cleaned += 1
-                        except Exception as e:
-                            safe_push_log(f"⚠️ Could not remove {file_path.name}: {e}")
-
-        if cleanup_type in ("all", "subtitles"):
-            # Subtitle files (.srt/.vtt) and .part files
-            for ext in (".srt", ".vtt"):
-                for f in tmp_dir.glob(f"{base_filename}*{ext}"):
-                    try:
-                        f.unlink()
-                        files_cleaned += 1
-                    except Exception:
-                        pass
-            # Part files related to base_filename
-            for f in tmp_dir.glob(f"{base_filename}*.*.part"):
-                try:
-                    f.unlink()
-                    files_cleaned += 1
-                except Exception:
-                    pass
-
-        if cleanup_type in ("all", "cutting"):
-            # Cutting intermediate files
-            for suffix in ("-cut", "-cut-final"):
-                for ext in (".srt", ".vtt", ".mkv", ".mp4", ".webm"):
-                    for f in tmp_dir.glob(f"{base_filename}*{suffix}*{ext}"):
-                        try:
-                            f.unlink()
-                            files_cleaned += 1
-                        except Exception:
-                            pass
-
-        if cleanup_type in ("all", "outputs"):
-            # Final output files (for retry cleanup)
-            for ext in (".mkv", ".mp4", ".webm"):
-                p = tmp_dir / f"{base_filename}{ext}"
-                if p.exists():
-                    try:
-                        p.unlink()
-                        files_cleaned += 1
-                    except Exception:
-                        pass
-
-        if files_cleaned > 0:
-            safe_push_log(f"🧹 Cleaned {files_cleaned} {cleanup_type} temporary files")
-        else:
-            safe_push_log(f"✅ No {cleanup_type} files to clean")
-
-    except Exception as e:
-        safe_push_log(f"⚠️ Error during {cleanup_type} cleanup: {e}")
-
-
-def _should_remove_file(file_path: Path, cleanup_type: str) -> bool:
-    """Helper function to determine if a file should be removed based on cleanup type"""
-    # Skip removing final output files during download cleanup
-    if cleanup_type == "download" and file_path.suffix in (".mkv", ".mp4", ".webm"):
-        # Only remove if it's clearly a temporary file (has additional suffixes)
-        stem = file_path.stem
-        return any(suffix in stem for suffix in [".temp", ".tmp", ".part", "-cut"])
-    return True
-
-
-def ensure_dir(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-
-
-def move_file(src: Path, dest_dir: Path) -> Path:
-    target = dest_dir / src.name
-    shutil.move(str(src), str(target))
-    return target
-
-
-def cleanup_extras(tmp_dir: Path, base_filename: str):
-    """Legacy wrapper for cleanup_tmp_files - maintained for compatibility"""
-    cleanup_tmp_files(base_filename, tmp_dir, "subtitles")
-
-
-def delete_intermediate_outputs(tmp_dir: Path, base_filename: str):
-    """Legacy wrapper for cleanup_tmp_files - maintained for compatibility"""
-    cleanup_tmp_files(base_filename, tmp_dir, "outputs")
+# File system functions moved to file_system_utils.py
 
 
 # === Helpers time ===
@@ -1321,9 +1160,6 @@ def extract_resolution_value(resolution_str: str) -> int:
             return 0
     except (ValueError, IndexError):
         return 0
-
-
-# Function removed - using parse_format_line from profile_utils instead
 
 
 def get_video_title(url: str, cookies_part: List[str]) -> str:
