@@ -22,7 +22,7 @@ TRANSLATIONS = {
     "logs": "Logs",
     "download_logs_button": "📥 Download logs",
     # === URL ANALYSIS ===
-    "url_analysis_spinner": "🔍 Analyzing URL...",
+    "url_analysis_spinner": "🔍 &nbsp; Analyzing URL...",
     "error_analyzing_url": "Error analyzing URL",
     "error_invalid_url_type": "Invalid URL type",
     "url_invalid_content": "This URL does not appear to be a compatible video or playlist.",
