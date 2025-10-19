@@ -92,6 +92,7 @@ except ImportError:
     from medias_utils import (
         analyze_audio_formats,
         get_formats_id_to_download,
+        get_available_formats,
         get_video_title,
         customize_video_metadata,
     )
@@ -271,27 +272,238 @@ def generate_format_string_from_profile(profile: Dict) -> str:
 # === VIDEO FORMAT EXTRACTION AND ANALYSIS ===
 
 
-# parse_format_line is now imported at the top of the file from profile_utils
+def _process_quality_strategy(quality_strategy: str, url: str) -> None:
+    """
+    Process the selected quality strategy and update session state with optimal profiles.
+
+    Args:
+        quality_strategy: Selected strategy ("auto_best", "best_no_fallback", etc.)
+        url: Video URL to analyze
+    """
+    if not url or not url.strip():
+        return
+
+    try:
+        # Check if url_info.json exists and is current
+        json_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+        if not json_path.exists():
+            # Need to analyze URL first
+            url_info = url_analysis(url)
+            if not url_info:
+                safe_push_log("⚠️ Failed to analyze URL for quality strategy")
+                return
+        else:
+            # Load existing url_info
+            with open(json_path, "r", encoding="utf-8") as f:
+                url_info = json.load(f)
+
+        # Get optimal profiles using new strategy
+        if quality_strategy in ["auto_best", "best_no_fallback", "choose_profile"]:
+            # Load url_info to analyze audio tracks
+            language_primary = settings.LANGUAGE_PRIMARY or "en"
+            languages_secondaries = settings.LANGUAGES_SECONDARIES or ""
+            vo_first = settings.VO_FIRST
+
+            # Analyze audio formats
+            vo_lang, audio_formats, multiple_langs = analyze_audio_formats(
+                url_info,
+                language_primary=language_primary,
+                languages_secondaries=languages_secondaries,
+                vo_first=vo_first,
+            )
+
+            # Get optimal profiles
+            optimal_format_profiles = get_formats_id_to_download(
+                json_path, multiple_langs, audio_formats
+            )
+
+            st.session_state.optimal_format_profiles = optimal_format_profiles
+
+            # profiles_to_try = [{'format_id': '399+251', 'ext': 'webm', 'height': 1080, 'vcodec': 'av01.0.08M.08', 'protocol': 'https+https'}, {'format_id': '248+251', 'ext': 'webm', 'height': 1080, 'vcodec': 'vp9', 'protocol': 'https+https'}]
+
+            # Set chosen profiles based on strategy
+            if quality_strategy == "auto_best":
+                st.session_state.chosen_format_profiles = optimal_format_profiles
+            elif quality_strategy == "best_no_fallback":
+                # Only the first (best) profile
+                st.session_state.chosen_format_profiles = (
+                    optimal_format_profiles[:1] if optimal_format_profiles else []
+                )
+            # For choose_profile, chosen_format_profiles will be set by user selection
+
+        elif quality_strategy == "choose_available":
+            # Load all available formats for selection
+            available_formats = get_available_formats(url_info)
+            st.session_state.available_formats_list = available_formats
+
+    except Exception as e:
+        safe_push_log(f"❌ Error processing quality strategy: {str(e)[:100]}...")
+
+
+def _display_strategy_content(quality_strategy: str, url: str) -> None:
+    """
+    Display content specific to the selected quality strategy.
+
+    Args:
+        quality_strategy: Selected strategy
+        url: Video URL
+    """
+    st.markdown("---")
+
+    if quality_strategy == "auto_best":
+        st.info(
+            "🔄 **Auto Best Qualities**: Tries up to 2 optimal profiles (AV1 → VP9) until success."
+        )
+
+        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
+        if optimal_profiles:
+            st.success(
+                f"✅ {len(optimal_profiles)} optimal profiles generated for this video"
+            )
+
+            with st.expander(
+                "📋 Generated Profiles (will be tried in order)", expanded=True
+            ):
+                for i, profile in enumerate(optimal_profiles, 1):
+                    height = profile.get("height", "?")
+                    vcodec = profile.get("vcodec", "unknown")
+                    ext = profile.get("ext", "unknown")
+                    format_id = profile.get("format_id", "unknown")
+
+                    st.markdown(f"**{i}. {height}p ({vcodec}) - {ext.upper()}**")
+                    st.code(f"Format ID: {format_id}", language="text")
+        else:
+            st.warning(
+                "⚠️ No optimal profiles generated yet. URL analysis may be needed."
+            )
+
+    elif quality_strategy == "best_no_fallback":
+        st.warning(
+            "🏆 **Best Quality Only**: Only the highest quality profile will be attempted. No fallback if it fails."
+        )
+
+        # Show quality downgrade setting
+        st.checkbox(
+            "🚫 Refuse any quality downgrade",
+            value=not settings.QUALITY_DOWNGRADE,
+            help="Stop download if the best profile fails (recommended for this mode)",
+            key="refuse_quality_downgrade_best",
+        )
+
+        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
+        if optimal_profiles:
+            best_profile = optimal_profiles[0]
+            height = best_profile.get("height", "?")
+            vcodec = best_profile.get("vcodec", "unknown")
+            ext = best_profile.get("ext", "unknown")
+            format_id = best_profile.get("format_id", "unknown")
+
+            st.success(f"🎯 **Selected Profile**: {height}p ({vcodec}) - {ext.upper()}")
+            st.code(f"Format ID: {format_id}", language="text")
+        else:
+            st.warning("⚠️ Best profile not available yet. URL analysis may be needed.")
+
+    elif quality_strategy == "choose_profile":
+        st.info(
+            "🎯 **Choose Specific Profile**: Select one profile from the optimal list. Only that profile will be tried."
+        )
+
+        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
+        if optimal_profiles:
+            profile_options = []
+            for i, profile in enumerate(optimal_profiles):
+                height = profile.get("height", "?")
+                vcodec = profile.get("vcodec", "unknown")
+                ext = profile.get("ext", "unknown")
+                label = f"{height}p ({vcodec}) - {ext.upper()}"
+                profile_options.append(label)
+
+            selected_index = st.selectbox(
+                "Select profile:",
+                options=range(len(profile_options)),
+                format_func=lambda x: profile_options[x],
+                key="selected_profile_index",
+            )
+
+            # Update chosen profiles based on selection
+            if selected_index is not None:
+                st.session_state.chosen_format_profiles = [
+                    optimal_profiles[selected_index]
+                ]
+
+                # Show selected profile details
+                selected_profile = optimal_profiles[selected_index]
+                format_id = selected_profile.get("format_id", "unknown")
+                st.success(f"✅ **Selected**: {profile_options[selected_index]}")
+                st.code(f"Format ID: {format_id}", language="text")
+        else:
+            st.warning(
+                "⚠️ No profiles available for selection. URL analysis may be needed."
+            )
+
+    elif quality_strategy == "choose_available":
+        st.info(
+            "📋 **Choose from all Available**: Select any format from the complete list detected by yt-dlp."
+        )
+        st.warning(
+            "⚠️ **Advanced users only**: This bypasses the intelligent profile system."
+        )
+
+        available_formats = st.session_state.get("available_formats_list", [])
+        if available_formats:
+            format_options = ["Auto (use profile system)"]
+            for fmt in available_formats:
+                format_options.append(f"{fmt['description']} - {fmt['format_id']}")
+
+            selected_format = st.selectbox(
+                "Select format:",
+                options=format_options,
+                key="selected_available_format",
+            )
+
+            if selected_format != "Auto (use profile system)":
+                # Extract format_id from selection
+                format_id = selected_format.split(" - ")[-1]
+                st.success(f"✅ **Selected Format**: {selected_format}")
+
+                # Create a profile-like dict for consistency
+                for fmt in available_formats:
+                    if fmt["format_id"] == format_id:
+                        chosen_profile = {
+                            "format_id": format_id,
+                            "height": fmt["height"],
+                            "vcodec": fmt["vcodec"],
+                            "ext": fmt["ext"],
+                            "label": f"Manual: {fmt['description']}",
+                        }
+                        st.session_state.chosen_format_profiles = [chosen_profile]
+                        break
+            else:
+                # Fallback to auto mode
+                st.session_state.chosen_format_profiles = st.session_state.get(
+                    "optimal_format_profiles", []
+                )
+        else:
+            st.warning(
+                "⚠️ No formats available for selection. URL analysis may be needed."
+            )
 
 
 def _get_optimal_profiles_from_json() -> List[Dict]:
     """
-    Get optimal download profiles using new strategy with get_formats_id_to_download().
+    Get optimal download profiles using get_formats_id_to_download().
 
-    This function uses the intelligent format selection strategy that:
-    - Prioritizes AV1 and VP9 codecs over H.264
-    - Returns max 2 profiles (AV1-first and VP9-first)
-    - Handles multi-language audio tracks correctly
-    - Uses yt-dlp's format sorting directly
+    This is a simple wrapper that calls get_formats_id_to_download() which now
+    returns complete profiles with all necessary fields (label, name, container, etc.).
 
     Returns:
-        List of profile dicts ready for download, or empty list if error
+        List of complete profile dicts ready for download, or empty list if error
     """
     try:
         # Check if url_info.json exists
         json_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
         if not json_path.exists():
-            safe_push_log("⚠️ url_info.json not found, cannot use new profile strategy")
+            safe_push_log("⚠️ url_info.json not found, cannot use profile strategy")
             return []
 
         # Load url_info to analyze audio tracks
@@ -316,77 +528,41 @@ def _get_optimal_profiles_from_json() -> List[Dict]:
         safe_push_log(f"   Audio tracks: {len(audio_formats)}")
         safe_push_log(f"   Multi-language: {'Yes' if multiple_langs else 'No'}")
 
-        # Get optimal profiles using new strategy
+        # Get optimal profiles - now returns complete profiles with all fields
         safe_push_log("🎯 Selecting optimal video formats (AV1/VP9 priority)...")
-        optimal_format_profiles = get_formats_id_to_download(
+        optimal_profiles = get_formats_id_to_download(
             str(json_path), multiple_langs, audio_formats
         )
 
-        if not optimal_format_profiles:
-            safe_push_log("❌ No optimal profiles returned by new strategy")
+        if not optimal_profiles:
+            safe_push_log("❌ No optimal profiles returned")
             return []
 
-        log_title(f"✅ Found {len(optimal_format_profiles)} optimal profile(s)")
+        log_title(f"✅ Found {len(optimal_profiles)} optimal profile(s)")
 
-        # Convert to HomeTube profile format
-        profiles_to_try = []
-        for idx, format_profile in enumerate(optimal_format_profiles, 1):
-            format_id = format_profile.get("format_id", "")
-            vcodec = format_profile.get("vcodec", "unknown")
-            height = format_profile.get("height", 0)
-            ext = format_profile.get("ext", "unknown")
-            protocol = format_profile.get("protocol", "https")
-
-            # Determine codec label for display
-            codec_label = "Unknown"
-            if "av01" in vcodec.lower() or "av1" in vcodec.lower():
-                codec_label = "AV1"
-            elif "vp9" in vcodec.lower() or "vp09" in vcodec.lower():
-                codec_label = "VP9"
-            elif "avc" in vcodec.lower() or "h264" in vcodec.lower():
-                codec_label = "H.264"
-
-            # Determine container: Always MKV for modern codecs (AV1/VP9/Opus)
-            # Modern format combination works best with MKV container
-            container = "mkv"
-
-            # Build profile name and label
-            profile_name = f"optimal_{codec_label.lower()}_{height}p"
-            profile_label = f"🎯 Optimal {codec_label} {height}p"
-
+        # Log profile details
+        for idx, profile in enumerate(optimal_profiles, 1):
             safe_push_log("")
-            safe_push_log(f"📦 Profile {idx}: {profile_label}")
-            safe_push_log(f"   🆔 Format ID: {format_id}")
-            safe_push_log(f"   🎬 Video Codec: {vcodec} ({codec_label})")
-            safe_push_log(f"   📐 Resolution: {height}p")
-            safe_push_log(f"   📦 Extension: {ext}")
-            safe_push_log(f"   📁 Output Container: {container.upper()}")
-            safe_push_log(f"   🌐 Protocol: {protocol}")
-
-            # Create profile dict compatible with download system
-            profile_compat = {
-                "name": profile_name,
-                "label": profile_label,
-                "format": format_id,  # Direct format ID from yt-dlp
-                "format_sort": "",  # Not needed, format already selected
-                "extra_args": [],
-                "container": container,
-                "priority": idx,  # First profile has highest priority
-                "_format_profile": format_profile,  # Keep original data for display
-            }
-
-            profiles_to_try.append(profile_compat)
+            safe_push_log(f"📦 Profile {idx}: {profile.get('label', 'Unknown')}")
+            safe_push_log(f"   🆔 Format ID: {profile.get('format_id', '')}")
+            safe_push_log(f"   🎬 Video Codec: {profile.get('vcodec', 'unknown')}")
+            safe_push_log(f"   📐 Resolution: {profile.get('height', 0)}p")
+            safe_push_log(f"   📦 Extension: {profile.get('ext', 'unknown')}")
+            safe_push_log(
+                f"   📁 Output Container: {profile.get('container', 'mkv').upper()}"
+            )
+            safe_push_log(f"   🌐 Protocol: {profile.get('protocol', 'https')}")
 
         log_title(
-            f"🎯 Will try {len(profiles_to_try)} profile(s) in order (best codec first)"
+            f"🎯 Will try {len(optimal_profiles)} profile(s) in order (best codec first)"
         )
-        return profiles_to_try
+        return optimal_profiles
 
     except FileNotFoundError:
-        safe_push_log("⚠️ url_info.json not found for new profile strategy")
+        safe_push_log("⚠️ url_info.json not found for profile strategy")
         return []
     except Exception as e:
-        safe_push_log(f"⚠️ Error in new profile strategy: {e}")
+        safe_push_log(f"⚠️ Error in profile strategy: {e}")
         import traceback
 
         safe_push_log(f"   Traceback: {traceback.format_exc()}")
@@ -446,16 +622,40 @@ def smart_download_with_profiles(
         if key in st.session_state:
             del st.session_state[key]
 
-    # Use NEW STRATEGY ONLY: get_formats_id_to_download() for optimal AV1/VP9 selection
-    log_title("🎯 Selecting optimal profiles...")
-    profiles_to_try = (
-        _get_optimal_profiles_from_json()
-    )  # Formats loaded from url_info.json
+    # Use NEW STRATEGY: get profiles from quality strategy session state
+    log_title("🎯 Using quality strategy profiles...")
+
+    # Get profiles from session state (set by quality strategy)
+    chosen_profiles = st.session_state.get("chosen_format_profiles", [])
+    quality_strategy = st.session_state.get("download_quality_strategy", "auto_best")
+
+    if chosen_profiles:
+        profiles_to_try = chosen_profiles
+        safe_push_log(
+            f"✅ Using {len(profiles_to_try)} profiles from {quality_strategy} strategy"
+        )
+    else:
+        # Fallback to old method if no strategy profiles available
+        safe_push_log("⚠️ No strategy profiles found, using fallback method")
+        profiles_to_try = _get_optimal_profiles_from_json()
 
     if not profiles_to_try:
-        error_msg = "No optimal profiles found. Make sure url_info.json exists and contains valid format data."
+        error_msg = "No profiles available for download. Please select a quality strategy first."
         safe_push_log(f"❌ {error_msg}")
         return 1, error_msg
+
+    # Update download mode and refuse_quality_downgrade based on strategy
+    if quality_strategy == "auto_best":
+        download_mode = "auto"
+        refuse_quality_downgrade = False
+    elif quality_strategy == "best_no_fallback":
+        download_mode = "forced"
+        refuse_quality_downgrade = st.session_state.get(
+            "refuse_quality_downgrade_best", not settings.QUALITY_DOWNGRADE
+        )
+    elif quality_strategy in ["choose_profile", "choose_available"]:
+        download_mode = "forced"
+        refuse_quality_downgrade = False  # User made specific choice
 
     safe_push_log("")
 
@@ -574,17 +774,17 @@ def _build_profile_command(
     sb_choice: str,
 ) -> List[str]:
     """Build ytdlp command for a specific profile."""
-    # Get format string (always present in new strategy profiles)
-    format_string = profile.get("format", "")
+    # Get format string from format_id (single source of truth)
+    format_string = profile.get("format_id", "")
 
     # Create quality strategy
     quality_strategy = {
         "format": format_string,
-        "format_sort": profile.get("format_sort", "res,fps,+size,br"),
-        "extra_args": profile.get("extra_args", []),
+        "format_sort": "res,fps,+size,br",  # Standard sort
+        "extra_args": [],
     }
 
-    # Use profile's container preference
+    # Use profile's container preference (always MKV from get_formats_id_to_download)
     profile_container = profile.get("container", "mkv").lower()
     profile_force_mp4 = profile_container == "mp4"
 
@@ -634,11 +834,10 @@ def _get_profile_codec_info(profile: Dict) -> List[str]:
     """Extract codec information from profile for display."""
     codec_info = []
 
-    # Extract format profile data (all profiles use new strategy format)
-    format_profile = profile.get("_format_profile", {})
-    video_codec = format_profile.get("vcodec", "").lower()
-    format_id = profile.get("format", "")
-    height = format_profile.get("height", 0)
+    # Extract data directly from unified profile structure
+    video_codec = profile.get("vcodec", "").lower()
+    format_id = profile.get("format_id", "")
+    height = profile.get("height", 0)
 
     # Video codec info (detailed)
     if "av01" in video_codec or "av1" in video_codec:
@@ -680,6 +879,7 @@ def _execute_profile_downloads(
 ) -> Tuple[int, str]:
     """Execute download attempts for each profile."""
     log_title("🚀 Starting download attempts...")
+    safe_push_log(f"profiles_to_try: {profiles_to_try}")
 
     for profile_idx, profile in enumerate(profiles_to_try, 1):
         safe_push_log("")
@@ -725,13 +925,12 @@ def _execute_profile_downloads(
             # Log successful download with detailed format info
             log_title("✅ Download successful!")
             safe_push_log(f"📦 Profile used: {profile['label']}")
-            safe_push_log(f"🎯 Format ID: {profile.get('format', 'unknown')}")
+            safe_push_log(f"🎯 Format ID: {profile.get('format_id', 'unknown')}")
 
-            # Show codec details
-            format_profile = profile.get("_format_profile", {})
-            vcodec = format_profile.get("vcodec", "unknown")
-            height = format_profile.get("height", 0)
-            ext = format_profile.get("ext", "unknown")
+            # Show codec details from unified profile structure
+            vcodec = profile.get("vcodec", "unknown")
+            height = profile.get("height", 0)
+            ext = profile.get("ext", "unknown")
             safe_push_log(f"🎬 Video codec: {vcodec}")
             safe_push_log(f"📐 Resolution: {height}p")
             safe_push_log(f"📦 Container: {ext}")
@@ -822,142 +1021,6 @@ if "download_finished" not in st.session_state:
     )
 if "download_cancelled" not in st.session_state:
     st.session_state.download_cancelled = False
-
-
-# File system utilities moved to file_system_utils.py
-
-
-# def smart_download_with_fallback(
-#     base_cmd: List[str],
-#     url: str,
-#     progress_placeholder=None,
-#     status_placeholder=None,
-#     info_placeholder=None,
-# ) -> Tuple[int, str]:
-#     """
-#     Intelligent download with progressive fallback strategies
-
-#     Returns:
-#         Tuple[int, str]: (return_code, error_message)
-#     """
-#     cookies_available = False
-#     cookies_part = []
-
-#     # Check if cookies are configured
-#     cookies_method = st.session_state.get("cookies_method", "none")
-#     if cookies_method != "none":
-#         cookies_part = build_cookies_params()
-#         cookies_available = len(cookies_part) > 0
-
-#     # Strategy 1: Try without cookies first (fastest)
-#     if status_placeholder:
-#         status_placeholder.info(t("status_trying_no_auth"))
-#     safe_push_log("🚀 Strategy 1: Trying without cookies (fastest)")
-
-#     cmd = base_cmd + [url]
-#     ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
-
-#     if ret == 0:
-#         safe_push_log("✅ Success without authentication!")
-#         return ret, ""
-
-#     # Check if we got an authentication-related error
-#     last_error = st.session_state.get("last_error", "").lower()
-#     if not any(
-#         error in last_error
-#         for error in ["403", "forbidden", "signature", "unavailable"]
-#     ):
-#         return ret, "Non-authentication error"
-
-#     safe_push_log("⚠️ Authentication error detected, trying fallback strategies...")
-
-#     # Strategy 2: Try different YouTube clients
-#     for i, client in enumerate(
-#         YOUTUBE_CLIENT_FALLBACKS[1:], 2
-#     ):  # Skip default (already tried)
-#         client_name = client["name"]
-#         if status_placeholder:
-#             if client_name == "android":
-#                 status_placeholder.info(t("status_retry_android"))
-#             elif client_name == "ios":
-#                 status_placeholder.info(t("status_retry_ios"))
-#             elif client_name == "web":
-#                 status_placeholder.info(t("status_retry_web"))
-#             else:
-#                 status_placeholder.info(f"🔄 Retry {i}: Using {client_name} client...")
-
-#         safe_push_log(f"🔄 Strategy {i}: Trying with {client_name} client")
-
-#         cmd = base_cmd + client["args"] + [url]
-#         ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
-
-#         if ret == 0:
-#             safe_push_log(f"✅ Success with {client_name} client!")
-#             return ret, ""
-
-#     # Strategy 3: Try with cookies if available
-#     if cookies_available:
-#         if status_placeholder:
-#             status_placeholder.info(t("status_retry_cookies"))
-#         safe_push_log("🍪 Strategy: Trying with authentication cookies")
-
-#         # Try each client with cookies
-#         for client in YOUTUBE_CLIENT_FALLBACKS:
-#             client_name = client["name"]
-#             safe_push_log(f"🔄 Trying {client_name} client + cookies")
-
-#             cmd = base_cmd + client["args"] + cookies_part + [url]
-#             ret = run_cmd(
-#                 cmd, progress_placeholder, status_placeholder, info_placeholder
-#             )
-
-#             if ret == 0:
-#                 safe_push_log(f"✅ Success with {client_name} client + cookies!")
-#                 return ret, ""
-
-#     # All strategies failed - show comprehensive error message
-#     if status_placeholder:
-#         status_placeholder.error("❌ Download failed after all retry attempts")
-
-#     safe_push_log("❌ All fallback strategies failed")
-#     safe_push_log("")
-#     log_title("🚫 Download failed - Comprehensive troubleshooting:")
-
-#     # Show specific error based on what was tried
-#     if not cookies_available:
-#         safe_push_log("🔑 PRIMARY ISSUE: No authentication configured")
-#         safe_push_log("💡 IMMEDIATE SOLUTION:")
-#         safe_push_log("   1. ⚠️  CONFIGURE COOKIES below")
-#         safe_push_log("   2. 🌐 Use 'Browser Cookies' (easiest)")
-#         safe_push_log("   3. 📁 Or export cookies from browser to file")
-#         safe_push_log("")
-#         safe_push_log(
-#             "🎯 KEY INSIGHT: Even public videos need cookies for signature verification!"
-#         )
-#     else:
-#         safe_push_log("🔑 AUTHENTICATION ISSUE: Cookies configured but not working")
-#         safe_push_log("💡 SOLUTIONS TO TRY:")
-#         safe_push_log("   1. 🔄 Update your cookies (they may be expired)")
-#         safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
-#         safe_push_log("   3. 🔁 Try different browser or re-export cookies")
-#         safe_push_log(f"   4. 📋 Current method: {cookies_method}")
-
-#     safe_push_log("")
-#     safe_push_log(
-#         "📺 Technical context: YouTube uses encrypted signatures that require"
-#     )
-#     safe_push_log("    fresh authentication tokens to decrypt video URLs.")
-#     safe_push_log("─" * 50)  # Static separator for end of troubleshooting section
-
-#     return ret, "Authentication failed after all strategies"
-
-
-# File system functions moved to file_system_utils.py
-# customize_video_metadata function moved to medias_utils.py
-
-
-# Subprocess and logging functions moved to logs_utils.py and process_utils.py
-# log_title function moved to logs_utils.py
 
 
 def extract_resolution_value(resolution_str: str) -> int:
@@ -1139,6 +1202,7 @@ def display_url_info(url_info: Dict) -> None:
         # st.markdown(f"**{title}**")
 
         # title = info.get("title", "Titre inconnu")
+
         st.markdown(
             f"""
             <h2 style="font-weight:600; font-size:1.6em; margin-top:0;">
@@ -1983,538 +2047,52 @@ with st.expander(f"{t('cutting_title')}", expanded=False):
 
     st.info(t("sponsorblock_sections_info"))
 
-# Video quality selection with dynamic behavior
+# Video quality selection with new strategy
 with st.expander(f"{t('quality_title')}", expanded=False):
-    # Initialize session state for formats
-    if "available_formats" not in st.session_state:
-        st.session_state.available_formats = []
-    if "selected_format" not in st.session_state:
-        st.session_state.selected_format = "auto"
+    # Initialize session state for quality management
+    if "optimal_format_profiles" not in st.session_state:
+        st.session_state.optimal_format_profiles = []
+    if "chosen_format_profiles" not in st.session_state:
+        st.session_state.chosen_format_profiles = []
+    if "available_formats_list" not in st.session_state:
+        st.session_state.available_formats_list = []
 
-    # === 1. QUALITY PROFILES SECTION (FIRST) ===
-    st.subheader("🏆 Quality Profiles")
+    st.subheader("🏆 Quality Strategy")
     st.info(
-        "🎯 **Intelligent quality strategies** - HomeTube automatically selects the best codecs and formats for optimal quality and compatibility."
+        "🏆 **Smart quality selection** - Choose your strategy for optimal video quality and compatibility."
     )
 
-    # Download mode selection
-    download_mode = st.radio(
-        "Quality Strategy:",
-        options=["auto", "forced"],
+    # Determine default strategy based on QUALITY_DOWNGRADE setting
+    # If QUALITY_DOWNGRADE=false, default to "best_no_fallback" (no fallback on failure)
+    # If QUALITY_DOWNGRADE=true, default to "auto_best" (try multiple profiles)
+    default_strategy_index = 0 if settings.QUALITY_DOWNGRADE else 1
+
+    # Quality strategy selection
+    quality_strategy = st.radio(
+        "Select your quality strategy:",
+        options=["auto_best", "best_no_fallback", "choose_profile", "choose_available"],
         format_func=lambda x: {
-            "auto": "🔄 Auto (Best Quality) - Recommended",
-            "forced": "🎯 Force Profile (No Fallback)",
+            "auto_best": "🔄 Auto Best Qualities (Recommended)",
+            "best_no_fallback": "🏆 Best Quality (No fallback)",
+            "choose_profile": "🎯 Choose Quality Profile",
+            "choose_available": "📋 Choose Quality Available",
         }[x],
-        index=0,
-        help="Auto mode tries profiles in order until success. Forced mode only tries your selected profile.",
-        key="download_mode",
-        horizontal=True,
+        index=default_strategy_index,
+        help="Select your quality strategy. Auto tries multiple profiles for best compatibility.",
+        key="quality_strategy",
+        horizontal=False,
     )
 
-    if download_mode == "auto":
-        st.info(
-            "🤖 **Auto Mode**: HomeTube will try all quality profiles in order (best to most compatible) and stop at the first success."
-        )
-
-        # Show dynamic profile generation based on available formats
-        if url:
-            clean_url = sanitize_url(url)
-
-            # Check if analysis is complete
-            analysis_complete = (
-                st.session_state.get("codecs_detected_for_url", "") == clean_url
-                and "available_codecs" in st.session_state
-            )
-
-            if analysis_complete:
-                _, available_formats = get_cached_video_analysis(clean_url)
-
-                if available_formats:
-                    # Generate optimal profile combinations
-                    optimal_combinations = get_optimal_profiles(
-                        available_formats, max_profiles=10
-                    )
-
-                    if optimal_combinations:
-                        st.success(
-                            f"🎯 **{len(optimal_combinations)} optimal combinations generated** (from available formats)"
-                        )
-
-                        with st.expander(
-                            "📋 Generated Profile Combinations (Auto Mode)",
-                            expanded=True,
-                        ):
-                            for i, combination in enumerate(optimal_combinations, 1):
-                                video_info = combination["video_format"]
-                                audio_info = combination["audio_format"]
-
-                                # Create detailed display
-                                quality_info = (
-                                    f"{video_info['resolution']}p"
-                                    f"@{video_info.get('fps', '?')}fps "
-                                    f"({video_info.get('vcodec', '?')}) + "
-                                    f"{audio_info.get('abr', '?')}kbps "
-                                    f"({audio_info.get('acodec', '?')})"
-                                )
-
-                                format_spec = combination["format_spec"]
-                                container = combination["container"].upper()
-
-                                st.write(f"✅ {i}. **{combination['profile_label']}**")
-                                st.write(f"   📊 Quality: {quality_info}")
-                                st.write(f"   🔧 Format: `{format_spec}` → {container}")
-                    else:
-                        # Use cached profile analysis from detect_video_quality_now
-                        available_profiles = st.session_state.get(
-                            "available_profiles", []
-                        )
-                        profile_summary = st.session_state.get("profile_summary", {})
-
-                        # If no cached analysis, fallback to live calculation
-                        if not available_profiles and not profile_summary:
-                            profile_summary = get_profile_availability_summary(
-                                available_formats
-                            )
-                            available_profiles = [
-                                name
-                                for name, info in profile_summary.items()
-                                if info["available"]
-                            ]
-
-                        if available_profiles:
-                            st.success(
-                                f"🎯 **{len(available_profiles)} profiles available** (from {len(QUALITY_PROFILES)} total)"
-                            )
-
-                            with st.expander(
-                                "📋 Available Profile Summary", expanded=True
-                            ):
-                                for profile_name in available_profiles:
-                                    info = profile_summary[profile_name]
-                                    st.write(f"✅ **{info['label']}**")
-                                    st.write(
-                                        f"   🎬 Video: {', '.join(info['video_matches'])}"
-                                    )
-                                    st.write(
-                                        f"   🔊 Audio: {', '.join(info['audio_matches'])}"
-                                    )
-                        else:
-                            st.warning(
-                                "⚠️ No profiles match available formats - will try all profiles as fallback"
-                            )
-                else:
-                    # No formats available - show static profile list
-                    with st.expander(
-                        "📋 All Profile Order (No Format Analysis)", expanded=False
-                    ):
-                        for i, profile in enumerate(QUALITY_PROFILES, 1):
-                            st.write(
-                                f"{i}. **{profile['label']}** - {profile['description']}"
-                            )
-            else:
-                # No analysis yet - encourage user to detect profiles
-                st.warning(
-                    "⚠️ **No profile analysis done yet** - Click '🔍 Detect Available Profiles' below to see which profiles work best for this video."
-                )
-
-                # Show all profiles as fallback
-                with st.expander(
-                    "📋 All Quality Profiles (Default Order)", expanded=False
-                ):
-                    st.info(
-                        "These profiles will be tried in order if no detection is performed:"
-                    )
-                    for i, profile in enumerate(QUALITY_PROFILES, 1):
-                        st.write(
-                            f"{i}. **{profile['label']}** - {profile['description']}"
-                        )
-        else:
-            # No URL yet - show all profiles with hint
-            st.info(
-                "💡 Enter a video URL above, then use '🔍 Detect Available Profiles' to see optimal profiles for that video"
-            )
-            with st.expander("📋 Default Profile Order (Auto Mode)", expanded=False):
-                st.info(
-                    "These profiles will be tried in order when no specific detection is performed:"
-                )
-                for i, profile in enumerate(QUALITY_PROFILES, 1):
-                    st.write(f"{i}. **{profile['label']}** - {profile['description']}")
-
-        # Store auto mode
-        selected_profile = None
-
-    else:
-        st.warning(
-            "🔒 **Forced Mode**: Only your selected profile will be tried. Download will fail if this specific combination is unavailable."
-        )
-
-        # Check if we have dynamic profile analysis results
-        if url:
-            clean_url = sanitize_url(url)
-            analysis_complete = (
-                st.session_state.get("codecs_detected_for_url", "") == clean_url
-                and "available_codecs" in st.session_state
-            )
-
-            if analysis_complete:
-                _, available_formats = get_cached_video_analysis(clean_url)
-
-                if available_formats:
-                    # Generate optimal profile combinations (same as auto mode)
-                    optimal_combinations = get_optimal_profiles(
-                        available_formats, max_profiles=10
-                    )
-
-                    if optimal_combinations:
-                        st.success(
-                            f"🎯 **{len(optimal_combinations)} real detected profiles available** (same as Auto Mode)"
-                        )
-
-                        # Create selectbox with real detected combinations
-                        def format_combination_option(combination_idx):
-                            combination = optimal_combinations[combination_idx]
-                            video_info = combination["video_format"]
-                            audio_info = combination["audio_format"]
-
-                            quality_info = (
-                                f"{video_info['resolution']}p"
-                                f"@{video_info.get('fps', '?')}fps "
-                                f"({video_info.get('vcodec', '?')}) + "
-                                f"{audio_info.get('abr', '?')}kbps "
-                                f"({audio_info.get('acodec', '?')})"
-                            )
-
-                            return f"{combination['profile_label']} | {quality_info}"
-
-                        selected_combination_idx = st.selectbox(
-                            "Select detected profile combination:",
-                            options=list(range(len(optimal_combinations))),
-                            format_func=format_combination_option,
-                            index=0,
-                            help="These are the real detected and matched profiles for this specific video.",
-                            key="quality_profile_combination",
-                        )
-
-                        # Get the selected combination
-                        selected_combination = optimal_combinations[
-                            selected_combination_idx
-                        ]
-
-                        # Store the combination for download use - convert to profile-like structure
-                        dynamic_profile = {
-                            "name": selected_combination["profile_name"],
-                            "label": selected_combination["profile_label"],
-                            "format": selected_combination["format_spec"],
-                            "format_sort": f"res:{selected_combination['video_format']['resolution']},fps,+size,br",
-                            "extra_args": selected_combination["extra_args"],
-                            "container": selected_combination["container"],
-                            "priority": selected_combination["priority"],
-                            "_dynamic_combination": selected_combination,  # Store original for reference
-                        }
-
-                        # Store in session state for download logic
-                        st.session_state["dynamic_profile_selected"] = dynamic_profile
-                        selected_profile = dynamic_profile[
-                            "name"
-                        ]  # Store name for compatibility
-
-                        # Show detailed info about selected combination
-                        st.info(f"🎯 **{selected_combination['profile_label']}**")
-
-                        video_info = selected_combination["video_format"]
-                        audio_info = selected_combination["audio_format"]
-
-                        st.write(
-                            f"📊 **Quality**: {video_info['resolution']}p@{video_info.get('fps', '?')}fps ({video_info.get('vcodec', '?')}) + {audio_info.get('abr', '?')}kbps ({audio_info.get('acodec', '?')})"
-                        )
-                        st.write(
-                            f"🔧 **Format**: `{selected_combination['format_spec']}` → {selected_combination['container'].upper()}"
-                        )
-
-                        # Show available combinations preview
-                        with st.expander(
-                            "📋 All Detected Profile Combinations", expanded=False
-                        ):
-                            for i, combination in enumerate(optimal_combinations, 1):
-                                video_info = combination["video_format"]
-                                audio_info = combination["audio_format"]
-
-                                quality_info = (
-                                    f"{video_info['resolution']}p"
-                                    f"@{video_info.get('fps', '?')}fps "
-                                    f"({video_info.get('vcodec', '?')}) + "
-                                    f"{audio_info.get('abr', '?')}kbps "
-                                    f"({audio_info.get('acodec', '?')})"
-                                )
-
-                                format_spec = combination["format_spec"]
-                                container = combination["container"].upper()
-
-                                status_icon = (
-                                    "🎯" if i - 1 == selected_combination_idx else "📋"
-                                )
-                                st.write(
-                                    f"{status_icon} {i}. **{combination['profile_label']}**"
-                                )
-                                st.write(f"   📊 Quality: {quality_info}")
-                                st.write(f"   🔧 Format: `{format_spec}` → {container}")
-
-                    else:
-                        # Fallback to static profiles if no dynamic combinations found
-                        st.warning(
-                            "⚠️ No dynamic profiles generated - using static profiles as fallback"
-                        )
-
-                        selected_profile = st.selectbox(
-                            "Select quality profile:",
-                            options=[profile["name"] for profile in QUALITY_PROFILES],
-                            format_func=lambda x: next(
-                                p["label"] for p in QUALITY_PROFILES if p["name"] == x
-                            ),
-                            index=get_default_profile_index(),
-                            help="Using static profiles as fallback. Try 'Detect Available Profiles' for better options.",
-                            key="quality_profile",
-                        )
-
-                        # Show selected profile details
-                        profile = get_profile_by_name(selected_profile)
-                        if profile:
-                            st.info(f"🎯 **{profile['label']}**")
-                            st.write(f"📋 {profile['description']}")
-                            st.write(format_profile_codec_info(profile))
-                else:
-                    # No formats available - fallback to static profiles
-                    st.warning(
-                        "⚠️ No formats detected - using static profiles as fallback"
-                    )
-
-                    selected_profile = st.selectbox(
-                        "Select quality profile:",
-                        options=[profile["name"] for profile in QUALITY_PROFILES],
-                        format_func=lambda x: next(
-                            p["label"] for p in QUALITY_PROFILES if p["name"] == x
-                        ),
-                        index=get_default_profile_index(),
-                        help="No formats detected. Try 'Detect Available Profiles' for better options.",
-                        key="quality_profile",
-                    )
-
-                    # Show selected profile details
-                    profile = get_profile_by_name(selected_profile)
-                    if profile:
-                        st.info(f"🎯 **{profile['label']}**")
-                        st.write(f"📋 {profile['description']}")
-                        st.write(format_profile_codec_info(profile))
-            else:
-                # No analysis yet - encourage detection
-                st.info(
-                    "💡 Click '🔍 Detect Available Profiles' below to see real detected profiles for this video"
-                )
-
-                selected_profile = st.selectbox(
-                    "Select quality profile:",
-                    options=[profile["name"] for profile in QUALITY_PROFILES],
-                    format_func=lambda x: next(
-                        p["label"] for p in QUALITY_PROFILES if p["name"] == x
-                    ),
-                    index=get_default_profile_index(),
-                    help="Use 'Detect Available Profiles' to see real matched profiles for this video.",
-                    key="quality_profile",
-                )
-
-                # Show selected profile details
-                profile = get_profile_by_name(selected_profile)
-                if profile:
-                    st.info(f"🎯 **{profile['label']}**")
-                    st.write(f"📋 {profile['description']}")
-                    st.write(format_profile_codec_info(profile))
-        else:
-            # No URL provided
-            selected_profile = st.selectbox(
-                "Select quality profile:",
-                options=[profile["name"] for profile in QUALITY_PROFILES],
-                format_func=lambda x: next(
-                    p["label"] for p in QUALITY_PROFILES if p["name"] == x
-                ),
-                index=get_default_profile_index(),
-                help="Enter a URL above and use 'Detect Available Profiles' to see real matched profiles.",
-                key="quality_profile",
-            )
-
-            # Show selected profile details
-            profile = get_profile_by_name(selected_profile)
-            if profile:
-                st.info(f"🎯 **{profile['label']}**")
-                st.write(f"📋 {profile['description']}")
-                st.write(format_profile_codec_info(profile))
-
-    # === 2. ADVANCED PROFILE OPTIONS ===
-    with st.expander("⚙️ Advanced Profile Options", expanded=False):
-        st.info(
-            "🔧 **Fine-tune profile behavior** - These options affect how the quality profiles above are applied."
-        )
-
-        prefer_free_formats = st.checkbox(
-            "Prefer free formats (WebM/Opus)",
-            value=True,
-            help="Prioritize open/free codecs when available. Automatically disabled for MP4 profiles.",
-            key="prefer_free_formats",
-        )
-
-        refuse_quality_downgrade = st.checkbox(
-            "Refuse quality downgrade",
-            value=False,
-            help="Fail download if premium codecs (AV1/Opus) are unavailable, instead of falling back to lower quality.",
-            key="refuse_quality_downgrade",
-        )
-
-    # === 3. FORMAT AND CODEC DETECTION ===
-    st.subheader("🔍 Detect Available Quality Profiles")
-    st.info(
-        "🎯 **Discover optimal profiles** - Analyze the video to find the best matching quality profiles available."
-    )
-
-    # Manual quality detection button and status in a single section
+    # Process strategy selection and update profiles
     if url and url.strip():
         clean_url = sanitize_url(url)
-        has_analysis = (
-            st.session_state.get("codecs_detected_for_url", "") == clean_url
-            and "available_codecs" in st.session_state
-        )
+        _process_quality_strategy(quality_strategy, clean_url)
 
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            if st.button(
-                "🔍 Detect Available Profiles",
-                help="Analyze video formats and generate matching quality profiles",
-                type="primary",
-            ):
-                detect_video_quality_now(url.strip())
-                st.rerun()
+    # Display strategy-specific content
+    _display_strategy_content(quality_strategy, url)
 
-        with col2:
-            if has_analysis:
-                # Analysis complete - show quality summary
-                _, cached_formats = get_cached_video_analysis(clean_url)
-                st.session_state.available_formats = cached_formats
-
-                if cached_formats:
-                    max_res = max(
-                        extract_resolution_value(f["resolution"])
-                        for f in cached_formats
-                    )
-                    if max_res >= 2160:
-                        st.success("✅ 4K+ quality available - profiles updated above")
-                    elif max_res >= 1080:
-                        st.success("✅ HD quality available - profiles updated above")
-                    else:
-                        st.success(
-                            "✅ Standard quality available - profiles updated above"
-                        )
-                else:
-                    st.success(
-                        "✅ Analysis complete - use manual format selection below"
-                    )
-            else:
-                st.info("💡 Click to detect optimal profiles for this video")
-    else:
-        st.info("💡 Enter a video URL above to analyze available quality profiles")
-
-    # === 4. DETECTED CODECS DISPLAY ===
-    if url:
-        clean_url = sanitize_url(url)
-
-        # Only show codec details if analysis is complete
-        cached_codecs, _ = get_cached_video_analysis(clean_url)
-
-        # Check if we have real analysis results (not just defaults)
-        has_real_analysis = (
-            st.session_state.get("codecs_detected_for_url", "") == clean_url
-            and "available_codecs" in st.session_state
-        )
-
-        if has_real_analysis and any(cached_codecs.values()):
-            st.markdown("### 🧬 Detected Video Codecs")
-
-            # Create columns for codec display
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.markdown("**📹 Video Codecs:**")
-                if cached_codecs.get("av01"):
-                    st.success("🏆 AV1 (Premium)")
-                else:
-                    st.error("❌ AV1 (Premium)")
-
-                if cached_codecs.get("vp9"):
-                    st.success("🥈 VP9 (Modern)")
-                else:
-                    st.error("❌ VP9 (Modern)")
-
-                if cached_codecs.get("h264"):
-                    st.success("📺 H.264 (Compatible)")
-                else:
-                    st.error("❌ H.264 (Compatible)")
-
-            with col2:
-                st.markdown("**🎵 Audio Codecs:**")
-                if cached_codecs.get("opus"):
-                    st.success("🎧 Opus (High Quality)")
-                else:
-                    st.error("❌ Opus (High Quality)")
-
-                if cached_codecs.get("aac"):
-                    st.success("🔊 AAC (Compatible)")
-                else:
-                    st.error("❌ AAC (Compatible)")
-
-            # Quality assessment
-            has_premium = cached_codecs.get("av01") and cached_codecs.get("opus")
-            has_modern = cached_codecs.get("vp9") and cached_codecs.get("opus")
-
-            if has_premium:
-                st.success(
-                    "🏆 **Premium Quality Available** - AV1 + Opus codecs detected"
-                )
-            elif has_modern:
-                st.info("🥈 **Modern Quality Available** - VP9 + Opus codecs detected")
-            else:
-                st.warning("📺 **Standard Quality Only** - Basic codecs available")
-
-    # === 5. MANUAL FORMAT SELECTION ===
-    with st.expander("🔧 Manual Format Selection", expanded=False):
-        st.info(
-            "🎯 **Override profiles** - Select a specific format from the detected list. This overrides the intelligent profile system above."
-        )
-        st.warning(
-            "⚠️ Advanced users only: This bypasses quality profiles and may result in format compatibility issues."
-        )
-
-        if st.session_state.available_formats:
-            format_options = [t("quality_auto_option")] + [
-                f"{fmt['resolution']} - {fmt['ext']} ({fmt['format_id']})"
-                for fmt in st.session_state.available_formats
-            ]
-
-            selected_format_display = st.selectbox(
-                t("quality_select_prompt"),
-                options=format_options,
-                index=0,
-                help="Legacy format selection - overrides profile system",
-                key="format_selector",
-            )
-
-            # Store the actual format ID for yt-dlp
-            if selected_format_display == t("quality_auto_option"):
-                st.session_state.selected_format = "auto"
-            else:
-                # Extract format ID from the display string
-                for fmt in st.session_state.available_formats:
-                    if f"({fmt['id']})" in selected_format_display:
-                        st.session_state.selected_format = fmt["id"]
-                        break
-        else:
-            st.info("💡 Use 'Detect Quality' above to populate format options here")
+    # Store final configuration in session state for download
+    st.session_state["download_quality_strategy"] = quality_strategy
 
 
 # Optional embedding section for chapter and subs
@@ -3250,7 +2828,7 @@ if submitted:
 
     # === NEW STRATEGY: Simple configuration from settings ===
     # Get settings for quality preferences (used by new strategy internally)
-    settings = get_settings()
+    # settings = get_settings()
     push_log("🤖 Using new dynamic strategy with optimal format selection")
 
     # === NEW STRATEGY: Always use dynamic format selection ===

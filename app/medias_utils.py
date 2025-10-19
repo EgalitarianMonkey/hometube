@@ -218,6 +218,7 @@ def get_formats_id_to_download(
 ) -> List[Dict]:
     """
     Determine optimal download profiles (max 2 profiles: AV1 and VP9).
+    Returns complete profile dictionaries ready to use throughout the application.
 
     Strategy:
     - If multiple_langs=False: fetch video+audio pairs (bv*+ba/b)
@@ -233,10 +234,20 @@ def get_formats_id_to_download(
         audio_formats: List of audio formats to combine (if multiple_langs=True)
 
     Returns:
-        List of profile dictionaries (max 2):
+        List of complete profile dictionaries (max 2) with all fields needed:
         [
-            {"format_id": "399+251", "ext": "webm", "height": 1080, "vcodec": "vp9", "protocol": "https"},
-            {"format_id": "616+251", "ext": "webm", "height": 1080, "vcodec": "av1", "protocol": "https"}
+            {
+                "format_id": "399+251",
+                "ext": "webm",
+                "height": 1080,
+                "vcodec": "vp9",
+                "protocol": "https",
+                "label": "🎯 Optimal VP9 1080p",
+                "name": "optimal_vp9_1080p",
+                "container": "mkv",
+                "priority": 1
+            },
+            ...
         ]
     """
 
@@ -311,6 +322,26 @@ def get_formats_id_to_download(
                         [a.get("format_id", "") for a in audio_formats]
                     )
                     format_info["format_id"] = f"{video_id}+{audio_ids}"
+
+                # Enrich with additional fields for application use
+                vcodec = format_info.get("vcodec", "unknown")
+                height = format_info.get("height", 0)
+                format_id = format_info.get("format_id", "")
+
+                # Determine codec label
+                codec_label = "Unknown"
+                if "av01" in vcodec.lower() or "av1" in vcodec.lower():
+                    codec_label = "AV1"
+                elif "vp9" in vcodec.lower() or "vp09" in vcodec.lower():
+                    codec_label = "VP9"
+                elif "avc" in vcodec.lower() or "h264" in vcodec.lower():
+                    codec_label = "H.264"
+
+                # Add enriched fields
+                format_info["label"] = f"🎯 Optimal {codec_label} {height}p"
+                format_info["name"] = f"optimal_{codec_label.lower()}_{height}p"
+                format_info["container"] = "mkv"  # Always MKV for modern codecs
+                format_info["priority"] = len(profiles) + 1
 
                 # Add to profiles list
                 profiles.append(format_info)
@@ -485,6 +516,80 @@ def get_format_details(url_info: Dict, format_id: str) -> Optional[Dict]:
             return fmt
 
     return None
+
+
+def get_available_formats(url_info: Dict) -> List[Dict]:
+    """
+    Extract all available video formats from url_info for user selection.
+
+    Args:
+        url_info: Dictionary from yt-dlp JSON output
+
+    Returns:
+        List of format dictionaries with simplified information for UI display
+    """
+    if not url_info or "error" in url_info:
+        return []
+
+    formats = url_info.get("formats", [])
+    if not formats:
+        return []
+
+    # Filter video formats only (excluding audio-only and storyboard)
+    video_formats = []
+    for fmt in formats:
+        # Skip audio-only formats
+        if fmt.get("vcodec") == "none":
+            continue
+
+        # Skip storyboard and other metadata formats
+        if fmt.get("format_note", "").lower() in ["storyboard", "mhtml"]:
+            continue
+
+        # Extract key information for display
+        format_info = {
+            "format_id": fmt.get("format_id", ""),
+            "ext": fmt.get("ext", "unknown"),
+            "resolution": f"{fmt.get('width', '?')}x{fmt.get('height', '?')}",
+            "height": fmt.get("height", 0),
+            "fps": fmt.get("fps"),
+            "vcodec": fmt.get("vcodec", "unknown"),
+            "acodec": fmt.get("acodec", "none"),
+            "filesize": fmt.get("filesize"),
+            "tbr": fmt.get("tbr", 0),  # Total bitrate
+            "vbr": fmt.get("vbr", 0),  # Video bitrate
+            "abr": fmt.get("abr", 0),  # Audio bitrate
+        }
+
+        # Create a human-readable description
+        description_parts = [f"{format_info['resolution']}"]
+
+        if format_info["fps"]:
+            description_parts.append(f"{format_info['fps']}fps")
+
+        description_parts.append(f"({format_info['vcodec']})")
+
+        if format_info["acodec"] != "none":
+            description_parts.append(f"+ {format_info['acodec']}")
+
+        if format_info["filesize"] and format_info["filesize"] > 0:
+            size_mb = format_info["filesize"] / (1024 * 1024)
+            if size_mb > 1024:
+                description_parts.append(f"~{size_mb/1024:.1f}GB")
+            else:
+                description_parts.append(f"~{size_mb:.0f}MB")
+        elif format_info["tbr"] > 0:
+            description_parts.append(f"{format_info['tbr']:.0f}kbps")
+
+        format_info["description"] = " ".join(description_parts)
+        video_formats.append(format_info)
+
+    # Sort by quality (height descending, then fps descending, then bitrate descending)
+    video_formats.sort(
+        key=lambda x: (x["height"], x.get("fps", 0), x["tbr"]), reverse=True
+    )
+
+    return video_formats
 
 
 def group_audio_by_language(audio_formats: List[Dict]) -> Dict[str, List[Dict]]:

@@ -56,7 +56,7 @@ _DEFAULTS = {
     "VO_FIRST": "true",  # Prioritize original voice (VO) first before primary language
     # === Quality & Download Preferences ===
     "VIDEO_QUALITY_MAX": "max",  # Maximum video resolution: "max" for highest available, or "2160", "1440", "1080", "720", "480", "360"
-    "QUALITY_PROFILE": "auto",  # auto, mkv_av1_opus, mkv_vp9_opus, mp4_av1_aac, mp4_h264_aac
+    "QUALITY_DOWNGRADE": "true",  # Allow quality downgrade on profile failure (false = stop at first failure)
     "EMBED_CHAPTERS": "true",  # Embed chapters by default
     "EMBED_SUBTITLES": "true",  # Embed subtitles by default
     # === Debug Options ===
@@ -113,7 +113,7 @@ class Settings:
 
     # Quality & Download
     VIDEO_QUALITY_MAX: str
-    QUALITY_PROFILE: str
+    QUALITY_DOWNGRADE: bool
     EMBED_CHAPTERS: bool
     EMBED_SUBTITLES: bool
 
@@ -181,7 +181,7 @@ def get_settings() -> Settings:
         ),
         VO_FIRST=_to_bool(config["VO_FIRST"], True),
         VIDEO_QUALITY_MAX=config["VIDEO_QUALITY_MAX"].strip().lower(),
-        QUALITY_PROFILE=config["QUALITY_PROFILE"].strip().lower(),
+        QUALITY_DOWNGRADE=_to_bool(config["QUALITY_DOWNGRADE"], True),
         EMBED_CHAPTERS=_to_bool(config["EMBED_CHAPTERS"], True),
         EMBED_SUBTITLES=_to_bool(config["EMBED_SUBTITLES"], True),
         REMOVE_TMP_FILES=_to_bool(config["REMOVE_TMP_FILES"], True),
@@ -286,7 +286,7 @@ def print_config_summary() -> None:
     # Quality
     print("\n🎬 Video Quality:")
     print(f"   Max resolution: {s.VIDEO_QUALITY_MAX}")
-    print(f"   Quality profile: {s.QUALITY_PROFILE}")
+    print(f"   Quality downgrade allowed: {s.QUALITY_DOWNGRADE}")
     print(f"   Embed chapters: {s.EMBED_CHAPTERS}")
     print(f"   Embed subtitles: {s.EMBED_SUBTITLES}")
 
