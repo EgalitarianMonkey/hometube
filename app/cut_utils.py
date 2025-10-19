@@ -190,3 +190,98 @@ def remap_interval(
     if e2 < s2:
         e2 = s2
     return (s2, e2)
+
+
+# === VIDEO CUTTING COMMAND BUILDING ===
+
+
+def build_cut_command(
+    final_tmp: Path,
+    actual_start: float,
+    duration: float,
+    processed_subtitle_files: List[Tuple[str, Path]],
+    cut_output: Path,
+    cut_ext: str,
+) -> List[str]:
+    """
+    Build the ffmpeg command for cutting video with subtitles.
+
+    Args:
+        final_tmp: Path to the source video file
+        actual_start: Start time in seconds for cutting
+        duration: Duration in seconds for the cut
+        processed_subtitle_files: List of (language, subtitle_file_path) tuples
+        cut_output: Path for the output cut video file
+        cut_ext: Extension of the output file (.mp4 or .mkv)
+
+    Returns:
+        List of command arguments for ffmpeg
+    """
+    # Build video cutting command
+    cmd_cut = [
+        "ffmpeg",
+        "-y",
+        "-loglevel",
+        "warning",
+        "-ss",
+        str(actual_start),
+        "-t",
+        str(duration),
+        "-i",
+        str(final_tmp),
+    ]
+
+    # Add processed subtitle inputs
+    for lang, srt_file in processed_subtitle_files:
+        cmd_cut.extend(["-i", str(srt_file)])
+
+    # Video and audio mappings
+    cmd_cut.extend(
+        [
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a?",
+        ]
+    )
+
+    # Subtitle mappings
+    for i, (lang, _) in enumerate(processed_subtitle_files):
+        cmd_cut.extend(["-map", f"{i+1}:0"])
+
+    # Exclude attached pictures
+    cmd_cut.extend(["-map", "-0:m:attached_pic"])
+
+    # Stream copy to preserve quality, with format-appropriate subtitle codec
+    if cut_ext == ".mp4":
+        # MP4 format: use mov_text for subtitle compatibility
+        cmd_cut.extend(["-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text"])
+    else:
+        # MKV format: use SRT for maximum compatibility
+        cmd_cut.extend(["-c:v", "copy", "-c:a", "copy", "-c:s", "srt"])
+
+    # Subtitle metadata
+    if processed_subtitle_files:
+        first_lang = processed_subtitle_files[0][0]
+        cmd_cut.extend(
+            [
+                "-disposition:s:0",
+                "default",
+                "-metadata:s:s:0",
+                f"language={first_lang}",
+            ]
+        )
+
+    # Additional options for perfect sync
+    cmd_cut.extend(
+        [
+            "-shortest",
+            "-avoid_negative_ts",
+            "make_zero",
+            "-max_interleave_delta",
+            "0",
+            str(cut_output),
+        ]
+    )
+
+    return cmd_cut

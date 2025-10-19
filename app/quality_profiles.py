@@ -20,8 +20,10 @@ from typing import Dict, List, Optional, Tuple, Union
 # Import centralized utilities
 try:
     from .process_utils import run_subprocess_safe
+    from .logs_utils import safe_push_log, log_title
 except ImportError:
     from process_utils import run_subprocess_safe
+    from logs_utils import safe_push_log, log_title
 
 
 # Lazy imports to avoid circular dependencies
@@ -37,24 +39,7 @@ def _get_main_functions():
         return main_module
 
 
-# Stub functions for when main is not available (testing, etc.)
-def safe_push_log(message: str):
-    """Stub for main.safe_push_log - prints to console if main not available"""
-    try:
-        main = _get_main_functions()
-        main.safe_push_log(message)
-    except (ImportError, AttributeError):
-        print(f"[LOG] {message}")
-
-
-def log_title(title: str, underline_char: str = "─"):
-    """Stub for main.log_title"""
-    try:
-        main = _get_main_functions()
-        main.log_title(title, underline_char)
-    except (ImportError, AttributeError):
-        safe_push_log(title)
-        safe_push_log(underline_char * len(title))
+# Logging functions are now imported from logs_utils
 
 
 def sanitize_url(url: str) -> str:

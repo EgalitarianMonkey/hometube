@@ -39,6 +39,7 @@ try:
         analyze_audio_formats,
         get_formats_id_to_download,
         get_video_title,
+        customize_video_metadata,
     )
     from .ytdlp_version_check import check_and_show_updates
     from .logs_utils import (
@@ -50,8 +51,9 @@ try:
         log_title,
         log_authentication_error_hint,
         log_format_unavailable_error_hint,
+        register_main_push_log,
     )
-    from .process_utils import run_subprocess_safe
+
     from .file_system_utils import (
         list_subdirs_recursive,
         cleanup_tmp_files,
@@ -62,6 +64,7 @@ try:
     from .cut_utils import (
         get_keyframes,
         find_nearest_keyframes,
+        build_cut_command,
     )
 except ImportError:
     # Fallback for direct execution from app directory
@@ -90,6 +93,7 @@ except ImportError:
         analyze_audio_formats,
         get_formats_id_to_download,
         get_video_title,
+        customize_video_metadata,
     )
     from ytdlp_version_check import check_and_show_updates
     from logs_utils import (
@@ -101,8 +105,9 @@ except ImportError:
         log_title,
         log_authentication_error_hint,
         log_format_unavailable_error_hint,
+        register_main_push_log,
     )
-    from process_utils import run_subprocess_safe
+
     from file_system_utils import (
         list_subdirs_recursive,
         cleanup_tmp_files,
@@ -113,6 +118,7 @@ except ImportError:
     from cut_utils import (
         get_keyframes,
         find_nearest_keyframes,
+        build_cut_command,
     )
 
 # Configuration import (must be after translations for configure_language)
@@ -941,107 +947,11 @@ if "download_cancelled" not in st.session_state:
 
 
 # File system functions moved to file_system_utils.py
+# customize_video_metadata function moved to medias_utils.py
 
 
-# === Helpers time ===
-
-
-def customize_video_metadata(
-    video_path: Path, user_title: str, original_title: str = None
-) -> bool:
-    """
-    Customize video metadata using FFmpeg, replacing title with user-provided name
-    and preserving original title in album field
-
-    Args:
-        video_path: Path to the video file
-        user_title: Title provided by the user (from filename input)
-        original_title: Original video title from yt-dlp (optional)
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        safe_push_log("📝 Customizing video metadata...")
-
-        # Create temporary output file
-        temp_output = video_path.with_suffix(f".temp{video_path.suffix}")
-
-        # Build FFmpeg command
-        cmd_metadata = [
-            "ffmpeg",
-            "-y",  # Overwrite output file
-            "-i",
-            str(video_path),
-            "-c",
-            "copy",  # Copy streams without re-encoding (fast)
-            "-metadata",
-            f"title={user_title}",  # Use user-provided title
-        ]
-
-        # Add original title as album if available
-        if original_title and original_title != user_title:
-            cmd_metadata.extend(["-metadata", f"album={original_title}"])
-
-        # Add output path
-        cmd_metadata.append(str(temp_output))
-
-        # Execute FFmpeg command
-        result = run_subprocess_safe(
-            cmd_metadata, timeout=120, error_context="Metadata customization"
-        )
-
-        if result.returncode == 0 and temp_output.exists():
-            # Replace original file with metadata-customized version
-            video_path.unlink()  # Remove original
-            temp_output.rename(video_path)  # Rename temp to original
-            safe_push_log(f"✅ Metadata customized - Title: {user_title}")
-            return True
-        else:
-            error_msg = result.stderr.strip()
-            safe_push_log(f"⚠️ Failed to customize metadata: {error_msg}")
-            # Clean up temp file if it exists
-            if temp_output.exists():
-                temp_output.unlink()
-            return False
-
-    except Exception as e:
-        safe_push_log(f"⚠️ Error customizing metadata: {e}")
-        # Clean up temp file if it exists
-        temp_output = video_path.with_suffix(f".temp{video_path.suffix}")
-        if temp_output.exists():
-            temp_output.unlink()
-        return False
-
-
-# Subprocess and logging functions moved to logs_utils.py
-
-
-def safe_push_log(message: str):
-    """Safe logging function that works even if logs aren't initialized yet"""
-    try:
-        if "ALL_LOGS" in globals() and "logs_placeholder" in globals():
-            push_log(message)
-        else:
-            # If logging isn't ready, just print to console for debugging
-            print(f"[LOG] {message}")
-    except Exception as e:
-        print(f"[LOG] {message} (Error: {e})")
-
-
-def log_title(title: str, underline_char: str = "─"):
-    """
-    Log a title with automatic underline matching the exact title length
-
-    Args:
-        title: The title text to display
-        underline_char: Character to use for underline (default: ─)
-    """
-    # Use exact title length for natural, adaptive underlines
-    underline_length = len(title)
-
-    safe_push_log(title)
-    safe_push_log(underline_char * underline_length)
+# Subprocess and logging functions moved to logs_utils.py and process_utils.py
+# log_title function moved to logs_utils.py
 
 
 def extract_resolution_value(resolution_str: str) -> int:
@@ -1063,9 +973,6 @@ def extract_resolution_value(resolution_str: str) -> int:
             return 0
     except (ValueError, IndexError):
         return 0
-
-
-# get_video_title moved to medias_utils.py
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -3204,6 +3111,10 @@ def push_log(line: str):
     render_download_button()
 
 
+# Register this push_log function for use by other modules
+register_main_push_log(push_log)
+
+
 # Pending analysis logs system removed - using direct synchronous logging instead
 
 
@@ -3942,71 +3853,14 @@ if submitted:
         else:
             push_log("📹 Step 3 - MUX: Cutting video (no subtitles)")
 
-        # Build video cutting command
-        cmd_cut = [
-            "ffmpeg",
-            "-y",
-            "-loglevel",
-            "warning",
-            "-ss",
-            str(actual_start),
-            "-t",
-            str(duration),
-            "-i",
-            str(final_tmp),
-        ]
-
-        # Add processed subtitle inputs
-        for lang, srt_file in processed_subtitle_files:
-            cmd_cut.extend(["-i", str(srt_file)])
-
-        # Video and audio mappings
-        cmd_cut.extend(
-            [
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a?",
-            ]
-        )
-
-        # Subtitle mappings
-        for i, (lang, _) in enumerate(processed_subtitle_files):
-            cmd_cut.extend(["-map", f"{i+1}:0"])
-
-        # Exclude attached pictures
-        cmd_cut.extend(["-map", "-0:m:attached_pic"])
-
-        # Stream copy to preserve quality, with format-appropriate subtitle codec
-        if cut_ext == ".mp4":
-            # MP4 format: use mov_text for subtitle compatibility
-            cmd_cut.extend(["-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text"])
-        else:
-            # MKV format: use SRT for maximum compatibility
-            cmd_cut.extend(["-c:v", "copy", "-c:a", "copy", "-c:s", "srt"])
-
-        # Subtitle metadata
-        if processed_subtitle_files:
-            first_lang = processed_subtitle_files[0][0]
-            cmd_cut.extend(
-                [
-                    "-disposition:s:0",
-                    "default",
-                    "-metadata:s:s:0",
-                    f"language={first_lang}",
-                ]
-            )
-
-        # Additional options for perfect sync
-        cmd_cut.extend(
-            [
-                "-shortest",
-                "-avoid_negative_ts",
-                "make_zero",
-                "-max_interleave_delta",
-                "0",
-                str(cut_output),
-            ]
+        # Build video cutting command using dedicated utility function
+        cmd_cut = build_cut_command(
+            final_tmp=final_tmp,
+            actual_start=actual_start,
+            duration=duration,
+            processed_subtitle_files=processed_subtitle_files,
+            cut_output=cut_output,
+            cut_ext=cut_ext,
         )
 
         # === EXECUTE FINAL CUTTING COMMAND ===

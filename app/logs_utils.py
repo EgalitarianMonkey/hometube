@@ -51,23 +51,28 @@ def safe_push_log(message: str):
     _safe_push_log_fallback(message)
 
 
+# Global variable to store the main push_log function
+_main_push_log = None
+
+
+def register_main_push_log(push_log_func):
+    """Register the main.py push_log function for use by other modules"""
+    global _main_push_log
+    _main_push_log = push_log_func
+
+
 def push_log_generic(message: str):
     """
     Generic logging function for modules outside of main.py.
-    Attempts to use main's push_log if available, otherwise falls back to safe logging.
+    Uses registered main push_log if available, otherwise falls back to safe logging.
 
     Args:
         message: Log message to process
     """
-    # Import here to avoid circular imports
-    import sys
-
-    # Try to get the main module's push_log function
-    main_module = sys.modules.get("__main__")
-    if main_module and hasattr(main_module, "push_log"):
-        # Use main's specialized push_log function
+    # Try to use the registered main push_log function
+    if _main_push_log is not None:
         try:
-            main_module.push_log(message)
+            _main_push_log(message)
             return
         except Exception:
             pass

@@ -12,13 +12,11 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 
-# Import safe_push_log from main module
+# Import logging functions from centralized module
 try:
-    from main import safe_push_log
+    from .logs_utils import safe_push_log
 except ImportError:
-    # Fallback for testing environments
-    def safe_push_log(message: str) -> None:
-        print(f"LOG: {message}")
+    from logs_utils import safe_push_log
 
 
 def find_subtitle_files_optimized(
