@@ -2743,6 +2743,41 @@ if submitted:
 
     push_log(f"📁 Destination folder: {dest_dir}")
 
+    # Check if video already exists in destination (safety check)
+    if filename:
+        # Check all common video extensions
+        existing_files = []
+        for ext in [".mkv", ".mp4", ".webm", ".avi", ".mov"]:
+            potential_file = dest_dir / f"{filename}{ext}"
+            if potential_file.exists():
+                existing_files.append(potential_file)
+
+        if existing_files and not settings.ALLOW_OVERWRITE_EXISTING_VIDEO:
+            # File exists and overwrite is not allowed
+            log_title("⚠️ VIDEO ALREADY EXISTS - SKIPPING DOWNLOAD")
+            push_log("")
+            push_log(f"📁 Existing file: {existing_files[0].name}")
+            push_log(
+                f"📊 File size: {existing_files[0].stat().st_size / (1024 * 1024):.2f}MiB"
+            )
+            push_log("")
+            push_log("🛡️ Protection active: ALLOW_OVERWRITE_EXISTING_VIDEO=false")
+            push_log(
+                "ℹ️  To allow overwrites, set ALLOW_OVERWRITE_EXISTING_VIDEO=true in .env"
+            )
+            push_log("")
+            push_log("✅ Skipping download to protect existing file")
+
+            status_placeholder.warning(
+                f"⚠️ File already exists: {existing_files[0].name}\n\n"
+                "Download skipped to protect existing file.\n"
+                "To allow overwrites, set ALLOW_OVERWRITE_EXISTING_VIDEO=true"
+            )
+
+            # Mark download as finished
+            st.session_state.download_finished = True
+            st.stop()  # Stop execution here
+
     # build bases
     clean_url = sanitize_url(url)
 

@@ -60,6 +60,8 @@ _DEFAULTS = {
     "EMBED_SUBTITLES": "true",  # Embed subtitles by default
     # === Debug Options ===
     "REMOVE_TMP_FILES": "false",  # Keep temporary files by default for debugging and resilience (set to true to auto-cleanup)
+    # === Safety Options ===
+    "ALLOW_OVERWRITE_EXISTING_VIDEO": "false",  # Prevent overwriting existing videos by default (set to true to allow overwrites)
     # === Advanced Options ===
     "YTDLP_CUSTOM_ARGS": "",
     "CUTTING_MODE": "keyframes",  # keyframes or precise
@@ -117,6 +119,7 @@ class Settings:
 
     # Debug & Advanced
     REMOVE_TMP_FILES: bool
+    ALLOW_OVERWRITE_EXISTING_VIDEO: bool
     YTDLP_CUSTOM_ARGS: str
     CUTTING_MODE: str
     BROWSER_SELECT: str
@@ -181,6 +184,9 @@ def get_settings() -> Settings:
         EMBED_CHAPTERS=_to_bool(config["EMBED_CHAPTERS"], True),
         EMBED_SUBTITLES=_to_bool(config["EMBED_SUBTITLES"], True),
         REMOVE_TMP_FILES=_to_bool(config["REMOVE_TMP_FILES"], True),
+        ALLOW_OVERWRITE_EXISTING_VIDEO=_to_bool(
+            config["ALLOW_OVERWRITE_EXISTING_VIDEO"], False
+        ),
         YTDLP_CUSTOM_ARGS=config["YTDLP_CUSTOM_ARGS"],
         CUTTING_MODE=config["CUTTING_MODE"],
         BROWSER_SELECT=config["BROWSER_SELECT"],
@@ -340,6 +346,7 @@ def print_config_summary() -> None:
     print(f"   Cutting mode: {s.CUTTING_MODE}")
     print(f"   Browser select: {s.BROWSER_SELECT}")
     print(f"   Remove temp files: {s.REMOVE_TMP_FILES}")
+    print(f"   Allow overwrite existing: {s.ALLOW_OVERWRITE_EXISTING_VIDEO}")
     if s.YTDLP_CUSTOM_ARGS:
         print(f"   Custom yt-dlp args: {s.YTDLP_CUSTOM_ARGS}")
 
