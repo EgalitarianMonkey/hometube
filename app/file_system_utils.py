@@ -259,6 +259,25 @@ def move_file(src: Path, dest_dir: Path) -> Path:
     return target
 
 
+def copy_file(src: Path, dest_dir: Path) -> Path:
+    """
+    Copy file from source to destination directory.
+
+    This preserves the original file in tmp for debugging and resilience.
+    Use this instead of move_file to keep all download artifacts for future reuse.
+
+    Args:
+        src: Source file path
+        dest_dir: Destination directory path
+
+    Returns:
+        Path: Path to the copied file
+    """
+    target = dest_dir / src.name
+    shutil.copy2(str(src), str(target))  # copy2 preserves metadata
+    return target
+
+
 def should_remove_tmp_files() -> bool:
     """
     Check if temporary files should be removed.

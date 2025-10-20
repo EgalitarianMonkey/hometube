@@ -26,7 +26,7 @@ try:
         ensure_dir,
         cleanup_tmp_files,
         should_remove_tmp_files,
-        move_file,
+        copy_file,
         get_unique_video_folder_name_from_url,
     )
     from .display_utils import (
@@ -88,7 +88,7 @@ except ImportError:
         ensure_dir,
         cleanup_tmp_files,
         should_remove_tmp_files,
-        move_file,
+        copy_file,
         get_unique_video_folder_name_from_url,
     )
     from display_utils import (
@@ -3263,18 +3263,20 @@ if submitted:
     # Clean up temporary files now that cutting and metadata are complete
     cleanup_tmp_files(base_output, tmp_subfolder_dir, "subtitles")
 
-    # Measure final processed file size before moving
+    # Measure final processed file size before copying
     if final_source.exists():
         processed_size = final_source.stat().st_size
         processed_size_mb = processed_size / (1024 * 1024)
-        push_log(f"📊 Processed file size: {processed_size_mb:.2f}MiB (before move)")
+        push_log(f"📊 Processed file size: {processed_size_mb:.2f}MiB (before copy)")
 
     try:
-        final_moved = move_file(final_source, dest_dir)
+        # Copy file to destination (keeps original in tmp for resilience)
+        final_copied = copy_file(final_source, dest_dir)
+        push_log(f"📋 Original kept in: {final_source.parent.name}/{final_source.name}")
         progress_placeholder.progress(100, text=t("status_completed"))
 
         # Get final file size for accurate display
-        final_file_size = final_moved.stat().st_size
+        final_file_size = final_copied.stat().st_size
         final_size_mb = final_file_size / (1024 * 1024)
         final_size_str = f"{final_size_mb:.2f}MiB"
 
@@ -3294,9 +3296,9 @@ if submitted:
 
         # Format full file path properly for display
         if video_subfolder == "/":
-            display_path = f"Videos/{final_moved.name}"
+            display_path = f"Videos/{final_copied.name}"
         else:
-            display_path = f"Videos/{video_subfolder}/{final_moved.name}"
+            display_path = f"Videos/{video_subfolder}/{final_copied.name}"
 
         status_placeholder.success(t("status_file_ready", subfolder=display_path))
         st.toast(t("toast_download_completed"), icon="✅")

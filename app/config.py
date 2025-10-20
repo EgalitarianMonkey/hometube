@@ -59,7 +59,7 @@ _DEFAULTS = {
     "EMBED_CHAPTERS": "true",  # Embed chapters by default
     "EMBED_SUBTITLES": "true",  # Embed subtitles by default
     # === Debug Options ===
-    "REMOVE_TMP_FILES": "true",  # Remove temporary files after processing (set to false for debugging)
+    "REMOVE_TMP_FILES": "false",  # Keep temporary files by default for debugging and resilience (set to true to auto-cleanup)
     # === Advanced Options ===
     "YTDLP_CUSTOM_ARGS": "",
     "CUTTING_MODE": "keyframes",  # keyframes or precise
