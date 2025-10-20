@@ -62,6 +62,7 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 - **⚙️ Advanced configurations**: Set any custom yt-dlp arguments (proxy, max-filesize, etc.)
 - **🔐 Cookies Authentication**: Essential for reliable downloads - unlocks restricted content and prevents signature errors
 - **📊 Quality Control**: Auto-select best quality or manual override
+- **🧠 Intelligent Caching**: Smart URL analysis reuse with quality verification - avoids re-downloading metadata unless format quality improves
 - **🎥 Video Sources**: **YouTube**, Reddit, Vimeo, Dailymotion, TikTok, Twitch, Facebook, Instagra, etc. [See complete list (1800+)](docs/supported-platforms.md) -->
 
 <!-- ## ⚡ Technical Highlights

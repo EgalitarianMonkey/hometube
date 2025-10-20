@@ -44,6 +44,7 @@ try:
         sanitize_url,
         check_url_info_integrity,
     )
+    from .url_utils import should_reuse_url_info, save_url_info
     from .subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
@@ -107,6 +108,7 @@ except ImportError:
         sanitize_url,
         check_url_info_integrity,
     )
+    from url_utils import should_reuse_url_info, save_url_info
     from subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
@@ -1006,6 +1008,15 @@ def url_analysis(url: str) -> Optional[Dict]:
         # Prepare output path for JSON file in the unique video folder
         json_output_path = video_tmp_dir / "url_info.json"
 
+        # === CHECK IF URL_INFO.JSON ALREADY EXISTS WITH GOOD INTEGRITY ===
+        should_reuse, existing_info = should_reuse_url_info(json_output_path)
+
+        if should_reuse and existing_info:
+            # Store in session state and return immediately (no download needed)
+            st.session_state["url_info"] = existing_info
+            st.session_state["url_info_path"] = str(json_output_path)
+            return existing_info
+
         # Build cookies parameters from config (important to avoid bot detection)
         # Use config-based cookies since session_state may not be available yet
         cookies_params = build_cookies_params_from_config()
@@ -1286,13 +1297,7 @@ def url_analysis(url: str) -> Optional[Dict]:
                     safe_push_log("✅ Premium formats (AV1/VP9) detected")
 
             # Save JSON to file for later use with yt-dlp --load-info-json
-            try:
-                with open(json_output_path, "w", encoding="utf-8") as f:
-                    json.dump(info, f, indent=2, ensure_ascii=False)
-                safe_push_log(f"💾 URL info saved to {json_output_path}")
-            except Exception as e:
-                # Non-critical error - continue even if file write fails
-                safe_push_log(f"⚠️ Could not save URL info to file: {e}")
+            save_url_info(json_output_path, info)
 
             # Store in session state for global access
             st.session_state["url_info"] = info
