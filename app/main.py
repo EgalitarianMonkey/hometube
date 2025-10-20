@@ -27,6 +27,7 @@ try:
         cleanup_tmp_files,
         should_remove_tmp_files,
         move_file,
+        get_unique_video_folder_name_from_url,
     )
     from .display_utils import (
         fmt_hhmmss,
@@ -88,6 +89,7 @@ except ImportError:
         cleanup_tmp_files,
         should_remove_tmp_files,
         move_file,
+        get_unique_video_folder_name_from_url,
     )
     from display_utils import (
         fmt_hhmmss,
@@ -241,10 +243,13 @@ def _process_quality_strategy(quality_strategy: str, url: str) -> None:
         return
 
     try:
-        # Check if url_info.json exists and is current
-        json_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+        # Get or create unique folder for this video URL
+        video_tmp_dir = get_video_tmp_dir(url)
+
+        # Check if url_info.json exists in the unique video folder
+        json_path = video_tmp_dir / "url_info.json"
         if not json_path.exists():
-            # Need to analyze URL first
+            # Need to analyze URL first (will create the folder and file)
             url_info = url_analysis(url)
             if not url_info:
                 safe_push_log("⚠️ Failed to analyze URL for quality strategy")
@@ -434,19 +439,25 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
             st.warning(t("quality_no_formats_selection"))
 
 
-def _get_optimal_profiles_from_json() -> List[Dict]:
+def _get_optimal_profiles_from_json(url: str) -> List[Dict]:
     """
     Get optimal download profiles using get_profiles_with_formats_id_to_download().
 
     This is a simple wrapper that calls get_profiles_with_formats_id_to_download() which now
     returns complete profiles with all necessary fields (label, name, container, etc.).
 
+    Args:
+        url: Video URL to get profiles for
+
     Returns:
         List of complete profile dicts ready for download, or empty list if error
     """
     try:
-        # Check if url_info.json exists
-        json_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+        # Get or create unique folder for this video URL
+        video_tmp_dir = get_video_tmp_dir(url)
+
+        # Check if url_info.json exists in the unique video folder
+        json_path = video_tmp_dir / "url_info.json"
         if not json_path.exists():
             safe_push_log("⚠️ url_info.json not found, cannot use profile strategy")
             return []
@@ -587,7 +598,7 @@ def smart_download_with_profiles(
     else:
         # Fallback to old method if no strategy profiles available
         safe_push_log("⚠️ No strategy profiles found, using fallback method")
-        profiles_to_try = _get_optimal_profiles_from_json()
+        profiles_to_try = _get_optimal_profiles_from_json(url)
 
     if not profiles_to_try:
         error_msg = "No profiles available for download. Please select a quality strategy first."
@@ -980,8 +991,18 @@ def url_analysis(url: str) -> Optional[Dict]:
         return None
 
     try:
-        # Prepare output path for JSON file
-        json_output_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+        # Sanitize URL and create unique folder for this video
+        clean_url = sanitize_url(url)
+        unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
+        video_tmp_dir = TMP_DOWNLOAD_FOLDER / unique_folder_name
+        ensure_dir(video_tmp_dir)
+
+        # Store in session state for reuse across the application
+        st.session_state["video_tmp_dir"] = video_tmp_dir
+        st.session_state["unique_folder_name"] = unique_folder_name
+
+        # Prepare output path for JSON file in the unique video folder
+        json_output_path = video_tmp_dir / "url_info.json"
 
         # Build cookies parameters from config (important to avoid bot detection)
         # Use config-based cookies since session_state may not be available yet
@@ -1004,7 +1025,7 @@ def url_analysis(url: str) -> Optional[Dict]:
             "--flat-playlist",  # For playlists, get basic info without extracting all videos
             "--playlist-end",
             "1",  # Only first video for quick playlist detection
-            sanitize_url(url),
+            clean_url,
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -1039,7 +1060,7 @@ def url_analysis(url: str) -> Optional[Dict]:
                     "3",
                     "--no-cache-dir",
                     *cookies_params,
-                    sanitize_url(url),
+                    clean_url,
                 ]
 
                 result = subprocess.run(
@@ -1074,7 +1095,7 @@ def url_analysis(url: str) -> Optional[Dict]:
                 if not needs_auth and cookies_params:
                     cmd_retry.extend(cookies_params)
 
-                cmd_retry.append(sanitize_url(url))
+                cmd_retry.append(clean_url)
 
                 result = subprocess.run(
                     cmd_retry, capture_output=True, text=True, timeout=45
@@ -1322,6 +1343,37 @@ def get_url_info_path() -> Optional[Path]:
     if path_str and Path(path_str).exists():
         return Path(path_str)
     return None
+
+
+def get_video_tmp_dir(url: str) -> Path:
+    """
+    Get or create the unique temporary directory for a video URL.
+
+    Uses session state cache to avoid recalculating the folder name.
+    If not in cache, calculates it and stores it for reuse.
+
+    Args:
+        url: Video URL (will be sanitized internally)
+
+    Returns:
+        Path to the unique temporary directory for this video
+    """
+    # Check if we already have it in session state
+    cached_dir = st.session_state.get("video_tmp_dir")
+    if cached_dir and isinstance(cached_dir, Path):
+        return cached_dir
+
+    # Calculate and cache it
+    clean_url = sanitize_url(url)
+    unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
+    video_tmp_dir = TMP_DOWNLOAD_FOLDER / unique_folder_name
+    ensure_dir(video_tmp_dir)
+
+    # Store in session state for reuse
+    st.session_state["video_tmp_dir"] = video_tmp_dir
+    st.session_state["unique_folder_name"] = unique_folder_name
+
+    return video_tmp_dir
 
 
 def analyze_video_on_url_change(url: str) -> None:
@@ -2691,17 +2743,24 @@ if submitted:
 
     push_log(f"📁 Destination folder: {dest_dir}")
 
-    # Create temporary subfolder structure with same hierarchy
-    if video_subfolder == "/":
-        tmp_subfolder_dir = TMP_DOWNLOAD_FOLDER
-    else:
-        tmp_subfolder_dir = TMP_DOWNLOAD_FOLDER / video_subfolder
-        ensure_dir(tmp_subfolder_dir)
-
-    push_log(t("log_temp_download_folder", folder=tmp_subfolder_dir))
-
     # build bases
     clean_url = sanitize_url(url)
+
+    # Get or create unique temporary folder for this specific video URL
+    # This ensures each video has its own isolated workspace
+    # Uses cached value from session state if url_analysis was already called
+    tmp_video_dir = get_video_tmp_dir(url)
+    unique_folder_name = st.session_state.get("unique_folder_name", "unknown")
+
+    # Create temporary subfolder structure within the unique video folder
+    if video_subfolder == "/":
+        tmp_subfolder_dir = tmp_video_dir
+    else:
+        tmp_subfolder_dir = tmp_video_dir / video_subfolder
+        ensure_dir(tmp_subfolder_dir)
+
+    push_log(f"🔧 Unique video workspace: {unique_folder_name}")
+    push_log(t("log_temp_download_folder", folder=tmp_subfolder_dir))
 
     # Setup cookies for yt-dlp operations
     cookies_part = build_cookies_params()
