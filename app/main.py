@@ -31,6 +31,8 @@ try:
     from .display_utils import (
         fmt_hhmmss,
         parse_time_like,
+        build_info_items,
+        render_media_card,
     )
     from .medias_utils import (
         analyze_audio_formats,
@@ -90,6 +92,8 @@ except ImportError:
     from display_utils import (
         fmt_hhmmss,
         parse_time_like,
+        build_info_items,
+        render_media_card,
     )
     from medias_utils import (
         analyze_audio_formats,
@@ -220,61 +224,6 @@ AUTH_ERROR_PATTERNS = [
     "403",
     "forbidden",
 ]
-
-
-# === LEGACY STUBS FOR UI COMPATIBILITY ===
-# These functions are stubs to allow the UI to compile
-# The actual download logic uses ONLY the new strategy (_get_optimal_profiles_from_json)
-
-# Empty profile list - old static profiles not used anymore
-QUALITY_PROFILES = []
-
-
-def get_profile_by_name(name: str) -> Optional[Dict]:
-    """Stub - not used in new strategy"""
-    return None
-
-
-def get_default_profile_index() -> int:
-    """Stub - not used in new strategy"""
-    return 0
-
-
-def format_profile_codec_info(profile: Dict) -> str:
-    """Stub - not used in new strategy"""
-    return "Using new dynamic strategy"
-
-
-def get_optimal_profiles(formats: List[Dict], max_profiles: int = 10) -> List[Dict]:
-    """Stub - not used in new strategy"""
-    return []
-
-
-def get_profile_availability_summary(formats: List[Dict]) -> Dict:
-    """Stub - not used in new strategy"""
-    return {}
-
-
-def analyze_video_formats_unified(
-    url: str, cookies_part: List[str]
-) -> Tuple[Dict[str, bool], List[Dict]]:
-    """Stub - not used in new strategy"""
-    return {}, []
-
-
-def get_download_configuration() -> Dict:
-    """Stub - returns default config for new strategy"""
-    return {
-        "download_mode": "auto",
-        "selected_profile_name": None,
-        "selected_format": None,
-        "refuse_quality_downgrade": False,
-    }
-
-
-def generate_format_string_from_profile(profile: Dict) -> str:
-    """Stub - not used in new strategy"""
-    return ""
 
 
 # === VIDEO FORMAT EXTRACTION AND ANALYSIS ===
@@ -1298,162 +1247,53 @@ def display_url_info(url_info: Dict) -> None:
     if is_playlist:
         # ===== PLAYLIST INFORMATION =====
         title = url_info.get("title", "Unknown Playlist")
-        entries_count = len(url_info.get("entries", []))
         uploader = url_info.get("uploader", url_info.get("channel", ""))
 
-        # For flat-playlist mode, use playlist_count if available
-        if "playlist_count" in url_info:
-            entries_count = url_info["playlist_count"]
-
-        # Get first video info if available
-        first_video_title = ""
-        if url_info.get("entries") and len(url_info["entries"]) > 0:
-            first_video = url_info["entries"][0]
-            if isinstance(first_video, dict) and "title" in first_video:
-                first_video_title = first_video["title"]
-
-        # Build compact playlist info
-        playlist_info_items = []
-
-        playlist_info_items.append(
-            f'<span style="color: #e2e8f0;">&nbsp; {platform_emoji} &nbsp; {platform_name} Playlist</span>'
-        )
-        if uploader:
-            playlist_info_items.append(
-                f'<span style="color: #e2e8f0;">👤 &nbsp; {uploader}</span>'
-            )
-        playlist_info_items.append(
-            f'<span style="color: #e2e8f0;">📊 &nbsp; {entries_count} videos</span>'
-        )
-        if first_video_title:
-            # Truncate long titles for first video
-            truncated_title = (
-                first_video_title[:50] + "..."
-                if len(first_video_title) > 50
-                else first_video_title
-            )
-            playlist_info_items.append(
-                f'<span style="color: #94a3b8; font-size: 0.85em;">📹 &nbsp; {truncated_title}</span>'
-            )
-
-        playlist_info_line = (
-            ' <span style="color: #4ade80;">&nbsp; &nbsp; &nbsp;</span> '.join(
-                playlist_info_items
-            )
-            if playlist_info_items
-            else ""
+        # Get playlist count
+        entries_count = url_info.get("playlist_count") or len(
+            url_info.get("entries", [])
         )
 
-        # Display everything in one compact card
-        st.html(
-            f"""
-            <div style="
-                background: linear-gradient(135deg, #1e3a2e 0%, #2d5a45 100%);
-                border-radius: 12px;
-                padding: 18px;
-                border-left: 5px solid #4ade80;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                margin: 10px 0;
-            ">
-                <h2 style="
-                    color: #ffffff;
-                    font-size: 1.3em;
-                    font-weight: 600;
-                    margin: 0 0 12px 0;
-                    line-height: 1.3;
-                ">
-                    {title}
-                </h2>
-                
-                {f'''<div style="
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 8px 12px;
-                    font-size: 0.9em;
-                    padding-left: 12px;
-                ">
-                    {playlist_info_line}
-                </div>''' if playlist_info_line else ''}
-            </div>
-            """
+        # Get first video title if available
+        first_video_title = None
+        entries = url_info.get("entries", [])
+        if entries and isinstance(entries[0], dict):
+            first_video_title = entries[0].get("title")
+
+        # Build info items using helper
+        info_items = build_info_items(
+            platform_emoji=platform_emoji,
+            platform_name=platform_name,
+            media_type="Playlist",
+            uploader=uploader,
+            entries_count=entries_count,
+            first_video_title=first_video_title,
         )
+
+        # Render card
+        st.html(render_media_card(title, info_items))
 
     elif url_info.get("_type") == "video" or "duration" in url_info:
         # ===== SINGLE VIDEO INFORMATION =====
         title = url_info.get("title", "Unknown Video")
+        uploader = url_info.get("uploader", url_info.get("channel", ""))
         duration = url_info.get("duration", 0)
         view_count = url_info.get("view_count")
         like_count = url_info.get("like_count")
-        uploader = url_info.get("uploader", url_info.get("channel", ""))
 
-        # Format data for display
-        duration_str = fmt_hhmmss(int(duration)) if duration and duration > 0 else ""
-        views_formatted = f"{view_count:,}".replace(",", " ") if view_count else ""
-        likes_formatted = (
-            f"{like_count:,}".replace(",", " ") if like_count and like_count > 0 else ""
+        # Build info items using helper
+        info_items = build_info_items(
+            platform_emoji=platform_emoji,
+            platform_name=platform_name,
+            media_type="Video",
+            uploader=uploader,
+            duration=duration,
+            view_count=view_count,
+            like_count=like_count,
         )
 
-        # Build compact inline stats
-        stats_items = []
-        stats_items.append(
-            f'<span style="color: #e2e8f0;">&nbsp; {platform_emoji} &nbsp; {platform_name} Video</span>'
-        )
-        if uploader:
-            stats_items.append(
-                f'<span style="color: #e2e8f0;">👤 &nbsp; {uploader}</span>'
-            )
-        if duration > 0:
-            stats_items.append(
-                f'<span style="color: #e2e8f0;">⏱️ &nbsp; {duration_str}</span>'
-            )
-        if view_count:
-            stats_items.append(
-                f'<span style="color: #e2e8f0;">👁️ &nbsp; {views_formatted}</span>'
-            )
-        if like_count is not None and like_count > 0:
-            stats_items.append(
-                f'<span style="color: #e2e8f0;">👍 &nbsp; {likes_formatted}</span>'
-            )
-
-        stats_line = (
-            ' <span style="color: #4ade80;">&nbsp; &nbsp;</span> '.join(stats_items)
-            if stats_items
-            else ""
-        )
-
-        # Display everything in one compact card
-        st.html(
-            f"""
-            <div style="
-                background: linear-gradient(135deg, #1e3a2e 0%, #2d5a45 100%);
-                border-radius: 12px;
-                padding: 18px;
-                border-left: 5px solid #4ade80;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                margin: 10px 0;
-            ">                
-                <h2 style="
-                    color: #ffffff;
-                    font-size: 1.3em;
-                    font-weight: 600;
-                    margin: 0 0 12px 0;
-                    line-height: 1.3;
-                ">
-                    {title}
-                </h2>
-                
-                {f'''<div style="
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 8px 12px;
-                    font-size: 0.9em;
-                    padding-left: 12px;
-                ">
-                    {stats_line}
-                </div>''' if stats_line else ''}
-            </div>
-            """
-        )
+        # Render card
+        st.html(render_media_card(title, info_items))
 
     else:
         # Unknown format - not a video or playlist
@@ -1502,187 +1342,6 @@ def analyze_video_on_url_change(url: str) -> None:
             st.session_state.pop("available_codecs", None)
             st.session_state.pop("available_formats", None)
             st.session_state.pop("codecs_detected_for_url", None)
-
-
-def detect_video_quality_now(url: str) -> None:
-    """
-    Simple function to detect video quality when user clicks button or starts download.
-    Shows all logs in real-time directly in the UI.
-
-    Args:
-        url: Video URL to analyze
-    """
-    if not url:
-        safe_push_log("❌ No URL provided for quality detection")
-        return
-
-    clean_url = sanitize_url(url)
-
-    # Check if we already have results for this URL
-    cached_url = st.session_state.get("codecs_detected_for_url", "")
-    if cached_url == clean_url and st.session_state.get("available_codecs"):
-        safe_push_log("💾 Using cached quality analysis results")
-        return
-
-    safe_push_log("")
-    safe_push_log(f"🚀 Starting quality detection for: {clean_url[:50]}...")
-
-    # Prepare authentication
-    cookies_method = st.session_state.get("cookies_method", "none")
-    cookies_part = []
-
-    if cookies_method != "none":
-        try:
-            cookies_part = build_cookies_params()
-            if cookies_part:
-                safe_push_log(f"🍪 Using cookies from {cookies_method}")
-            else:
-                safe_push_log(
-                    f"⚠️ Cookies method '{cookies_method}' configured but no valid cookies found"
-                )
-                cookies_method = "none"
-        except Exception as e:
-            safe_push_log(f"❌ Cookie setup failed: {str(e)[:50]}...")
-            cookies_method = "none"
-            cookies_part = []
-
-    # Perform analysis with spinner for user feedback
-    try:
-        available_codecs, available_formats = analyze_video_formats_unified(
-            clean_url, cookies_part
-        )
-
-        # Store results in session state
-        st.session_state["available_codecs"] = available_codecs
-        st.session_state["available_formats"] = available_formats
-        st.session_state["codecs_detected_for_url"] = clean_url
-        st.session_state["formats_detection_timestamp"] = time.time()
-
-        # Calculate optimal profiles based on detected formats
-        try:
-            profile_summary = get_profile_availability_summary(available_formats)
-
-            # Extract available profile names from summary
-            available_profile_names = [
-                name for name, info in profile_summary.items() if info["available"]
-            ]
-
-            # Store optimal profiles in session state for UI display
-            st.session_state["available_profiles"] = available_profile_names
-            st.session_state["profile_summary"] = profile_summary
-
-            safe_push_log(
-                f"🎯 Profile analysis: {len(available_profile_names)} profiles available from {len(QUALITY_PROFILES)} total"
-            )
-
-        except Exception as e:
-            safe_push_log(f"⚠️ Profile analysis failed: {str(e)[:50]}... Using fallback")
-            # Set empty profiles to trigger fallback behavior
-            st.session_state["available_profiles"] = []
-            st.session_state["profile_summary"] = {}
-
-        # Success message
-        codec_count = sum(available_codecs.values())
-        format_count = len(available_formats)
-
-        has_premium = available_codecs.get("av01") and available_codecs.get("opus")
-        has_modern = available_codecs.get("vp9") and available_codecs.get("opus")
-
-        if has_premium:
-            safe_push_log(
-                "🎉 ✅ Quality detection complete: Premium quality formats available!"
-            )
-        elif has_modern:
-            safe_push_log(
-                "✅ Quality detection complete: Modern quality formats available"
-            )
-        else:
-            safe_push_log(
-                "✅ Quality detection complete: Standard quality formats available"
-            )
-
-        safe_push_log(f"📊 Final results: {codec_count} codecs, {format_count} formats")
-        safe_push_log("")
-
-    except Exception as e:
-        safe_push_log(f"❌ Quality detection failed: {str(e)[:100]}...")
-        # Set optimistic defaults
-        st.session_state["available_codecs"] = {
-            "av01": True,
-            "vp9": True,
-            "h264": True,
-            "opus": True,
-            "aac": True,
-        }
-        st.session_state["available_formats"] = []
-        st.session_state["codecs_detected_for_url"] = clean_url
-
-
-def get_cached_video_analysis(url: str) -> Tuple[Dict[str, bool], List[Dict]]:
-    """
-    Get cached video analysis results from session state.
-
-    Args:
-        url: Video URL to get analysis for
-
-    Returns:
-        Tuple[Dict[str, bool], List[Dict]]: (available_codecs, available_formats)
-        Returns optimistic defaults if no cache or URL mismatch
-    """
-    if not url:
-        # Return defaults for empty URL
-        default_codecs = {
-            "av01": True,
-            "vp9": True,
-            "h264": True,
-            "opus": True,
-            "aac": True,
-        }
-        return default_codecs, []
-
-    url = url.strip()
-    cached_url = st.session_state.get("codecs_detected_for_url", "")
-
-    if (
-        cached_url == url
-        and "available_codecs" in st.session_state
-        and "available_formats" in st.session_state
-    ):
-        # Return cached results
-        return (
-            st.session_state["available_codecs"],
-            st.session_state["available_formats"],
-        )
-
-    # No cache or URL mismatch - return optimistic defaults
-    default_codecs = {
-        "av01": True,
-        "vp9": True,
-        "h264": True,
-        "opus": True,
-        "aac": True,
-    }
-    return default_codecs, []
-
-    # DEPRECATED - No longer using async format analysis with threading
-    # Now using simple synchronous detect_video_quality_now() function
-    # Threading code and cookie preparation removed - handled in synchronous functions
-
-
-# _background_format_analysis function removed - threading approach abandoned
-# Using simple synchronous approach with detect_video_quality_now() instead
-
-
-# get_analysis_status_display() function removed - no longer needed with synchronous approach
-
-
-# DEPRECATED - No longer using thread-based logging
-# def analysis_log(message: str):
-#     """DEPRECATED: Was for thread-safe logging, now using direct safe_push_log"""
-#     pass
-
-
-# transfer_analysis_logs_to_main function removed - no longer needed with synchronous approach
 
 
 def build_cookies_params() -> List[str]:
