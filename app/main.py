@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 # Third-party imports
-import requests
 import streamlit as st
 
 try:
@@ -18,28 +17,58 @@ try:
     from .core import (
         build_base_ytdlp_command,
         build_cookies_params as core_build_cookies_params,
-        build_sponsorblock_params as core_build_sponsorblock_params,
-        get_sponsorblock_config as core_get_sponsorblock_config,
     )
-    from .utils import (
+    from .file_system_utils import (
         is_valid_cookie_file,
+        is_valid_browser,
         sanitize_filename,
-        sanitize_url,
-        video_id_from_url,
-        parse_time_like,
-        fmt_hhmmss,
+        list_subdirs_recursive,
+        ensure_dir,
+        cleanup_tmp_files,
+        should_remove_tmp_files,
+        move_file,
     )
-    from .quality_profiles import QUALITY_PROFILES
+    from .display_utils import (
+        fmt_hhmmss,
+        parse_time_like,
+    )
+    from .medias_utils import (
+        analyze_audio_formats,
+        get_profiles_with_formats_id_to_download,
+        get_available_formats,
+        get_video_title,
+        customize_video_metadata,
+        sanitize_url,
+    )
     from .subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
         check_required_subtitles_embedded,
         find_subtitle_files_optimized,
     )
-    from .profile_utils import (
-        match_profiles_to_formats,
-        generate_profile_combinations,
-        parse_format_line,
+    from .ytdlp_version_check import check_and_show_updates
+    from .logs_utils import (
+        is_cookies_expired_warning,
+        should_suppress_message,
+        is_authentication_error,
+        is_format_unavailable_error,
+        safe_push_log,
+        log_title,
+        log_authentication_error_hint,
+        log_format_unavailable_error_hint,
+        register_main_push_log,
+    )
+    from .cut_utils import (
+        get_keyframes,
+        find_nearest_keyframes,
+        build_cut_command,
+    )
+    from .sponsors_utils import (
+        fetch_sponsorblock_segments,
+        get_sponsorblock_segments,
+        calculate_sponsor_overlap,
+        get_sponsorblock_config,
+        build_sponsorblock_params,
     )
 except ImportError:
     # Fallback for direct execution from app directory
@@ -47,38 +76,109 @@ except ImportError:
     from core import (
         build_base_ytdlp_command,
         build_cookies_params as core_build_cookies_params,
-        build_sponsorblock_params as core_build_sponsorblock_params,
-        get_sponsorblock_config as core_get_sponsorblock_config,
     )
-    from utils import (
+    from file_system_utils import (
         is_valid_cookie_file,
+        is_valid_browser,
         sanitize_filename,
-        sanitize_url,
-        video_id_from_url,
-        parse_time_like,
-        fmt_hhmmss,
+        list_subdirs_recursive,
+        ensure_dir,
+        cleanup_tmp_files,
+        should_remove_tmp_files,
+        move_file,
     )
-    from quality_profiles import QUALITY_PROFILES
+    from display_utils import (
+        fmt_hhmmss,
+        parse_time_like,
+    )
+    from medias_utils import (
+        analyze_audio_formats,
+        get_profiles_with_formats_id_to_download,
+        get_available_formats,
+        get_video_title,
+        customize_video_metadata,
+        sanitize_url,
+    )
     from subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
         check_required_subtitles_embedded,
         find_subtitle_files_optimized,
     )
-    from profile_utils import (
-        match_profiles_to_formats,
-        generate_profile_combinations,
-        parse_format_line,
+    from ytdlp_version_check import check_and_show_updates
+    from logs_utils import (
+        is_cookies_expired_warning,
+        should_suppress_message,
+        is_authentication_error,
+        is_format_unavailable_error,
+        safe_push_log,
+        log_title,
+        log_authentication_error_hint,
+        log_format_unavailable_error_hint,
+        register_main_push_log,
+    )
+    from cut_utils import (
+        get_keyframes,
+        find_nearest_keyframes,
+        build_cut_command,
+    )
+    from sponsors_utils import (
+        fetch_sponsorblock_segments,
+        get_sponsorblock_segments,
+        calculate_sponsor_overlap,
+        get_sponsorblock_config,
+        build_sponsorblock_params,
     )
 
+# Configuration import (must be after translations for configure_language)
+from app.config import (
+    get_settings,
+    ensure_folders_exist,
+    print_config_summary,
+    get_default_subtitle_languages,
+)
 
 # === CONSTANTS ===
 
+# Load settings once
+settings = get_settings()
+
+# Configure translations with the loaded UI language
+configure_language(settings.UI_LANGUAGE)
+
+# Ensure folders exist and get paths
+VIDEOS_FOLDER, TMP_DOWNLOAD_FOLDER = ensure_folders_exist()
+
+# Extract commonly used settings for backward compatibility
+YOUTUBE_COOKIES_FILE_PATH = settings.YOUTUBE_COOKIES_FILE_PATH
+COOKIES_FROM_BROWSER = settings.COOKIES_FROM_BROWSER
+IN_CONTAINER = settings.IN_CONTAINER
+
+# Get default subtitle languages based on audio preferences
+SUBTITLES_CHOICES = get_default_subtitle_languages()
+
+# Print configuration summary in development mode
+if __name__ == "__main__" or settings.DEBUG:
+    print_config_summary()
+
+# CSS Styles
+LOGS_CONTAINER_STYLE = """
+    height: 400px;
+    overflow-y: auto;
+    background-color: #0e1117;
+    color: #fafafa;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 14px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    border: 1px solid #262730;
+"""
+
 # API and system constants
-SPONSORBLOCK_API = "https://sponsor.ajay.app"
 MIN_COOKIE_FILE_SIZE = 100  # bytes
 ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-HOMETUBE_GITHUB_REPO = "EgalitarianMonkey/hometube"  # GitHub repository for HomeTube
 
 # Browser support for cookie extraction
 SUPPORTED_BROWSERS = [
@@ -122,1029 +222,352 @@ AUTH_ERROR_PATTERNS = [
 ]
 
 
-# === YT-DLP VERSION CHECK ===
+# === LEGACY STUBS FOR UI COMPATIBILITY ===
+# These functions are stubs to allow the UI to compile
+# The actual download logic uses ONLY the new strategy (_get_optimal_profiles_from_json)
+
+# Empty profile list - old static profiles not used anymore
+QUALITY_PROFILES = []
 
 
-def get_current_ytdlp_version() -> Optional[str]:
-    """Get the currently installed yt-dlp version."""
-
-    try:
-        result = subprocess.run(
-            ["yt-dlp", "--version"], capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-        pass
+def get_profile_by_name(name: str) -> Optional[Dict]:
+    """Stub - not used in new strategy"""
     return None
 
 
-def get_latest_ytdlp_version() -> Optional[str]:
-    """Get the latest yt-dlp version from GitHub API."""
-    # Environment variable for testing
-    test_version = CONFIG.get("TEST_LATEST_YTDLP_VERSION")
-    if test_version:
-        return test_version
+def get_default_profile_index() -> int:
+    """Stub - not used in new strategy"""
+    return 0
 
-    try:
-        response = requests.get(
-            "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", timeout=10
-        )
-        if response.status_code == 200:
-            data = response.json()
-            return data.get("tag_name", "").lstrip("v")  # Remove 'v' prefix if present
-    except (requests.RequestException, json.JSONDecodeError, Exception):
-        pass
-    return None
 
-
-# === HOMETUBE VERSION CHECK ===
-
-
-def get_current_hometube_version() -> Optional[str]:
-    """Get the current HomeTube version from pyproject.toml."""
-
-    try:
-        import tomllib
-
-        pyproject_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "pyproject.toml"
-        )
-        with open(pyproject_path, "rb") as f:
-            data = tomllib.load(f)
-            return data.get("project", {}).get("version")
-    except (FileNotFoundError, ImportError, Exception):
-        # Fallback for Python < 3.11 or if tomllib not available
-        try:
-            pyproject_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), "pyproject.toml"
-            )
-            with open(pyproject_path, "r") as f:
-                for line in f:
-                    if line.strip().startswith("version = "):
-                        # Extract version from line like: version = "0.7.1"
-                        return line.split('"')[1]
-        except (FileNotFoundError, IndexError, Exception):
-            pass
-    return None
-
-
-def get_latest_hometube_version() -> Optional[str]:
-    """Get the latest HomeTube version from GitHub API."""
-    # Environment variable for testing
-    test_version = CONFIG.get("TEST_LATEST_HOMETUBE_VERSION")
-    if test_version:
-        return test_version
-
-    try:
-        response = requests.get(
-            f"https://api.github.com/repos/{HOMETUBE_GITHUB_REPO}/releases/latest",
-            timeout=10,
-        )
-        if response.status_code == 200:
-            data = response.json()
-            return data.get("tag_name", "").lstrip("v")  # Remove 'v' prefix if present
-        elif response.status_code == 404:
-            # Repository might not have releases yet, try tags
-            response = requests.get(
-                f"https://api.github.com/repos/{HOMETUBE_GITHUB_REPO}/tags", timeout=10
-            )
-            if response.status_code == 200:
-                data = response.json()
-                if data and len(data) > 0:
-                    return data[0].get("name", "").lstrip("v")
-    except (requests.RequestException, json.JSONDecodeError, Exception):
-        pass
-    return None
-
-
-def check_and_show_updates() -> None:
-    """
-    Simplified function to check and display update information
-    Called when user clicks the update check button in sidebar
-    """
-    try:
-        # Get current versions
-        ytdlp_current = get_current_ytdlp_version() or "unknown"
-        ytdlp_latest = get_latest_ytdlp_version() or "unknown"
-        hometube_current = get_current_hometube_version() or "unknown"
-        hometube_latest = get_latest_hometube_version() or "unknown"
-
-        # Build information message
-        update_info_markdown = f"""
-**🔄 Update Information**
-
-**HomeTube:**
-
-**{t('update_current_version')}:** {hometube_current}  
-**{t('update_latest_version')}:** {hometube_latest}  
-**Status:** {"✅ Up to date" if hometube_current == hometube_latest else "🔄 Update available"}
-
-**yt-dlp:**
-
-**{t('update_current_version')}:** {ytdlp_current}  
-**{t('update_latest_version')}:** {ytdlp_latest}  
-**Status:** {"✅ Up to date" if ytdlp_current == ytdlp_latest else "🔄 Update available"}
-
-**{t('update_docker_title')}:**
-
-{t('update_docker_instruction')}
-
-{t('update_docker_command')}
-
-**{t('update_local_title')} (yt-dlp):**
-
-{t('update_local_instruction')}
-
-**{t('update_git_title')} (HomeTube):**
-
-{t('update_git_instruction')}
-            """
-        st.info(update_info_markdown)
-
-    except Exception as e:
-        # Never break the app, but show a friendly error
-        st.error(f"⚠️ Could not check for updates: {str(e)}")
-        st.info("Please check for updates manually using the commands above.")
-
-
-# === VIDEO FORMAT EXTRACTION AND ANALYSIS ===
-
-
-# parse_format_line is now imported at the top of the file from profile_utils
-
-
-def get_video_formats(
-    url: str, cookies_part: List[str] = None
-) -> Tuple[bool, List[Dict], str]:
-    """
-    Retrieve video format list from yt-dlp.
-
-    Args:
-        url: Video URL to analyze
-        cookies_part: Optional cookie parameters
-
-    Returns:
-        Tuple[bool, List[Dict], str]:
-        - success: True if retrieval successful
-        - formats: List of format dictionaries with format_id, ext, vcodec, acodec, height, etc.
-        - error_msg: Error message if failed
-    """
-    if cookies_part is None:
-        cookies_part = []
-
-    safe_push_log("🔍 Retrieving video formats...")
-
-    # Fallback strategies with different clients
-    strategies = [
-        {"name": "Default", "args": [], "timeout": 20},
-        {
-            "name": "Android",
-            "args": ["--extractor-args", "youtube:player_client=android"],
-            "timeout": 25,
-        },
-        {
-            "name": "iOS",
-            "args": ["--extractor-args", "youtube:player_client=ios"],
-            "timeout": 25,
-        },
-        {
-            "name": "Web",
-            "args": ["--extractor-args", "youtube:player_client=web"],
-            "timeout": 30,
-        },
-    ]
-
-    last_error = ""
-
-    for i, strategy in enumerate(strategies, 1):
-        try:
-            safe_push_log(f"🔄 Strategy {i}/{len(strategies)}: {strategy['name']}")
-
-            # Build command
-            cmd = ["yt-dlp", "--list-formats", "--no-download"] + strategy["args"]
-            if cookies_part:
-                cmd.extend(cookies_part)
-                safe_push_log("   🍪 With authentication...")
-            else:
-                safe_push_log("   🌐 Without authentication...")
-            cmd.append(url)
-
-            result = run_subprocess_safe(
-                cmd,
-                timeout=strategy["timeout"],
-                error_context=f"Extraction formats ({strategy['name']})",
-            )
-
-            if result.returncode == 0 and result.stdout.strip():
-                output_lines = result.stdout.strip().split("\n")
-
-                # Parse format lines
-                formats = []
-                for line in output_lines:
-                    format_info = parse_format_line(line)
-                    if format_info:
-                        formats.append(format_info)
-
-                if formats:
-                    video_formats = [f for f in formats if f["vcodec"] != "none"]
-                    audio_formats = [f for f in formats if f["acodec"] != "none"]
-
-                    safe_push_log(
-                        f"   ✅ {len(video_formats)} video formats, {len(audio_formats)} audio formats"
-                    )
-                    return True, formats, ""
-                else:
-                    safe_push_log("   ⚠️ No valid format parsed")
-                    # Debug: show some output lines
-                    safe_push_log(
-                        f"   🔍 Debug: {len(output_lines)} yt-dlp output lines"
-                    )
-                    for i, line in enumerate(output_lines[:5]):  # First 5 lines
-                        safe_push_log(
-                            f"   Line {i+1}: {line[:80]}..."
-                        )  # Truncate to 80 chars
-            else:
-                error_msg = result.stderr.strip() if result.stderr else "No output"
-                safe_push_log(f"   ❌ Failed: {error_msg[:50]}...")
-                last_error = error_msg
-
-        except Exception as e:
-            safe_push_log(f"   💥 Exception: {str(e)[:50]}...")
-            last_error = str(e)
-            continue
-
-    safe_push_log("❌ All extraction strategies failed")
-    return False, [], last_error
-
-
-# === PROFILE MATCHING SYSTEM ===
-
-
-def extract_format_codecs(formats: List[Dict]) -> Dict:
-    """
-    Extract available codecs and their formats from yt-dlp format list.
-
-    Args:
-        formats: List of format dictionaries from yt-dlp
-
-    Returns:
-        Dict with video_codecs and audio_codecs analysis
-    """
-    video_codecs = {}
-    audio_codecs = {}
-
-    for fmt in formats:
-        # Extract video codec info
-        vcodec = fmt.get("vcodec", "none")
-        if vcodec and vcodec != "none":
-            ext = fmt.get("ext", "unknown")
-            resolution = fmt.get("height", 0)
-            fps = fmt.get("fps", 0)
-
-            if vcodec not in video_codecs:
-                video_codecs[vcodec] = []
-
-            video_codecs[vcodec].append(
-                {
-                    "format_id": fmt.get("format_id"),
-                    "ext": ext,
-                    "resolution": resolution,
-                    "fps": fps,
-                    "filesize": fmt.get("filesize"),
-                    "tbr": fmt.get("tbr"),
-                }
-            )
-
-        # Extract audio codec info
-        acodec = fmt.get("acodec", "none")
-        if acodec and acodec != "none":
-            ext = fmt.get("ext", "unknown")
-            abr = fmt.get("abr", 0)
-
-            if acodec not in audio_codecs:
-                audio_codecs[acodec] = []
-
-            audio_codecs[acodec].append(
-                {
-                    "format_id": fmt.get("format_id"),
-                    "ext": ext,
-                    "abr": abr,
-                    "filesize": fmt.get("filesize"),
-                }
-            )
-
-    return {"video_codecs": video_codecs, "audio_codecs": audio_codecs}
-
-
-def match_codec_requirements(
-    available_codecs: Dict, codec_ext_requirements: List[Dict]
-) -> List[Dict]:
-    """
-    Match available codecs against profile requirements.
-
-    Args:
-        available_codecs: Available codecs from extract_format_codecs()
-        codec_ext_requirements: List of codec/ext requirements from profile
-
-    Returns:
-        List of matching codec combinations with their formats
-    """
-    matches = []
-
-    for requirement in codec_ext_requirements:
-        required_codecs = requirement.get("vcodec", requirement.get("acodec", []))
-        allowed_exts = requirement.get("ext", [])
-
-        for codec in required_codecs:
-            # Check for exact match or prefix match (e.g., 'av01' matches 'av01.0.08M.08')
-            matching_codecs = [
-                available_codec
-                for available_codec in available_codecs.keys()
-                if available_codec == codec or available_codec.startswith(codec)
-            ]
-
-            for matching_codec in matching_codecs:
-                codec_formats = available_codecs[matching_codec]
-
-                # Filter by extension if specified
-                if allowed_exts and None not in allowed_exts:
-                    codec_formats = [
-                        fmt for fmt in codec_formats if fmt["ext"] in allowed_exts
-                    ]
-
-                if codec_formats:
-                    # Sort by quality (resolution for video, bitrate for audio)
-                    if "resolution" in codec_formats[0]:  # Video codec
-                        codec_formats.sort(
-                            key=lambda x: (x["resolution"], x["fps"], x["tbr"] or 0),
-                            reverse=True,
-                        )
-                    else:  # Audio codec
-                        codec_formats.sort(key=lambda x: x["abr"] or 0, reverse=True)
-
-                    matches.append(
-                        {
-                            "codec": matching_codec,
-                            "original_requirement": requirement,
-                            "formats": codec_formats[:3],  # Top 3 best formats
-                        }
-                    )
-
-    return matches
-
-
-def match_profiles_to_formats_auto(formats: List[Dict]) -> List[Dict]:
-    """
-    Compatibility wrapper - match all QUALITY_PROFILES with available formats.
-
-    Args:
-        formats: List of formats retrieved by get_video_formats()
-
-    Returns:
-        List of optimal combinations sorted by priority/quality
-    """
-    if not formats:
-        safe_push_log("❌ No format available for matching")
-        return []
-
-    # Progress logging
-    video_formats = [f for f in formats if f["vcodec"] != "none"]
-    audio_formats = [f for f in formats if f["acodec"] != "none"]
-    safe_push_log(
-        f"📊 Analysis: {len(video_formats)} video formats, {len(audio_formats)} audio formats"
-    )
-
-    # Use utility function with VIDEO_QUALITY_MAX and all QUALITY_PROFILES
-    video_quality_max = CONFIG.get("VIDEO_QUALITY_MAX", "max")
-    combinations = match_profiles_to_formats(
-        formats, QUALITY_PROFILES, video_quality_max
-    )
-
-    # Log results
-    if combinations:
-        safe_push_log(f"🎯 {len(combinations)} combinations generated:")
-        for i, combo in enumerate(combinations, 1):
-            video_info = combo["video_format"]
-            audio_info = combo["audio_format"]
-            safe_push_log(f"   {i}. {combo['profile_label']}")
-            safe_push_log(
-                f"      Format: {combo['format_spec']} ({video_info['height']}p + {audio_info['abr']}kbps)"
-            )
-    else:
-        safe_push_log("❌ No viable combination found")
-
-    return combinations
+def format_profile_codec_info(profile: Dict) -> str:
+    """Stub - not used in new strategy"""
+    return "Using new dynamic strategy"
 
 
 def get_optimal_profiles(formats: List[Dict], max_profiles: int = 10) -> List[Dict]:
-    """
-    Compatibility function - calls the new match_profiles_to_formats.
-
-    Args:
-        formats: List of yt-dlp formats
-        max_profiles: Maximum number of profiles to return
-
-    Returns:
-        List of optimal combinations sorted by priority and quality
-    """
-    combinations = match_profiles_to_formats_auto(formats)
-    return combinations[:max_profiles]
+    """Stub - not used in new strategy"""
+    return []
 
 
 def get_profile_availability_summary(formats: List[Dict]) -> Dict:
-    """
-    Get a summary of profile availability for UI display.
-
-    Args:
-        formats: List of format dictionaries from yt-dlp
-
-    Returns:
-        Dictionary with profile availability information
-    """
-    if not formats:
-        return {}
-
-    available_formats = extract_format_codecs(formats)
-    summary = {}
-
-    for profile in QUALITY_PROFILES:
-        video_matches = match_codec_requirements(
-            available_formats["video_codecs"], profile["video_codec_ext"]
-        )
-        audio_matches = match_codec_requirements(
-            available_formats["audio_codecs"], profile["audio_codec_ext"]
-        )
-
-        available = len(video_matches) > 0 and len(audio_matches) > 0
-
-        summary[profile["name"]] = {
-            "available": available,
-            "label": profile["label"],
-            "video_codecs_found": len(video_matches),
-            "audio_codecs_found": len(audio_matches),
-            "video_matches": [m["codec"] for m in video_matches],
-            "audio_matches": [m["codec"] for m in audio_matches],
-        }
-
-    return summary
-
-
-def format_profile_for_display(combination: Dict) -> str:
-    """
-    Format a profile combination for user-friendly display.
-
-    Args:
-        combination: Profile combination from get_optimal_profiles()
-
-    Returns:
-        Formatted string for display
-    """
-    video_info = combination["video_format"]
-    audio_info = combination["audio_format"]
-
-    return (
-        f"{combination['profile_label']} | "
-        f"{video_info['resolution']}@{video_info.get('fps', '?')}fps "
-        f"({video_info.get('vcodec', '?')}) + "
-        f"{audio_info.get('abr', '?')}kbps "
-        f"({audio_info.get('acodec', '?')})"
-    )
-
-
-# === END DYNAMIC PROFILE MATCHING SYSTEM ===
+    """Stub - not used in new strategy"""
+    return {}
 
 
 def analyze_video_formats_unified(
     url: str, cookies_part: List[str]
 ) -> Tuple[Dict[str, bool], List[Dict]]:
-    """
-    Unified function that analyzes video formats and detects available codecs.
-
-    Compatibility wrapper around the new get_video_formats functions.
-
-    Args:
-        url: Video URL to analyze
-        cookies_part: Cookie parameters for authentication
-
-    Returns:
-        Tuple[Dict[str, bool], List[Dict]]:
-        - Codec availability dict: {"av01": True, "vp9": True, ...}
-        - List of all available formats with details (sorted by quality)
-    """
-    safe_push_log("")
-    log_title("🔍 Analyzing video formats and codecs...")
-
-    # Use the new simplified function
-    success, formats, error_msg = get_video_formats(url, cookies_part)
-
-    if success and formats:
-        # Extract available codecs
-        video_codecs = set()
-        audio_codecs = set()
-
-        for fmt in formats:
-            if fmt["vcodec"] != "none":
-                video_codecs.add(fmt["vcodec"])
-            if fmt["acodec"] != "none":
-                audio_codecs.add(fmt["acodec"])
-
-        # Create availability dict for compatibility
-        codecs_available = {
-            "av01": any(codec.startswith("av01") for codec in video_codecs),
-            "vp9": "vp9" in video_codecs,
-            "h264": any(
-                codec in ["h264", "avc1"] or codec.startswith("avc1")
-                for codec in video_codecs
-            ),
-            "opus": "opus" in audio_codecs,
-            "aac": "aac" in audio_codecs
-            or any(codec.startswith("mp4a") for codec in audio_codecs),
-        }
-
-        # Sort formats by quality (descending height)
-        sorted_formats = sorted(formats, key=lambda x: x.get("height", 0), reverse=True)
-
-        safe_push_log(f"✅ Codecs detected: {sum(codecs_available.values())}/5")
-        safe_push_log(f"📊 Formats analyzed: {len(sorted_formats)}")
-
-        return codecs_available, sorted_formats
-
-    # In case of failure, optimistic default return
-    safe_push_log("⚠️ Analysis failed, using default values")
-    default_codecs = {
-        "av01": True,
-        "vp9": True,
-        "h264": True,
-        "opus": True,
-        "aac": True,
-    }
-    return default_codecs, []
-
-
-def filter_viable_profiles(
-    available_codecs: Dict[str, bool], mode: str = "auto"
-) -> List[Dict]:
-    """
-    Filter quality profiles based on available codecs.
-
-    Args:
-        available_codecs: Dict of codec availability from probe_available_formats
-        mode: "auto" for fallback mode, "forced" for single profile mode
-
-    Returns:
-        List of viable profiles, sorted by priority
-    """
-    viable_profiles = []
-
-    # Analyze each profile for compatibility
-    for profile in QUALITY_PROFILES:
-        # Check if required codecs are available
-        required_codecs = profile.get("requires_probe", [])
-        profile_viable = all(
-            available_codecs.get(codec, True) for codec in required_codecs
-        )
-
-        if profile_viable:
-            viable_profiles.append(profile)
-        else:
-            missing_codecs = [
-                codec
-                for codec in required_codecs
-                if not available_codecs.get(codec, True)
-            ]
-
-            # Provide detailed explanation for why profile was skipped
-            reason_details = []
-            if "av01" in missing_codecs:
-                reason_details.append("AV1 codec not detected")
-            if "vp9" in missing_codecs:
-                reason_details.append("VP9 codec not detected")
-            if "opus" in missing_codecs:
-                reason_details.append("Opus audio not detected")
-
-            reason_str = (
-                " & ".join(reason_details)
-                if reason_details
-                else f"missing: {', '.join(missing_codecs)}"
-            )
-            safe_push_log(f"⏭️ Skipping {profile['label']} - {reason_str}")
-
-    if not viable_profiles:
-        # Fallback to most compatible profile if nothing else works
-        safe_push_log("")
-        safe_push_log("⚠️ Compatibility fallback activated")
-        safe_push_log("💡 No profiles matched the detected codecs")
-        safe_push_log("🔄 Forcing H.264 + AAC profile (maximum compatibility)")
-
-        viable_profiles = [
-            profile for profile in QUALITY_PROFILES if profile["name"] == "mp4_h264_aac"
-        ]
-
-        if not viable_profiles:
-            safe_push_log("❌ Critical error: Even basic H.264 profile not found!")
-
-    if viable_profiles:
-        safe_push_log(f"✅ Final selection: {len(viable_profiles)} viable profile(s)")
-        for i, p in enumerate(viable_profiles, 1):
-            safe_push_log(f"   {i}. {p['label']}")
-    return sorted(viable_profiles, key=lambda x: x["priority"])
-
-
-def generate_format_string_from_profile(profile: Dict) -> str:
-    """
-    Generate a yt-dlp format string from a modern profile structure.
-
-    Args:
-        profile: Profile dict with video_codec_ext and audio_codec_ext
-
-    Returns:
-        yt-dlp format string compatible with the old format system
-    """
-    video_parts = []
-    audio_parts = []
-
-    # Generate video format selectors
-    for video_spec in profile.get("video_codec_ext", []):
-        codecs = video_spec.get("vcodec", [])
-        exts = video_spec.get("ext", [])
-
-        for codec in codecs:
-            codec_selector = f"[vcodec^={codec}]"
-
-            if exts and None not in exts:
-                # Has specific extension requirements
-                for ext in exts:
-                    if ext:
-                        video_parts.append(f"bv*{codec_selector}[ext={ext}]")
-            else:
-                # No specific extension requirements
-                video_parts.append(f"bv*{codec_selector}")
-
-    # Generate audio format selectors
-    for audio_spec in profile.get("audio_codec_ext", []):
-        codecs = audio_spec.get("acodec", [])
-        exts = audio_spec.get("ext", [])
-
-        for codec in codecs:
-            codec_selector = f"[acodec^={codec}]"
-
-            if exts and None not in exts:
-                # Has specific extension requirements
-                for ext in exts:
-                    if ext:
-                        audio_parts.append(f"ba*{codec_selector}[ext={ext}]")
-            else:
-                # No specific extension requirements
-                audio_parts.append(f"ba*{codec_selector}")
-
-    # Combine video and audio parts
-    if not video_parts:
-        video_parts = ["bv*"]
-    if not audio_parts:
-        audio_parts = ["ba*"]
-
-    # Create combinations - each video with each audio
-    combinations = []
-    for video in video_parts[:2]:  # Limit to avoid too long strings
-        for audio in audio_parts[:2]:
-            combinations.append(f"{video}+{audio}")
-
-    # Join combinations with fallback separator
-    return "/".join(combinations) + "/b*"  # Final fallback to any format
-
-
-def get_profile_by_name(profile_name: str) -> Optional[Dict]:
-    """
-    Get a quality profile by name (case-insensitive).
-
-    Args:
-        profile_name: Name of the profile to find
-
-    Returns:
-        Profile dict if found, None otherwise
-    """
-    if not profile_name or not isinstance(profile_name, str):
-        return None
-
-    profile_name = profile_name.strip().lower()
-
-    # Skip auto mode
-    if profile_name == "auto":
-        return None
-
-    for profile in QUALITY_PROFILES:
-        if profile["name"].lower() == profile_name:
-            return profile
-
-    return None
-
-
-def format_profile_codec_info(profile: Dict) -> str:
-    """Format profile codec information for display."""
-    # Extract video codecs
-    video_codecs = []
-    for video_spec in profile.get("video_codec_ext", []):
-        video_codecs.extend(video_spec.get("vcodec", []))
-    video_display = " / ".join(video_codecs) if video_codecs else "Any"
-
-    # Extract audio codecs
-    audio_codecs = []
-    for audio_spec in profile.get("audio_codec_ext", []):
-        audio_codecs.extend(audio_spec.get("acodec", []))
-    audio_display = " / ".join(audio_codecs) if audio_codecs else "Any"
-
-    container = profile.get("container", "Unknown")
-
-    return f"🎬 Video: **{video_display}** | 🎵 Audio: **{audio_display}** | 📦 Container: **{container.upper()}**"
-
-
-def get_default_profile_index() -> int:
-    """
-    Get the default profile index based on QUALITY_PROFILE configuration.
-
-    For UI display purposes only. The actual profile selection logic
-    is handled in smart_download_with_profiles().
-
-    Returns:
-        Index of the configured profile in QUALITY_PROFILES, or 0 if auto/not found
-    """
-    default_profile_name = CONFIG.get("QUALITY_PROFILE", "auto").strip().lower()
-
-    # Auto mode or empty - return first profile for UI display
-    if default_profile_name in ["", "auto"]:
-        return 0
-
-    # Find the index of the configured profile
-    for i, profile in enumerate(QUALITY_PROFILES):
-        if profile["name"].lower() == default_profile_name:
-            return i
-
-    # If configured profile not found, return 0 and log a warning
-    print(
-        f"⚠️ Configured QUALITY_PROFILE '{default_profile_name}' not found, using first profile for display"
-    )
-    return 0
+    """Stub - not used in new strategy"""
+    return {}, []
 
 
 def get_download_configuration() -> Dict:
-    """
-    Centralized configuration retrieval from session state.
-
-    Returns:
-        Dict with all download configuration parameters
-    """
-    # Check if we have a dynamic profile selected (new system)
-    dynamic_profile = st.session_state.get("dynamic_profile_selected", None)
-    selected_profile_name = None
-
-    if dynamic_profile:
-        # Use dynamic_profile object directly
-        selected_profile_name = dynamic_profile
-    else:
-        # Fallback to traditional profile name lookup
-        profile_name = st.session_state.get("quality_profile", None)
-        if profile_name:
-            selected_profile_name = profile_name
-
+    """Stub - returns default config for new strategy"""
     return {
-        "download_mode": st.session_state.get("download_mode", "auto"),
-        "selected_profile_name": selected_profile_name,
-        "selected_format": st.session_state.get("selected_format", "auto"),
-        "refuse_quality_downgrade": st.session_state.get(
-            "refuse_quality_downgrade", False
-        ),
-        "embed_chapters": st.session_state.get("embed_chapters", True),
-        "embed_subs": st.session_state.get("embed_subs", True),
-        "ytdlp_custom_args": st.session_state.get("ytdlp_custom_args", ""),
+        "download_mode": "auto",
+        "selected_profile_name": None,
+        "selected_format": None,
+        "refuse_quality_downgrade": False,
     }
 
 
-def show_download_failure_help(cookies_available: bool, profiles_count: int):
+def generate_format_string_from_profile(profile: Dict) -> str:
+    """Stub - not used in new strategy"""
+    return ""
+
+
+# === VIDEO FORMAT EXTRACTION AND ANALYSIS ===
+
+
+def _process_quality_strategy(quality_strategy: str, url: str) -> None:
     """
-    Display helpful error messages when all download attempts fail.
+    Process the selected quality strategy and update session state with optimal profiles.
 
     Args:
-        cookies_available: Whether cookies are configured and available
-        profiles_count: Number of profiles that were attempted
+        quality_strategy: Selected strategy ("auto_best", "best_no_fallback", etc.)
+        url: Video URL to analyze
     """
-    safe_push_log("")
-    safe_push_log("❌ All profiles failed")
-    safe_push_log("=" * 30)
+    if not url or not url.strip():
+        return
 
-    if not cookies_available:
-        safe_push_log("🔑 No authentication configured")
-        safe_push_log("💡 Try: Enable browser cookies or export cookie file")
-    else:
-        safe_push_log("🔑 Authentication issue")
-        safe_push_log(
-            "� Try: Refresh browser authentication or check video accessibility"
-        )
+    try:
+        # Check if url_info.json exists and is current
+        json_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+        if not json_path.exists():
+            # Need to analyze URL first
+            url_info = url_analysis(url)
+            if not url_info:
+                safe_push_log("⚠️ Failed to analyze URL for quality strategy")
+                return
+        else:
+            # Load existing url_info
+            with open(json_path, "r", encoding="utf-8") as f:
+                url_info = json.load(f)
 
-    safe_push_log("📺 Modern video platforms require fresh auth for premium codecs")
-    safe_push_log("=" * 30)
+        # Get optimal profiles using new strategy
+        if quality_strategy in ["auto_best", "best_no_fallback", "choose_profile"]:
+            # Load url_info to analyze audio tracks
+            language_primary = settings.LANGUAGE_PRIMARY or "en"
+            # Convert list to comma-separated string
+            languages_secondaries = (
+                ",".join(settings.LANGUAGES_SECONDARIES)
+                if settings.LANGUAGES_SECONDARIES
+                else ""
+            )
+            vo_first = settings.VO_FIRST
+
+            # Analyze audio formats
+            vo_lang, audio_formats, multiple_langs = analyze_audio_formats(
+                url_info,
+                language_primary=language_primary,
+                languages_secondaries=languages_secondaries,
+                vo_first=vo_first,
+            )
+
+            # Get optimal profiles
+            optimal_format_profiles = get_profiles_with_formats_id_to_download(
+                json_path, multiple_langs, audio_formats
+            )
+
+            st.session_state.optimal_format_profiles = optimal_format_profiles
+
+            # profiles_to_try = [{'format_id': '399+251', 'ext': 'webm', 'height': 1080, 'vcodec': 'av01.0.08M.08', 'protocol': 'https+https'}, {'format_id': '248+251', 'ext': 'webm', 'height': 1080, 'vcodec': 'vp9', 'protocol': 'https+https'}]
+
+            # Set chosen profiles based on strategy
+            if quality_strategy == "auto_best":
+                st.session_state.chosen_format_profiles = optimal_format_profiles
+            elif quality_strategy == "best_no_fallback":
+                # Only the first (best) profile
+                st.session_state.chosen_format_profiles = (
+                    optimal_format_profiles[:1] if optimal_format_profiles else []
+                )
+            # For choose_profile, chosen_format_profiles will be set by user selection
+
+        elif quality_strategy == "choose_available":
+            # Load all available formats for selection
+            available_formats = get_available_formats(url_info)
+            st.session_state.available_formats_list = available_formats
+
+    except Exception as e:
+        safe_push_log(f"❌ Error processing quality strategy: {str(e)[:100]}...")
 
 
-def _get_video_analysis_cached(
-    url: str, cookies_part: List[str]
-) -> Tuple[Dict[str, bool], List[Dict]]:
-    """Get video format analysis with intelligent caching."""
-    cached_url = st.session_state.get("codecs_detected_for_url", "")
-    cache_timestamp = st.session_state.get("formats_detection_timestamp", 0)
-    cache_age_minutes = (time.time() - cache_timestamp) / 60
-
-    if cached_url == sanitize_url(url) and cache_age_minutes < CACHE_EXPIRY_MINUTES:
-        # Use recent cache
-        available_codecs, available_formats = get_cached_video_analysis(url)
-        safe_push_log(f"💾 Using cached analysis ({cache_age_minutes:.1f}min old)")
-    else:
-        # Force fresh analysis for accurate profile matching
-        safe_push_log("🆕 Fresh format analysis required for accurate profile matching")
-        available_codecs, available_formats = analyze_video_formats_unified(
-            sanitize_url(url), cookies_part
-        )
-
-        # Cache the results
-        st.session_state["available_codecs"] = available_codecs
-        st.session_state["available_formats"] = available_formats
-        st.session_state["codecs_detected_for_url"] = sanitize_url(url)
-        st.session_state["formats_detection_timestamp"] = time.time()
-
-    # Show analysis summary
-    codec_count = sum(available_codecs.values())
-    format_count = len(available_formats)
-    safe_push_log(
-        f"📊 Analysis complete: {codec_count} codecs detected, {format_count} formats available"
-    )
-
-    if format_count == 0:
-        safe_push_log("⚠️ No formats detected - this may indicate an access issue")
-        safe_push_log("💡 Profile matching will use static fallback method")
-    else:
-        safe_push_log("✅ Format analysis successful - using dynamic profile matching")
-
-    return available_codecs, available_formats
-
-
-def resolve_download_profiles(
-    download_mode: str,
-    target_profile: Optional[Union[str, Dict]],
-    available_formats: List[Dict],
-    available_codecs: Dict[str, bool],
-) -> Tuple[str, List[Dict], Optional[str]]:
+def _display_strategy_content(quality_strategy: str, url: str) -> None:
     """
-    Resolve which profiles to try for download based on mode and target.
+    Display content specific to the selected quality strategy.
 
     Args:
-        download_mode: "auto" or "forced"
-        target_profile: Profile name (str) or pre-resolved profile (dict) or None
-        available_formats: List of available video formats
-        available_codecs: Dict of detected codecs
+        quality_strategy: Selected strategy
+        url: Video URL
+    """
+    st.markdown("---")
+
+    if quality_strategy == "auto_best":
+        st.info(t("quality_auto_best_desc"))
+
+        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
+        if optimal_profiles:
+            st.success(t("quality_profiles_generated", count=len(optimal_profiles)))
+
+            with st.expander(t("quality_profiles_list_title"), expanded=True):
+                for i, profile in enumerate(optimal_profiles, 1):
+                    height = profile.get("height", "?")
+                    vcodec = profile.get("vcodec", "unknown")
+                    ext = profile.get("ext", "unknown")
+                    format_id = profile.get("format_id", "unknown")
+
+                    st.markdown(f"**{i}. {height}p ({vcodec}) - {ext.upper()}**")
+                    st.code(f"Format ID: {format_id}", language="text")
+        else:
+            st.warning(t("quality_no_profiles_warning"))
+
+    elif quality_strategy == "best_no_fallback":
+        st.warning(t("quality_best_no_fallback_desc"))
+
+        # Show quality downgrade setting
+        st.checkbox(
+            t("quality_refuse_downgrade"),
+            value=not settings.QUALITY_DOWNGRADE,
+            help=t("quality_refuse_downgrade_help"),
+            key="refuse_quality_downgrade_best",
+        )
+
+        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
+        if optimal_profiles:
+            best_profile = optimal_profiles[0]
+            height = best_profile.get("height", "?")
+            vcodec = best_profile.get("vcodec", "unknown")
+            ext = best_profile.get("ext", "unknown")
+            format_id = best_profile.get("format_id", "unknown")
+
+            profile_str = f"{height}p ({vcodec}) - {ext.upper()}"
+            st.success(t("quality_selected_profile", profile=profile_str))
+            st.code(f"Format ID: {format_id}", language="text")
+        else:
+            st.warning(t("quality_best_profile_not_available"))
+
+    elif quality_strategy == "choose_profile":
+        st.info(t("quality_choose_profile_desc"))
+
+        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
+        if optimal_profiles:
+            profile_options = []
+            for i, profile in enumerate(optimal_profiles):
+                height = profile.get("height", "?")
+                vcodec = profile.get("vcodec", "unknown")
+                ext = profile.get("ext", "unknown")
+                label = f"{height}p ({vcodec}) - {ext.upper()}"
+                profile_options.append(label)
+
+            selected_index = st.selectbox(
+                t("quality_select_profile_prompt"),
+                options=range(len(profile_options)),
+                format_func=lambda x: profile_options[x],
+                key="selected_profile_index",
+            )
+
+            # Update chosen profiles based on selection
+            if selected_index is not None:
+                st.session_state.chosen_format_profiles = [
+                    optimal_profiles[selected_index]
+                ]
+
+                # Show selected profile details
+                selected_profile = optimal_profiles[selected_index]
+                format_id = selected_profile.get("format_id", "unknown")
+                st.success(
+                    t("quality_selected", profile=profile_options[selected_index])
+                )
+                st.code(f"Format ID: {format_id}", language="text")
+        else:
+            st.warning(t("quality_no_profiles_selection"))
+
+    elif quality_strategy == "choose_available":
+        st.info(t("quality_choose_available_desc"))
+        st.warning(t("quality_choose_available_warning"))
+
+        available_formats = st.session_state.get("available_formats_list", [])
+        if available_formats:
+            format_options = [t("quality_format_auto_option")]
+            for fmt in available_formats:
+                format_options.append(f"{fmt['description']} - {fmt['format_id']}")
+
+            selected_format = st.selectbox(
+                t("quality_select_format_prompt"),
+                options=format_options,
+                key="selected_available_format",
+            )
+
+            if selected_format != t("quality_format_auto_option"):
+                # Extract format_id from selection
+                format_id = selected_format.split(" - ")[-1]
+                st.success(t("quality_selected_format", format=selected_format))
+
+                # Create a profile-like dict for consistency
+                for fmt in available_formats:
+                    if fmt["format_id"] == format_id:
+                        chosen_profile = {
+                            "format_id": format_id,
+                            "height": fmt["height"],
+                            "vcodec": fmt["vcodec"],
+                            "ext": fmt["ext"],
+                            "label": f"Manual: {fmt['description']}",
+                        }
+                        st.session_state.chosen_format_profiles = [chosen_profile]
+                        break
+            else:
+                # Fallback to auto mode
+                st.session_state.chosen_format_profiles = st.session_state.get(
+                    "optimal_format_profiles", []
+                )
+        else:
+            st.warning(t("quality_no_formats_selection"))
+
+
+def _get_optimal_profiles_from_json() -> List[Dict]:
+    """
+    Get optimal download profiles using get_profiles_with_formats_id_to_download().
+
+    This is a simple wrapper that calls get_profiles_with_formats_id_to_download() which now
+    returns complete profiles with all necessary fields (label, name, container, etc.).
 
     Returns:
-        Tuple[actual_mode, profiles_to_try, error_message]
-        - actual_mode: Final mode determined ("auto" or "forced")
-        - profiles_to_try: List of profile dicts ready for download
-        - error_message: Error string if resolution failed, None if success
+        List of complete profile dicts ready for download, or empty list if error
     """
-    # Handle QUALITY_PROFILE environment configuration
-    configured_profile_name = CONFIG.get("QUALITY_PROFILE", "auto").strip().lower()
+    try:
+        # Check if url_info.json exists
+        json_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+        if not json_path.exists():
+            safe_push_log("⚠️ url_info.json not found, cannot use profile strategy")
+            return []
 
-    if not target_profile:  # Only apply config if no explicit target
-        if configured_profile_name in ["", "auto"]:
-            safe_push_log("🤖 QUALITY_PROFILE=auto: Dynamic profile selection enabled")
-            download_mode = "auto"
-        else:
-            configured_profile = get_profile_by_name(configured_profile_name)
-            if configured_profile:
-                safe_push_log(
-                    f"⚙️ QUALITY_PROFILE={configured_profile_name}: Using specific profile"
-                )
-                safe_push_log(f"🎯 Profile: {configured_profile['label']}")
-                download_mode = "forced"
-                target_profile = configured_profile_name
-            else:
-                safe_push_log(
-                    f"❌ ERROR: Configured QUALITY_PROFILE '{configured_profile_name}' not found!"
-                )
-                safe_push_log(
-                    "📋 Available profiles: "
-                    + ", ".join([p["name"] for p in QUALITY_PROFILES])
-                )
-                safe_push_log("🔄 Falling back to automatic profile selection")
-                download_mode = "auto"
+        # Load url_info to analyze audio tracks
+        with open(json_path, "r", encoding="utf-8") as f:
+            url_info = json.load(f)
 
-    # Resolve profiles based on final mode
-    if download_mode == "forced" and target_profile:
-        return _resolve_forced_profile(target_profile, available_formats)
-    else:
-        return _resolve_auto_profiles(available_formats, available_codecs)
-
-
-def _resolve_forced_profile(
-    target_profile: Union[str, Dict], available_formats: List[Dict]
-) -> Tuple[str, List[Dict], Optional[str]]:
-    """Resolve a single forced profile."""
-    if isinstance(target_profile, dict):
-        # Dynamic profile from UI
-        safe_push_log(f"🔒 FORCED MODE (dynamic): {target_profile['label']}")
-
-        if "_dynamic_combination" in target_profile:
-            # Pre-resolved profile from UI - use directly
-            safe_push_log("✅ Using pre-resolved profile combination from UI selection")
-            return "forced", [target_profile], None
-        else:
-            # Raw dynamic profile - needs format matching
-            safe_push_log("🔍 Matching dynamic profile with available formats...")
-            return _match_single_profile(target_profile, available_formats, "dynamic")
-    else:
-        # Static profile name
-        forced_profile = get_profile_by_name(target_profile)
-        if not forced_profile:
-            return "forced", [], f"Unknown profile: {target_profile}"
-
-        safe_push_log(f"🔒 FORCED MODE (static): {forced_profile['label']}")
-        safe_push_log("🔍 Matching static profile with available formats...")
-        return _match_single_profile(forced_profile, available_formats, "static")
-
-
-def _resolve_auto_profiles(
-    available_formats: List[Dict], available_codecs: Dict[str, bool]
-) -> Tuple[str, List[Dict], Optional[str]]:
-    """Resolve multiple profiles for auto mode."""
-    safe_push_log("🤖 Auto mode: Dynamic profile generation")
-
-    # Try dynamic profile generation first
-    optimal_combinations = get_optimal_profiles(available_formats, max_profiles=10)
-
-    if optimal_combinations:
-        safe_push_log(
-            f"✅ Generated: {len(optimal_combinations)} optimal combination(s)"
+        # Get language preferences from settings
+        language_primary = settings.LANGUAGE_PRIMARY or "en"
+        # Convert list to comma-separated string
+        languages_secondaries = (
+            ",".join(settings.LANGUAGES_SECONDARIES)
+            if settings.LANGUAGES_SECONDARIES
+            else ""
         )
-        profiles_to_try = []
-        for combination in optimal_combinations:
-            profile_compat = {
-                "name": combination["profile_name"],
-                "label": combination["profile_label"],
-                "format": combination["format_spec"],
-                "format_sort": f"res:{combination['video_format']['resolution']},fps,+size,br",
-                "extra_args": combination["extra_args"],
-                "container": combination["container"],
-                "priority": combination["priority"],
-                "_dynamic_combination": combination,
-            }
-            profiles_to_try.append(profile_compat)
-        return "auto", profiles_to_try, None
-    else:
-        # Fallback to static profile filtering
-        safe_push_log("❌ No viable combinations found!")
-        safe_push_log("🔄 Falling back to static profile filtering...")
+        vo_first = settings.VO_FIRST
 
-        detected_codecs = [
-            codec for codec, available in available_codecs.items() if available
-        ]
-        safe_push_log(f"📋 Available codecs: {', '.join(detected_codecs)}")
-
-        profiles_to_try = filter_viable_profiles(available_codecs, "auto")
-        if profiles_to_try:
-            return "auto", profiles_to_try, None
-        else:
-            return "auto", [], "No viable profiles found based on codec compatibility"
-
-
-def _match_single_profile(
-    profile: Dict, available_formats: List[Dict], profile_type: str
-) -> Tuple[str, List[Dict], Optional[str]]:
-    """Match a single profile against available formats."""
-    video_quality_max = CONFIG.get("VIDEO_QUALITY_MAX", "max")
-    forced_combinations = generate_profile_combinations(
-        [profile], available_formats, video_quality_max
-    )
-
-    if forced_combinations:
-        safe_push_log(
-            f"✅ Found {len(forced_combinations)} compatible combination(s) for {profile_type} profile"
+        # Analyze audio formats
+        safe_push_log("🎵 Analyzing audio tracks...")
+        vo_lang, audio_formats, multiple_langs = analyze_audio_formats(
+            url_info,
+            language_primary=language_primary,
+            languages_secondaries=languages_secondaries,
+            vo_first=vo_first,
         )
-        profiles_to_try = []
-        for combination in forced_combinations:
-            profile_compat = {
-                "name": combination["profile_name"],
-                "label": combination["profile_label"],
-                "format": combination["format_spec"],
-                "format_sort": f"res:{combination['video_format']['resolution']},fps,+size,br",
-                "extra_args": combination["extra_args"],
-                "container": combination["container"],
-                "priority": combination["priority"],
-                "_dynamic_combination": combination,
-            }
-            profiles_to_try.append(profile_compat)
-        return "forced", profiles_to_try, None
-    else:
-        return (
-            "forced",
-            [],
-            f"{profile_type.title()} profile '{profile['label']}' has no compatible formats",
+
+        safe_push_log(f"   VO language: {vo_lang or 'unknown'}")
+        safe_push_log(f"   Audio tracks: {len(audio_formats)}")
+        safe_push_log(f"   Multi-language: {'Yes' if multiple_langs else 'No'}")
+
+        # Get optimal profiles - now returns complete profiles with all fields
+        safe_push_log("🎯 Selecting optimal video formats (AV1/VP9 priority)...")
+        optimal_profiles = get_profiles_with_formats_id_to_download(
+            str(json_path), multiple_langs, audio_formats
         )
+
+        if not optimal_profiles:
+            safe_push_log("❌ No optimal profiles returned")
+            return []
+
+        log_title(f"✅ Found {len(optimal_profiles)} optimal profile(s)")
+
+        # Log profile details
+        for idx, profile in enumerate(optimal_profiles, 1):
+            safe_push_log("")
+            safe_push_log(f"📦 Profile {idx}: {profile.get('label', 'Unknown')}")
+            safe_push_log(f"   🆔 Format ID: {profile.get('format_id', '')}")
+            safe_push_log(f"   🎬 Video Codec: {profile.get('vcodec', 'unknown')}")
+            safe_push_log(f"   📐 Resolution: {profile.get('height', 0)}p")
+            safe_push_log(f"   📦 Extension: {profile.get('ext', 'unknown')}")
+            safe_push_log(
+                f"   📁 Output Container: {profile.get('container', 'mkv').upper()}"
+            )
+            safe_push_log(f"   🌐 Protocol: {profile.get('protocol', 'https')}")
+
+        log_title(
+            f"🎯 Will try {len(optimal_profiles)} profile(s) in order (best codec first)"
+        )
+        return optimal_profiles
+
+    except FileNotFoundError:
+        safe_push_log("⚠️ url_info.json not found for profile strategy")
+        return []
+    except Exception as e:
+        safe_push_log(f"⚠️ Error in profile strategy: {e}")
+        import traceback
+
+        safe_push_log(f"   Traceback: {traceback.format_exc()}")
+        return []
 
 
 def smart_download_with_profiles(
@@ -1200,33 +623,42 @@ def smart_download_with_profiles(
         if key in st.session_state:
             del st.session_state[key]
 
-    # STRATEGY: Force fresh format analysis for accurate profile matching
-    safe_push_log(
-        "🔍 Performing comprehensive format analysis for optimal profile selection..."
-    )
+    # Use NEW STRATEGY: get profiles from quality strategy session state
+    log_title("🎯 Using quality strategy profiles...")
 
-    # Get video format analysis (with caching optimization)
-    available_codecs, available_formats = _get_video_analysis_cached(url, cookies_part)
+    # Get profiles from session state (set by quality strategy)
+    chosen_profiles = st.session_state.get("chosen_format_profiles", [])
+    quality_strategy = st.session_state.get("download_quality_strategy", "auto_best")
 
-    # Resolve which profiles to try
-    log_title("🎯 Selecting quality profiles...")
-    download_mode, profiles_to_try, error_message = resolve_download_profiles(
-        download_mode, target_profile, available_formats, available_codecs
-    )
-
-    if error_message:
-        safe_push_log(f"❌ Profile resolution failed: {error_message}")
-        return 1, error_message
-
-    # Profile resolution complete - show summary
-    if download_mode == "forced":
-        safe_push_log("⚠️ No fallback - will fail if these combinations don't work")
-
-    safe_push_log("")
+    if chosen_profiles:
+        profiles_to_try = chosen_profiles
+        safe_push_log(
+            f"✅ Using {len(profiles_to_try)} profiles from {quality_strategy} strategy"
+        )
+    else:
+        # Fallback to old method if no strategy profiles available
+        safe_push_log("⚠️ No strategy profiles found, using fallback method")
+        profiles_to_try = _get_optimal_profiles_from_json()
 
     if not profiles_to_try:
-        safe_push_log("❌ Profile selection failed - no viable profiles found")
-        return 1, "No viable profiles found based on codec compatibility"
+        error_msg = "No profiles available for download. Please select a quality strategy first."
+        safe_push_log(f"❌ {error_msg}")
+        return 1, error_msg
+
+    # Update download mode and refuse_quality_downgrade based on strategy
+    if quality_strategy == "auto_best":
+        download_mode = "auto"
+        refuse_quality_downgrade = False
+    elif quality_strategy == "best_no_fallback":
+        download_mode = "forced"
+        refuse_quality_downgrade = st.session_state.get(
+            "refuse_quality_downgrade_best", not settings.QUALITY_DOWNGRADE
+        )
+    elif quality_strategy in ["choose_profile", "choose_available"]:
+        download_mode = "forced"
+        refuse_quality_downgrade = False  # User made specific choice
+
+    safe_push_log("")
 
     # Execute download attempts
     return _execute_profile_downloads(
@@ -1246,6 +678,7 @@ def smart_download_with_profiles(
         progress_placeholder,
         status_placeholder,
         info_placeholder,
+        download_mode,
     )
 
 
@@ -1342,19 +775,17 @@ def _build_profile_command(
     sb_choice: str,
 ) -> List[str]:
     """Build ytdlp command for a specific profile."""
-    # Get format string
-    format_string = profile.get("format") or generate_format_string_from_profile(
-        profile
-    )
+    # Get format string from format_id (single source of truth)
+    format_string = profile.get("format_id", "")
 
     # Create quality strategy
     quality_strategy = {
         "format": format_string,
-        "format_sort": profile.get("format_sort", "res,fps,+size,br"),
-        "extra_args": profile.get("extra_args", []),
+        "format_sort": "res,fps,+size,br",  # Standard sort
+        "extra_args": [],
     }
 
-    # Use profile's container preference
+    # Use profile's container preference (always MKV from get_profiles_with_formats_id_to_download)
     profile_container = profile.get("container", "mkv").lower()
     profile_force_mp4 = profile_container == "mp4"
 
@@ -1404,30 +835,26 @@ def _get_profile_codec_info(profile: Dict) -> List[str]:
     """Extract codec information from profile for display."""
     codec_info = []
 
-    if "_dynamic_combination" in profile:
-        # Dynamic profile with detailed codec info
-        combination = profile["_dynamic_combination"]
-        video_codec = combination["video_format"].get("vcodec", "").lower()
-        audio_codec = combination["audio_format"].get("acodec", "").lower()
-    else:
-        # Static profile - extract from format string
-        format_str = profile.get("format", "").lower()
-        video_codec = format_str
-        audio_codec = format_str
+    # Extract data directly from unified profile structure
+    video_codec = profile.get("vcodec", "").lower()
+    format_id = profile.get("format_id", "")
+    height = profile.get("height", 0)
 
-    # Video codec info
-    if "av01" in video_codec:
-        codec_info.append("🎬 AV1 (best compression)")
-    elif "vp9" in video_codec:
-        codec_info.append("🎥 VP9 (modern)")
+    # Video codec info (detailed)
+    if "av01" in video_codec or "av1" in video_codec:
+        codec_info.append("🎬 AV1 codec")
+    elif "vp9" in video_codec or "vp09" in video_codec:
+        codec_info.append("🎥 VP9 codec")
+    elif "avc" in video_codec or "h264" in video_codec:
+        codec_info.append("📺 H.264 codec")
     else:
-        codec_info.append("📺 H.264 (compatible)")
+        codec_info.append(f"🎞️ {video_codec}")
 
-    # Audio codec info
-    if "opus" in audio_codec:
-        codec_info.append("🎵 Opus audio")
-    else:
-        codec_info.append("🔊 AAC audio")
+    # Resolution info
+    codec_info.append(f"📐 {height}p")
+
+    # Format ID info
+    codec_info.append(f"🆔 {format_id}")
 
     return codec_info
 
@@ -1449,9 +876,11 @@ def _execute_profile_downloads(
     progress_placeholder,
     status_placeholder,
     info_placeholder,
+    download_mode: str,
 ) -> Tuple[int, str]:
     """Execute download attempts for each profile."""
     log_title("🚀 Starting download attempts...")
+    safe_push_log(f"profiles_to_try: {profiles_to_try}")
 
     for profile_idx, profile in enumerate(profiles_to_try, 1):
         safe_push_log("")
@@ -1494,6 +923,23 @@ def _execute_profile_downloads(
         )
 
         if success:
+            # Log successful download with detailed format info
+            log_title("✅ Download successful!")
+            safe_push_log(f"📦 Profile used: {profile['label']}")
+            safe_push_log(f"🎯 Format ID: {profile.get('format_id', 'unknown')}")
+
+            # Show codec details from unified profile structure
+            vcodec = profile.get("vcodec", "unknown")
+            height = profile.get("height", 0)
+            ext = profile.get("ext", "unknown")
+            safe_push_log(f"🎬 Video codec: {vcodec}")
+            safe_push_log(f"📐 Resolution: {height}p")
+            safe_push_log(f"📦 Container: {ext}")
+
+            log_title(
+                f"📁 Container format: {profile.get('container', 'unknown').upper()}"
+            )
+
             return 0, ""
 
         # Handle profile failure
@@ -1508,256 +954,29 @@ def _execute_profile_downloads(
         if not should_continue:
             break
 
-    # All profiles failed - show comprehensive help
+    # All profiles failed - show simple error message
     profiles_count = len(profiles_to_try)
     if status_placeholder:
         status_placeholder.error("❌ All quality profiles failed")
 
-    show_download_failure_help(cookies_available, profiles_count)
+    safe_push_log("")
+    safe_push_log("❌ All profiles failed")
+    safe_push_log("=" * 50)
+    if not cookies_available:
+        safe_push_log("🔑 No authentication configured")
+        safe_push_log("💡 Try: Enable browser cookies or export cookie file")
+    else:
+        safe_push_log("🔑 Authentication issue")
+        safe_push_log(
+            "💡 Try: Refresh browser authentication or check video accessibility"
+        )
+    safe_push_log("=" * 50)
+
     return 1, f"All {profiles_count} profiles failed after full client fallback"
 
 
-# Constants
-# LOG_SEPARATOR removed - now using log_title() function for dynamic sizing
-
-# CSS Styles
-LOGS_CONTAINER_STYLE = """
-    height: 400px;
-    overflow-y: auto;
-    background-color: #0e1117;
-    color: #fafafa;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    font-family: 'Source Code Pro', monospace;
-    font-size: 14px;
-    line-height: 1.4;
-    white-space: pre-wrap;
-    border: 1px solid #262730;
-"""
-
-
-# === ENVIRONMENT CONFIGURATION ===
-def in_container() -> bool:
-    """Detect if we are running inside a container (Docker/Podman)"""
-    return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
-
-
-# Calculate once to avoid repeated filesystem checks
-IN_CONTAINER = in_container()
-
-
-# === DEFAULT CONFIGURATION ===
-# Exhaustive dictionary defining all configurable variables with default values
-DEFAULT_CONFIG = {
-    # === Core Paths ===
-    "VIDEOS_FOLDER": "/data/videos" if IN_CONTAINER else "./downloads",
-    "TMP_DOWNLOAD_FOLDER": "/data/tmp" if IN_CONTAINER else "./tmp",
-    # === Authentication ===
-    "YOUTUBE_COOKIES_FILE_PATH": "",
-    "COOKIES_FROM_BROWSER": "",
-    # === Localization ===
-    "UI_LANGUAGE": "en",
-    "SUBTITLES_CHOICES": "en",
-    # === Quality & Download Preferences ===
-    "VIDEO_QUALITY_MAX": "max",  # Maximum video resolution: "max" for highest available, or "2160", "1440", "1080", "720", "480", "360"
-    "QUALITY_PROFILE": "auto",  # auto, mkv_av1_opus, mkv_vp9_opus, mp4_av1_aac, mp4_h264_aac
-    "EMBED_CHAPTERS": "true",  # Embed chapters by default
-    "EMBED_SUBTITLES": "true",  # Embed subtitles by default
-    # === Debug Options ===
-    "REMOVE_TMP_FILES": "true",  # Remove temporary files after processing (set to false for debugging)
-    # === Advanced Options ===
-    "YTDLP_CUSTOM_ARGS": "",
-    "CUTTING_MODE": "keyframes",  # keyframes or precise
-    "BROWSER_SELECT": "chrome",  # Default browser for cookie extraction
-    # === System ===
-    "DEBUG": "false",
-}
-
-
-def load_environment_config() -> Dict[str, str]:
-    """
-    Load environment configuration with proper priority:
-    1. Default values from DEFAULT_CONFIG
-    2. Environment variables (os.getenv)
-    3. .env file (only in local/non-container mode if python-dotenv available)
-
-    Returns:
-        Dictionary with all configuration values
-    """
-    config = DEFAULT_CONFIG.copy()
-
-    # Get the directory where main.py is located for relative paths
-    app_dir = Path(__file__).parent
-    project_root = app_dir.parent
-
-    # Step 1: Start with default values (already in config)
-
-    # Step 2: Override with environment variables if they exist
-    for key in config:
-        env_value = os.getenv(key)
-        if env_value is not None:
-            config[key] = env_value
-
-    # Step 3: Load from .env file only if not in container
-    if not IN_CONTAINER:
-        env_file = project_root / ".env"
-        if env_file.exists():
-            try:
-                # Try to import and use python-dotenv if available
-                from dotenv import load_dotenv
-
-                # Load .env file values (don't override existing env vars)
-                load_dotenv(env_file, override=False)
-
-                # Update config with .env values that weren't already set by env vars
-                for key in config:
-                    new_env_value = os.getenv(key)
-                    if new_env_value is not None:
-                        config[key] = new_env_value
-
-            except ImportError:
-                # python-dotenv not available, skip .env file loading
-                pass
-            except Exception as e:
-                print(f"⚠️ Error reading .env file: {e}")
-
-    # Post-process configuration values
-
-    # Handle relative paths
-    if config["VIDEOS_FOLDER"] and not Path(config["VIDEOS_FOLDER"]).is_absolute():
-        config["VIDEOS_FOLDER"] = str(project_root / config["VIDEOS_FOLDER"])
-
-    if config["TMP_DOWNLOAD_FOLDER"]:
-        if not Path(config["TMP_DOWNLOAD_FOLDER"]).is_absolute():
-            config["TMP_DOWNLOAD_FOLDER"] = str(
-                project_root / config["TMP_DOWNLOAD_FOLDER"]
-            )
-    else:
-        # Default to VIDEOS_FOLDER/tmp if not specified
-        config["TMP_DOWNLOAD_FOLDER"] = str(Path(config["VIDEOS_FOLDER"]) / "tmp")
-
-    if (
-        config["YOUTUBE_COOKIES_FILE_PATH"]
-        and not Path(config["YOUTUBE_COOKIES_FILE_PATH"]).is_absolute()
-    ):
-        config["YOUTUBE_COOKIES_FILE_PATH"] = str(
-            project_root / config["YOUTUBE_COOKIES_FILE_PATH"]
-        )
-
-    return config
-
-
-# Load configuration
-CONFIG = load_environment_config()
-
-# Configure translations with the loaded UI language
-configure_language(CONFIG["UI_LANGUAGE"])
-
-# === ENV VARIABLES ===
-# Determine the project root for robust default paths
-app_dir = Path(__file__).parent
-project_root = app_dir.parent
-
-# Set up main configuration variables
-VIDEOS_FOLDER = Path(CONFIG["VIDEOS_FOLDER"])
-TMP_DOWNLOAD_FOLDER = Path(CONFIG["TMP_DOWNLOAD_FOLDER"])
-
-# Ensure the folders exist with proper error handling
-try:
-    VIDEOS_FOLDER.mkdir(parents=True, exist_ok=True)
-except Exception as e:
-    print(f"⚠️ Could not create videos folder {VIDEOS_FOLDER}: {e}")
-    # Fallback to a safe location
-    fallback_folder = Path.home() / "HomeTube_Downloads"
-    print(f"💡 Using fallback folder: {fallback_folder}")
-    VIDEOS_FOLDER = fallback_folder
-    try:
-        VIDEOS_FOLDER.mkdir(parents=True, exist_ok=True)
-    except Exception as e2:
-        print(f"❌ Could not create fallback folder: {e2}")
-        # Last resort: use current directory
-        VIDEOS_FOLDER = Path.cwd() / "downloads"
-
-# Ensure temp folder exists
-try:
-    TMP_DOWNLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
-except Exception as e:
-    print(f"⚠️ Could not create temp folder {TMP_DOWNLOAD_FOLDER}: {e}")
-
-# Cookies configuration
-YOUTUBE_COOKIES_FILE_PATH = CONFIG["YOUTUBE_COOKIES_FILE_PATH"] or None
-COOKIES_FROM_BROWSER = CONFIG["COOKIES_FROM_BROWSER"].strip().lower()
-
-# Parse subtitle choices from configuration
-SUBTITLES_CHOICES = [
-    x.strip().lower() for x in CONFIG["SUBTITLES_CHOICES"].split(",") if x.strip()
-]
-
-
-# === CONFIGURATION SUMMARY ===
-def print_config_summary():
-    """Print a summary of the current configuration for debugging"""
-    print("\n🔧 HomeTube Configuration Summary:")
-    print(f"🏃 Running mode: {'Container' if IN_CONTAINER else 'Local'}")
-    print(f"🌐 UI Language: {CONFIG['UI_LANGUAGE']}")
-    print(f"📁 Videos folder: {VIDEOS_FOLDER}")
-    print(f"📁 Temp folder: {TMP_DOWNLOAD_FOLDER}")
-
-    # Check folder accessibility
-    if not VIDEOS_FOLDER.exists():
-        print(f"⚠️ Videos folder does not exist: {VIDEOS_FOLDER}")
-    elif not os.access(VIDEOS_FOLDER, os.W_OK):
-        print(f"⚠️ Videos folder is not writable: {VIDEOS_FOLDER}")
-    else:
-        print(f"✅ Videos folder is ready: {VIDEOS_FOLDER}")
-
-    # Authentication status
-    if YOUTUBE_COOKIES_FILE_PATH and Path(YOUTUBE_COOKIES_FILE_PATH).exists():
-        print(f"🍪 Cookies file: {YOUTUBE_COOKIES_FILE_PATH}")
-    elif COOKIES_FROM_BROWSER:
-        print(f"🍪 Browser cookies: {COOKIES_FROM_BROWSER}")
-    else:
-        print("⚠️ No authentication configured (may limit video access)")
-
-    print(f"🔤 Subtitle languages: {', '.join(SUBTITLES_CHOICES)}")
-
-    # Environment file status (only relevant in local mode)
-    if not IN_CONTAINER:
-        # Check if python-dotenv is available
-        import importlib.util
-
-        if importlib.util.find_spec("dotenv") is not None:
-            print("✅ python-dotenv available: .env files supported")
-        else:
-            print("⚠️ python-dotenv not available - .env files will be ignored")
-
-        env_file = Path(__file__).parent.parent / ".env"
-        if env_file.exists():
-            print(f"✅ Configuration file: {env_file}")
-        else:
-            print("⚠️ No .env file found - using defaults")
-    else:
-        print("📦 Container mode - using environment variables only")
-
-    print()
-
-
-# Print configuration summary in development mode
-if __name__ == "__main__" or CONFIG["DEBUG"].lower() in ("true", "1", "yes"):
-    print_config_summary()
-
-
-# === UTILITY FUNCTIONS ===
-
-
-def is_valid_browser(browser_name: str) -> bool:
-    """Check if browser name is supported"""
-    if not browser_name:
-        return False
-    return browser_name.lower().strip() in SUPPORTED_BROWSERS
-
-
 # === STREAMLIT UI CONFIGURATION ===
+
 # Must be the first Streamlit command
 st.set_page_config(
     page_title=t("page_title"),
@@ -1795,882 +1014,474 @@ if "download_cancelled" not in st.session_state:
     st.session_state.download_cancelled = False
 
 
-# === Helpers FS ===
-def list_subdirs(root: Path) -> List[str]:
-    """List immediate subdirectories in root folder"""
-    if not root.exists():
-        return []
-    return sorted([p.name for p in root.iterdir() if p.is_dir()])
-
-
-def list_subdirs_recursive(root: Path, max_depth: int = 2) -> List[str]:
+@st.cache_data(ttl=3600, show_spinner=False)
+def url_analysis(url: str) -> Optional[Dict]:
     """
-    List subdirectories recursively up to max_depth levels.
-    Returns paths relative to root, formatted for display.
-    """
-    if not root.exists():
-        return []
-
-    subdirs = []
-
-    def scan_directory(current_path: Path, current_depth: int, relative_path: str = ""):
-        if current_depth > max_depth:
-            return
-
-        try:
-            for item in sorted(current_path.iterdir()):
-                if item.is_dir():
-                    # Build the relative path for display
-                    if relative_path:
-                        full_relative = f"{relative_path}/{item.name}"
-                    else:
-                        full_relative = item.name
-
-                    subdirs.append(full_relative)
-
-                    # Recurse if we haven't reached max depth
-                    if current_depth < max_depth:
-                        scan_directory(item, current_depth + 1, full_relative)
-        except PermissionError:
-            # Skip directories we can't access
-            pass
-
-    scan_directory(root, 0)
-    return subdirs
-
-
-def is_sabr_warning(message: str) -> bool:
-    """Check if message is a normal SABR/streaming warning that doesn't need auth hints"""
-    message_lower = message.lower()
-    sabr_patterns = [
-        "sabr streaming",
-        "sabr-only",
-        "server-side ad placement",
-        "formats have been skipped as they are missing a url",
-        "youtube is forcing sabr",
-        "youtube may have enabled",
-    ]
-    return any(pattern in message_lower for pattern in sabr_patterns)
-
-
-def is_cookies_expired_warning(message: str) -> bool:
-    """Check if message is a YouTube cookies expiration warning"""
-    message_lower = message.lower()
-    cookies_patterns = [
-        "the provided youtube account cookies are no longer valid",
-        "cookies are no longer valid",
-        "they have likely been rotated in the browser as a security measure",
-        "for tips on how to effectively export youtube cookies",
-    ]
-    return any(pattern in message_lower for pattern in cookies_patterns)
-
-
-def should_suppress_message(message: str) -> bool:
-    """Check if a message should be suppressed from user logs"""
-    message_lower = message.lower()
-
-    # Suppress empty lines
-    if message.strip() == "":
-        return True
-
-    # Suppress cookies expiration warnings (we'll show a friendly message instead)
-    if is_cookies_expired_warning(message):
-        return True
-
-    # Suppress SABR warnings (technical, not user-relevant)
-    if is_sabr_warning(message):
-        return True
-
-    # Suppress repetitive PO Token warnings (shown once per session)
-    if "po token" in message_lower and "gvs" in message_lower:
-        session_key = "po_token_warning_shown"
-        if st.session_state.get(session_key, False):
-            return True  # Suppress repeated warnings
-        st.session_state[session_key] = True
-        # Allow first warning to show, but simplify it
-        return False
-
-    # Suppress other repetitive technical warnings
-    repetitive_patterns = [
-        "there are missing subtitles languages because a po token was not provided",
-        "only images are available for download",
-        "the extractor specified to use impersonation",
-        "sleeping",  # "Sleeping 1.0 seconds" messages
-    ]
-
-    if any(pattern in message_lower for pattern in repetitive_patterns):
-        return True
-
-    # Suppress Python tracebacks and technical errors
-    technical_patterns = [
-        "traceback (most recent call last)",
-        'file "<frozen runpy>"',
-        'file "/usr/local/bin/yt-dlp',
-        'file "/usr/lib/python',
-        "contextlib.py",
-        "cookies.py",
-        "^file ",  # Generic file references in tracebacks
-    ]
-
-    return any(pattern in message_lower for pattern in technical_patterns)
-
-
-def is_authentication_error(error_message: str) -> bool:
-    """
-    Check if an error message indicates an authentication/cookies issue.
-
-    Excludes normal warnings like SABR streaming issues.
+    Analyze URL and fetch comprehensive video/playlist information using yt-dlp.
+    Cached for 1 hour to avoid repeated API calls.
+    Saves JSON to tmp/url_info.json for use with yt-dlp's --load-info-json.
 
     Args:
-        error_message: The error message to check
+        url: Video or playlist URL to analyze
 
     Returns:
-        True if it's likely an authentication issue
+        Dict with video/playlist information or None if error
     """
-    # Skip SABR warnings - these are normal technical warnings, not auth issues
-    if is_sabr_warning(error_message):
-        return False
-
-    return any(keyword in error_message.lower() for keyword in AUTH_ERROR_PATTERNS)
-
-
-def is_http_403_error(error_message: str) -> bool:
-    """Check if error is specifically HTTP 403 Forbidden"""
-    error_lower = error_message.lower()
-    return (
-        "403" in error_lower and "forbidden" in error_lower
-    ) or "unable to download video data" in error_lower
-
-
-def log_http_403_error_hint(error_message: str = ""):
-    """Log specific guidance for HTTP 403 errors - often signature/cookie related"""
-    safe_push_log("🚫 HTTP 403 Forbidden Error Detected")
-    safe_push_log("🔐 This is typically a signature verification or cookie issue")
-    safe_push_log("")
-
-    # Check for signature-specific issues
-    if any(
-        keyword in error_message.lower() for keyword in ["signature", "n-sig", "cipher"]
-    ):
-        safe_push_log("🔑 SIGNATURE ISSUE DETECTED:")
-        safe_push_log("   • YouTube uses encrypted signatures to protect video streams")
-        safe_push_log("   • These signatures expire quickly and require fresh cookies")
-        safe_push_log("")
-
-    cookies_method = _get_current_cookies_method()
-
-    safe_push_log("💡 IMMEDIATE SOLUTIONS:")
-    _log_authentication_solutions(cookies_method)
-    if cookies_method == "browser":
-        browser = st.session_state.get("browser_select", "chrome")
-        safe_push_log(
-            f"   4. 📋 Make sure you're actively logged into YouTube in {browser}"
-        )
-
-    safe_push_log("")
-    safe_push_log(
-        "🎯 KEY POINT: Even public videos need cookies for signature verification!"
-    )
-
-
-def log_authentication_error_hint(error_message: str = ""):
-    """Log context-aware authentication error messages"""
-    # Prevent spam - only show once per download session
-    session_key = "auth_hint_shown_this_download"
-    if st.session_state.get(session_key, False):
-        return
-
-    st.session_state[session_key] = True
-
-    # Check if this is specifically an HTTP 403 error
-    if is_http_403_error(error_message):
-        log_http_403_error_hint(error_message)
-        return
-
-    safe_push_log("🍪 This appears to be a cookies/authentication issue")
-
-    # Check current cookie configuration and provide specific guidance
-    cookies_method = st.session_state.get("cookies_method", "none")
-
-    if cookies_method == "none":
-        safe_push_log("❌ No cookies configured - video likely requires authentication")
-        safe_push_log(
-            "💡 SOLUTION: Configure cookies in the 'Cookies & Authentication' section below"
-        )
-        safe_push_log("   • Use browser cookies (recommended) or")
-        safe_push_log("   • Export cookies from browser to file")
-    elif cookies_method == "file":
-        if is_valid_cookie_file(YOUTUBE_COOKIES_FILE_PATH):
-            safe_push_log("⏰ Cookies file configured but may be expired")
-            safe_push_log("💡 SOLUTION: Update your cookies file")
-            safe_push_log("   • Re-export cookies from your browser")
-            safe_push_log("   • Make sure you're logged into YouTube in your browser")
-        else:
-            safe_push_log("❌ Cookies file configured but invalid/missing")
-            safe_push_log("💡 SOLUTION: Fix your cookies file configuration")
-    elif cookies_method == "browser":
-        browser = st.session_state.get("browser_select", "chrome")
-        safe_push_log(f"⏰ Browser cookies configured ({browser}) but may be expired")
-        safe_push_log("💡 SOLUTION: Refresh your browser authentication")
-        safe_push_log(f"   • Make sure you're logged into YouTube in {browser}")
-        safe_push_log("   • Try signing out and back in to YouTube")
-
-    safe_push_log(
-        "📺 Note: Age-restricted and private videos always require authentication"
-    )
-
-
-def is_format_unavailable_error(error_message: str) -> bool:
-    """Check if error is specifically about requested format not being available"""
-    error_lower = error_message.lower()
-    return (
-        "requested format is not available" in error_lower
-        or "format is not available" in error_lower
-    )
-
-
-def log_format_unavailable_error_hint(
-    error_message: str = "", current_profile_name: str = ""
-):
-    """Log specific guidance for format unavailable errors - often auth issues with premium codecs"""
-
-    # Prevent spam - only show detailed explanation once per profile
-    session_key = f"format_hint_shown_{current_profile_name}"
-    if st.session_state.get(session_key, False):
-        # Just show brief message for subsequent failures
-        safe_push_log("⚠️ Format rejected (authentication limitation)")
-        return
-
-    st.session_state[session_key] = True
-
-    # Analyze the profile being attempted
-    profile_info = ""
-    if current_profile_name:
-        if "av1" in current_profile_name.lower():
-            profile_info = "AV1 codec"
-        elif "vp9" in current_profile_name.lower():
-            profile_info = "VP9 codec"
-        elif "opus" in current_profile_name.lower():
-            profile_info = "Opus audio"
-        else:
-            profile_info = current_profile_name
-
-    safe_push_log("🚫 FORMAT AUTHENTICATION ISSUE")
-    if profile_info:
-        safe_push_log(f"🎯 YouTube refused to serve {profile_info} format")
-
-    safe_push_log(
-        "🔍 EXPLANATION: Format was detected as available, but YouTube's download"
-    )
-    safe_push_log(
-        "   API uses stricter authentication for premium codecs than format detection."
-    )
-    safe_push_log("")
-
-    cookies_method = _get_current_cookies_method()
-
-    if cookies_method == "none":
-        safe_push_log("🔧 SOLUTION: Enable authentication cookies for premium formats")
-        safe_push_log("   • Use browser cookies (recommended)")
-        safe_push_log(
-            "   • Premium codecs (AV1, VP9, Opus) typically require authentication"
-        )
-    elif cookies_method in ["browser", "file"]:
-        safe_push_log("💡 SOLUTION: Refresh your authentication")
-        safe_push_log("   • Sign out and back into YouTube in your browser")
-        safe_push_log("   • Clear browser cache and re-authenticate")
-        if "av1" in profile_info.lower():
-            safe_push_log("   • AV1 has the strictest authentication requirements")
-
-    safe_push_log("✅ FALLBACK: Trying more compatible profiles next")
-
-
-def smart_download_with_fallback(
-    base_cmd: List[str],
-    url: str,
-    progress_placeholder=None,
-    status_placeholder=None,
-    info_placeholder=None,
-) -> Tuple[int, str]:
-    """
-    Intelligent download with progressive fallback strategies
-
-    Returns:
-        Tuple[int, str]: (return_code, error_message)
-    """
-    cookies_available = False
-    cookies_part = []
-
-    # Check if cookies are configured
-    cookies_method = st.session_state.get("cookies_method", "none")
-    if cookies_method != "none":
-        cookies_part = build_cookies_params()
-        cookies_available = len(cookies_part) > 0
-
-    # Strategy 1: Try without cookies first (fastest)
-    if status_placeholder:
-        status_placeholder.info(t("status_trying_no_auth"))
-    safe_push_log("🚀 Strategy 1: Trying without cookies (fastest)")
-
-    cmd = base_cmd + [url]
-    ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
-
-    if ret == 0:
-        safe_push_log("✅ Success without authentication!")
-        return ret, ""
-
-    # Check if we got an authentication-related error
-    last_error = st.session_state.get("last_error", "").lower()
-    if not any(
-        error in last_error
-        for error in ["403", "forbidden", "signature", "unavailable"]
-    ):
-        return ret, "Non-authentication error"
-
-    safe_push_log("⚠️ Authentication error detected, trying fallback strategies...")
-
-    # Strategy 2: Try different YouTube clients
-    for i, client in enumerate(
-        YOUTUBE_CLIENT_FALLBACKS[1:], 2
-    ):  # Skip default (already tried)
-        client_name = client["name"]
-        if status_placeholder:
-            if client_name == "android":
-                status_placeholder.info(t("status_retry_android"))
-            elif client_name == "ios":
-                status_placeholder.info(t("status_retry_ios"))
-            elif client_name == "web":
-                status_placeholder.info(t("status_retry_web"))
-            else:
-                status_placeholder.info(f"🔄 Retry {i}: Using {client_name} client...")
-
-        safe_push_log(f"🔄 Strategy {i}: Trying with {client_name} client")
-
-        cmd = base_cmd + client["args"] + [url]
-        ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
-
-        if ret == 0:
-            safe_push_log(f"✅ Success with {client_name} client!")
-            return ret, ""
-
-    # Strategy 3: Try with cookies if available
-    if cookies_available:
-        if status_placeholder:
-            status_placeholder.info(t("status_retry_cookies"))
-        safe_push_log("🍪 Strategy: Trying with authentication cookies")
-
-        # Try each client with cookies
-        for client in YOUTUBE_CLIENT_FALLBACKS:
-            client_name = client["name"]
-            safe_push_log(f"🔄 Trying {client_name} client + cookies")
-
-            cmd = base_cmd + client["args"] + cookies_part + [url]
-            ret = run_cmd(
-                cmd, progress_placeholder, status_placeholder, info_placeholder
-            )
-
-            if ret == 0:
-                safe_push_log(f"✅ Success with {client_name} client + cookies!")
-                return ret, ""
-
-    # All strategies failed - show comprehensive error message
-    if status_placeholder:
-        status_placeholder.error("❌ Download failed after all retry attempts")
-
-    safe_push_log("❌ All fallback strategies failed")
-    safe_push_log("")
-    log_title("🚫 Download failed - Comprehensive troubleshooting:")
-
-    # Show specific error based on what was tried
-    if not cookies_available:
-        safe_push_log("🔑 PRIMARY ISSUE: No authentication configured")
-        safe_push_log("💡 IMMEDIATE SOLUTION:")
-        safe_push_log("   1. ⚠️  CONFIGURE COOKIES below")
-        safe_push_log("   2. 🌐 Use 'Browser Cookies' (easiest)")
-        safe_push_log("   3. 📁 Or export cookies from browser to file")
-        safe_push_log("")
-        safe_push_log(
-            "🎯 KEY INSIGHT: Even public videos need cookies for signature verification!"
-        )
-    else:
-        safe_push_log("🔑 AUTHENTICATION ISSUE: Cookies configured but not working")
-        safe_push_log("💡 SOLUTIONS TO TRY:")
-        safe_push_log("   1. 🔄 Update your cookies (they may be expired)")
-        safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
-        safe_push_log("   3. 🔁 Try different browser or re-export cookies")
-        safe_push_log(f"   4. 📋 Current method: {cookies_method}")
-
-    safe_push_log("")
-    safe_push_log(
-        "📺 Technical context: YouTube uses encrypted signatures that require"
-    )
-    safe_push_log("    fresh authentication tokens to decrypt video URLs.")
-    safe_push_log("─" * 50)  # Static separator for end of troubleshooting section
-
-    return ret, "Authentication failed after all strategies"
-
-
-def _build_strategy_command(
-    base_cmd: List[str],
-    client_args: List[str],
-    cookies_part: List[str],
-    url: str,
-    use_cookies: bool = False,
-) -> List[str]:
-    """Build complete yt-dlp command with client args and optional cookies"""
-    cmd = base_cmd + client_args
-    if use_cookies and cookies_part:
-        cmd.extend(cookies_part)
-    cmd.append(url)
-    return cmd
-
-
-def _get_current_cookies_method() -> str:
-    """Get current cookies method from session state"""
-    return st.session_state.get("cookies_method", "none")
-
-
-def _log_cookies_method_status(cookies_method: str) -> None:
-    """Log current cookies method status"""
-    safe_push_log(f"   4. 📋 Current method: {cookies_method}")
-
-
-def _log_authentication_solutions(cookies_method: str) -> None:
-    """Log common authentication error solutions based on current cookies method"""
-    if cookies_method == "none":
-        safe_push_log("   1. ⚠️  ENABLE COOKIES - This is likely the main issue")
-        safe_push_log("   2. 🌐 Use Browser Cookies (easiest solution)")
-        safe_push_log("   3. 📁 Or export cookies from your browser to a file")
-    elif cookies_method == "browser":
-        safe_push_log("   1. 🔄 UPDATE YOUR COOKIES - They may be expired")
-        safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
-        safe_push_log("   3. 🔁 Try refreshing/re-extracting cookies")
-    else:  # file method
-        safe_push_log("   1. 🔄 UPDATE YOUR COOKIES - They may be expired")
-        safe_push_log("   2. 🌐 Sign out and back into YouTube in your browser")
-        safe_push_log("   3. 🔁 Try different browser or re-export cookies")
-
-
-def _log_strategy_header(
-    strategy_name: str, strategy_num: int, total_strategies: int
-) -> None:
-    """Log strategy attempt header with consistent formatting"""
-    safe_push_log("")
-    log_title(f"🎯 Strategy {strategy_num}/{total_strategies}: {strategy_name}")
-
-
-def cleanup_temp_files(
-    base_filename: str, tmp_dir: Path = None, cleanup_type: str = "all"
-) -> None:
-    """
-    Centralized cleanup function for temporary files
-
-    Args:
-        base_filename: Base filename for targeted cleanup
-        tmp_dir: Directory to clean (defaults to TMP_DOWNLOAD_FOLDER)
-        cleanup_type: Type of cleanup - "all", "download", "subtitles", "cutting", "outputs"
-    """
-    if not CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
-        safe_push_log(
-            f"🔍 Debug mode: Skipping {cleanup_type} cleanup (REMOVE_TMP_FILES=false)"
-        )
-        return
-
-    if tmp_dir is None:
-        tmp_dir = TMP_DOWNLOAD_FOLDER
-
-    safe_push_log(f"🧹 Cleaning {cleanup_type} temporary files...")
+    if not url or not url.strip():
+        return None
 
     try:
-        files_cleaned = 0
+        # Prepare output path for JSON file
+        json_output_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
 
-        if cleanup_type in ("all", "download"):
-            # Download temporary files
-            patterns = [f"{base_filename}.*", "*.part", "*.ytdl", "*.temp", "*.tmp"]
-            for pattern in patterns:
-                for file_path in tmp_dir.glob(pattern):
-                    if file_path.is_file() and _should_remove_file(
-                        file_path, cleanup_type
-                    ):
-                        try:
-                            file_path.unlink()
-                            files_cleaned += 1
-                        except Exception as e:
-                            safe_push_log(f"⚠️ Could not remove {file_path.name}: {e}")
+        # Build cookies parameters from config (important to avoid bot detection)
+        # Use config-based cookies since session_state may not be available yet
+        cookies_params = build_cookies_params_from_config()
 
-        if cleanup_type in ("all", "subtitles"):
-            # Subtitle files (.srt/.vtt) and .part files
-            for ext in (".srt", ".vtt"):
-                for f in tmp_dir.glob(f"{base_filename}*{ext}"):
-                    try:
-                        f.unlink()
-                        files_cleaned += 1
-                    except Exception:
-                        pass
-            # Part files related to base_filename
-            for f in tmp_dir.glob(f"{base_filename}*.*.part"):
-                try:
-                    f.unlink()
-                    files_cleaned += 1
-                except Exception:
-                    pass
-
-        if cleanup_type in ("all", "cutting"):
-            # Cutting intermediate files
-            for suffix in ("-cut", "-cut-final"):
-                for ext in (".srt", ".vtt", ".mkv", ".mp4", ".webm"):
-                    for f in tmp_dir.glob(f"{base_filename}*{suffix}*{ext}"):
-                        try:
-                            f.unlink()
-                            files_cleaned += 1
-                        except Exception:
-                            pass
-
-        if cleanup_type in ("all", "outputs"):
-            # Final output files (for retry cleanup)
-            for ext in (".mkv", ".mp4", ".webm"):
-                p = tmp_dir / f"{base_filename}{ext}"
-                if p.exists():
-                    try:
-                        p.unlink()
-                        files_cleaned += 1
-                    except Exception:
-                        pass
-
-        if files_cleaned > 0:
-            safe_push_log(f"🧹 Cleaned {files_cleaned} {cleanup_type} temporary files")
+        # Log cookie status for debugging
+        if cookies_params:
+            if "--cookies" in cookies_params:
+                safe_push_log("🍪 URL analysis using cookies file")
+            elif "--cookies-from-browser" in cookies_params:
+                safe_push_log("🍪 URL analysis using browser cookies")
         else:
-            safe_push_log(f"✅ No {cleanup_type} files to clean")
+            safe_push_log("⚠️ URL analysis without cookies - may trigger bot detection")
 
-    except Exception as e:
-        safe_push_log(f"⚠️ Error during {cleanup_type} cleanup: {e}")
-
-
-def _should_remove_file(file_path: Path, cleanup_type: str) -> bool:
-    """Helper function to determine if a file should be removed based on cleanup type"""
-    # Skip removing final output files during download cleanup
-    if cleanup_type == "download" and file_path.suffix in (".mkv", ".mp4", ".webm"):
-        # Only remove if it's clearly a temporary file (has additional suffixes)
-        stem = file_path.stem
-        return any(suffix in stem for suffix in [".temp", ".tmp", ".part", "-cut"])
-    return True
-
-
-def ensure_dir(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-
-
-def move_file(src: Path, dest_dir: Path) -> Path:
-    target = dest_dir / src.name
-    shutil.move(str(src), str(target))
-    return target
-
-
-def cleanup_extras(tmp_dir: Path, base_filename: str):
-    """Legacy wrapper for cleanup_temp_files - maintained for compatibility"""
-    cleanup_temp_files(base_filename, tmp_dir, "subtitles")
-
-
-def delete_intermediate_outputs(tmp_dir: Path, base_filename: str):
-    """Legacy wrapper for cleanup_temp_files - maintained for compatibility"""
-    cleanup_temp_files(base_filename, tmp_dir, "outputs")
-
-
-# === Helpers time ===
-
-
-def customize_video_metadata(
-    video_path: Path, user_title: str, original_title: str = None
-) -> bool:
-    """
-    Customize video metadata using FFmpeg, replacing title with user-provided name
-    and preserving original title in album field
-
-    Args:
-        video_path: Path to the video file
-        user_title: Title provided by the user (from filename input)
-        original_title: Original video title from yt-dlp (optional)
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        safe_push_log("📝 Customizing video metadata...")
-
-        # Create temporary output file
-        temp_output = video_path.with_suffix(f".temp{video_path.suffix}")
-
-        # Build FFmpeg command
-        cmd_metadata = [
-            "ffmpeg",
-            "-y",  # Overwrite output file
-            "-i",
-            str(video_path),
-            "-c",
-            "copy",  # Copy streams without re-encoding (fast)
-            "-metadata",
-            f"title={user_title}",  # Use user-provided title
+        # Run yt-dlp with JSON output, skip download, flat playlist mode
+        cmd = [
+            "yt-dlp",
+            "-J",  # JSON output
+            "--skip-download",  # Don't download
+            "--flat-playlist",  # For playlists, get basic info without extracting all videos
+            "--playlist-end",
+            "1",  # Only first video for quick playlist detection
+            sanitize_url(url),
         ]
 
-        # Add original title as album if available
-        if original_title and original_title != user_title:
-            cmd_metadata.extend(["-metadata", f"album={original_title}"])
-
-        # Add output path
-        cmd_metadata.append(str(temp_output))
-
-        # Execute FFmpeg command
-        result = run_subprocess_safe(
-            cmd_metadata, timeout=120, error_context="Metadata customization"
-        )
-
-        if result.returncode == 0 and temp_output.exists():
-            # Replace original file with metadata-customized version
-            video_path.unlink()  # Remove original
-            temp_output.rename(video_path)  # Rename temp to original
-            safe_push_log(f"✅ Metadata customized - Title: {user_title}")
-            return True
-        else:
-            error_msg = result.stderr.strip()
-            safe_push_log(f"⚠️ Failed to customize metadata: {error_msg}")
-            # Clean up temp file if it exists
-            if temp_output.exists():
-                temp_output.unlink()
-            return False
-
-    except Exception as e:
-        safe_push_log(f"⚠️ Error customizing metadata: {e}")
-        # Clean up temp file if it exists
-        temp_output = video_path.with_suffix(f".temp{video_path.suffix}")
-        if temp_output.exists():
-            temp_output.unlink()
-        return False
-
-
-def run_subprocess_safe(
-    cmd: List[str], timeout: int = 60, error_context: str = ""
-) -> subprocess.CompletedProcess:
-    """Run subprocess with standardized error handling and timeout"""
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        return result
-    except subprocess.TimeoutExpired:
-        error_msg = f"Command timed out after {timeout} seconds"
-        if error_context:
-            error_msg = f"{error_context}: {error_msg}"
-        safe_push_log(f"⚠️ {error_msg}")
-        # Return a fake result object for consistency
-        return subprocess.CompletedProcess(cmd, 1, "", error_msg)
-    except Exception as e:
-        error_msg = f"Command failed: {str(e)}"
-        if error_context:
-            error_msg = f"{error_context}: {error_msg}"
-        safe_push_log(f"❌ {error_msg}")
-        return subprocess.CompletedProcess(cmd, 1, "", error_msg)
-
-
-def get_keyframes(video_path: Path) -> list[float]:
-    """
-    Extract keyframe timestamps from a video using ffprobe.
-    Returns a list of keyframe timestamps in seconds.
-    """
-    try:
-        push_log(t("log_keyframes_extraction"))
-
-        cmd_keyframes = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_packets",
-            "-show_entries",
-            "packet=pts_time,flags",
-            "-of",
-            "csv=p=0",
-            str(video_path),
-        ]
-
-        result = run_subprocess_safe(
-            cmd_keyframes, timeout=120, error_context="Keyframes extraction"
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if result.returncode != 0:
-            push_log(t("log_keyframes_failed", error=result.stderr))
-            return []
-
-        keyframes = []
-        for line in result.stdout.strip().split("\n"):
-            if line and "," in line:
-                parts = line.split(",")
-                if len(parts) >= 2 and "K" in parts[1]:
-                    try:
-                        timestamp = float(parts[0])
-                        keyframes.append(timestamp)
-                    except ValueError:
-                        continue
-
-        keyframes.sort()
-        push_log(t("log_keyframes_count", count=len(keyframes)))
-        return keyframes
-
-    except Exception as e:
-        push_log(t("log_keyframes_error", error=e))
-        return []
-
-
-def find_nearest_keyframes(
-    keyframes: list[float], start_sec: int, end_sec: int
-) -> tuple[float, float]:
-    """
-    Find the nearest keyframes to the requested start and end times.
-    Returns (nearest_start_keyframe, nearest_end_keyframe).
-    """
-    if not keyframes:
-        return float(start_sec), float(end_sec)
-
-    # Find nearest keyframe to start_sec (can be before or after)
-    start_kf = start_sec
-    min_start_diff = float("inf")
-    for kf in keyframes:
-        diff = abs(kf - start_sec)
-        if diff < min_start_diff:
-            min_start_diff = diff
-            start_kf = kf
-
-    # Find nearest keyframe to end_sec (can be before or after)
-    end_kf = end_sec
-    min_end_diff = float("inf")
-    for kf in keyframes:
-        diff = abs(kf - end_sec)
-        if diff < min_end_diff:
-            min_end_diff = diff
-            end_kf = kf
-
-    push_log(t("log_keyframes_selected", start=start_kf, end=end_kf))
-    push_log(
-        t(
-            "log_keyframes_offset",
-            start_offset=abs(start_kf - start_sec),
-            end_offset=abs(end_kf - end_sec),
-        )
-    )
-
-    return start_kf, end_kf
-
-
-def safe_push_log(message: str):
-    """Safe logging function that works even if logs aren't initialized yet"""
-    try:
-        if "ALL_LOGS" in globals() and "logs_placeholder" in globals():
-            push_log(message)
-        else:
-            # If logging isn't ready, just print to console for debugging
-            print(f"[LOG] {message}")
-    except Exception as e:
-        print(f"[LOG] {message} (Error: {e})")
-
-
-def log_title(title: str, underline_char: str = "─"):
-    """
-    Log a title with automatic underline of the same length
-
-    Args:
-        title: The title text to display
-        underline_char: Character to use for underline (default: ─)
-    """
-    # Simply use the full string length - much more natural!
-    underline_length = len(title)
-
-    safe_push_log(title)
-    safe_push_log(underline_char * underline_length)
-
-
-def extract_resolution_value(resolution_str: str) -> int:
-    """Extract numeric value from resolution string for sorting"""
-    if not resolution_str:
-        return 0
-    try:
-        # Handle common resolution formats: "1920x1080", "1080p", "720p60", etc.
-        if "x" in resolution_str:
-            # Extract height from "1920x1080" format
-            height = int(resolution_str.split("x")[1].split("p")[0])
-            return height
-        elif "p" in resolution_str:
-            # Extract from "1080p", "720p60" format
-            height = int(resolution_str.split("p")[0])
-            return height
-        else:
-            # Unknown format, return 0 for lowest priority
-            return 0
-    except (ValueError, IndexError):
-        return 0
-
-
-# Function removed - using parse_format_line from profile_utils instead
-
-
-def get_video_title(url: str, cookies_part: List[str]) -> str:
-    """
-    Get the title of the video using yt-dlp with retry strategy.
-    Returns sanitized title suitable for filename
-    """
-    safe_push_log("📋 Retrieving video title...")
-
-    # Simple retry strategies for title extraction
-    strategies = []
-
-    # Try with cookies first if available
-    if cookies_part:
-        strategies.append(
-            {
-                "name": "with cookies",
-                "cmd": ["yt-dlp", "--print", "title", "--no-download"]
-                + cookies_part
-                + [url],
-            }
-        )
-
-    # Try without cookies
-    strategies.append(
-        {
-            "name": "without cookies",
-            "cmd": ["yt-dlp", "--print", "title", "--no-download", url],
-        }
-    )
-
-    # Try each strategy
-    for strategy in strategies:
-        try:
-            result = run_subprocess_safe(
-                strategy["cmd"],
-                timeout=30,
-                error_context=f"Title extraction ({strategy['name']})",
+            # Check if error is authentication-related (age restriction, bot detection, etc.)
+            error_msg = result.stderr if result.stderr else ""
+            needs_auth = any(
+                [
+                    "Sign in to confirm" in error_msg,
+                    "confirm your age" in error_msg,
+                    "age" in error_msg.lower() and "restricted" in error_msg.lower(),
+                    "inappropriate for some users" in error_msg,
+                    "requires authentication" in error_msg,
+                    "login required" in error_msg,
+                ]
             )
 
-            if result.returncode == 0 and result.stdout.strip():
-                title = result.stdout.strip()
-                # Sanitize title for filename
-                sanitized = sanitize_filename(title)
-                safe_push_log(f"✅ Title retrieved {strategy['name']}: {title}")
-                return sanitized
-            else:
-                safe_push_log(
-                    f"⚠️ Title extraction {strategy['name']} failed: {result.stderr.strip()[:50]}..."
+            # If first attempt failed and we have cookies available, try with cookies
+            if needs_auth and cookies_params:
+                safe_push_log("🔐 Authentication required, retrying with cookies...")
+                cmd_with_auth = [
+                    "yt-dlp",
+                    "-J",
+                    "--skip-download",
+                    "--flat-playlist",
+                    "--playlist-end",
+                    "1",
+                    "--user-agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "--extractor-retries",
+                    "3",
+                    "--no-cache-dir",
+                    *cookies_params,
+                    sanitize_url(url),
+                ]
+
+                result = subprocess.run(
+                    cmd_with_auth, capture_output=True, text=True, timeout=45
                 )
-                # Only show auth hint for first failure with cookies
-                if strategy["name"] == "with cookies" and is_authentication_error(
-                    result.stderr
+
+                if result.returncode == 0:
+                    safe_push_log("✅ Authentication successful with cookies")
+                    # Continue to JSON parsing below
+                else:
+                    error_msg = (
+                        result.stderr[:400] if result.stderr else "Unknown error"
+                    )
+
+            # If still failing or no cookies available, try enhanced retry without auth
+            if result.returncode != 0:
+                safe_push_log("⚠️ Retrying with enhanced options...")
+                cmd_retry = [
+                    "yt-dlp",
+                    "-J",
+                    "--skip-download",
+                    "--flat-playlist",
+                    "--playlist-end",
+                    "1",
+                    "--user-agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "--extractor-retries",
+                    "3",
+                    "--no-cache-dir",
+                ]
+                # Only add cookies if we haven't tried them yet
+                if not needs_auth and cookies_params:
+                    cmd_retry.extend(cookies_params)
+
+                cmd_retry.append(sanitize_url(url))
+
+                result = subprocess.run(
+                    cmd_retry, capture_output=True, text=True, timeout=45
+                )
+
+            if result.returncode != 0:
+                error_msg = result.stderr[:400] if result.stderr else "Unknown error"
+
+                # Check for bot detection error
+                if "Sign in to confirm you're not a bot" in error_msg:
+                    # Provide helpful guidance based on current setup
+                    cookie_file_exists = (
+                        YOUTUBE_COOKIES_FILE_PATH
+                        and Path(YOUTUBE_COOKIES_FILE_PATH).exists()
+                    )
+                    browser_configured = COOKIES_FROM_BROWSER and is_valid_browser(
+                        COOKIES_FROM_BROWSER
+                    )
+
+                    help_msg = "⚠️ YouTube bot detection triggered.\n\n"
+
+                    if not cookie_file_exists and not browser_configured:
+                        help_msg += (
+                            "🔐 **No cookies configured!** This is likely why you're blocked.\n\n"
+                            "**Solutions:**\n"
+                            "1. 📁 **Add cookies file** (recommended for servers):\n"
+                            "   - Export cookies from your browser (see docs/usage.md)\n"
+                            "   - Place file at: `cookies/youtube_cookies.txt`\n"
+                            "   - Set YOUTUBE_COOKIES_FILE_PATH in .env\n\n"
+                            "2. 🌐 **Use browser cookies** (local development):\n"
+                            "   - Set COOKIES_FROM_BROWSER=chrome (or firefox, brave, etc.)\n"
+                            "   - Works if browser is on same machine\n\n"
+                            "3. ⏳ **Wait a few minutes** and try again\n\n"
+                            "[Documentation](docs/usage.md#-authentication--private-content)"
+                        )
+                    else:
+                        help_msg += (
+                            "🔐 Cookies are configured but YouTube still blocked the request.\n\n"
+                            "**Try these solutions:**\n"
+                            "1. 🔄 **Refresh your cookies** (they may be expired)\n"
+                            "2. ⏳ **Wait 5-10 minutes** before retrying\n"
+                            "3. 🌐 **Try from a different IP** if using VPN/proxy\n"
+                            "4. 🍪 **Verify cookies file is valid** (not corrupted)\n\n"
+                        )
+
+                        if cookie_file_exists:
+                            help_msg += f"📁 Current cookies file: `{YOUTUBE_COOKIES_FILE_PATH}`\n"
+                        if browser_configured:
+                            help_msg += (
+                                f"🌐 Browser configured: `{COOKIES_FROM_BROWSER}`\n"
+                            )
+
+                    return {"error": help_msg}
+
+                # Check for age restriction error
+                elif "confirm your age" in error_msg or (
+                    "age" in error_msg.lower() and "restricted" in error_msg.lower()
                 ):
-                    log_authentication_error_hint(result.stderr)
+                    cookie_file_exists = (
+                        YOUTUBE_COOKIES_FILE_PATH
+                        and Path(YOUTUBE_COOKIES_FILE_PATH).exists()
+                    )
+                    browser_configured = COOKIES_FROM_BROWSER and is_valid_browser(
+                        COOKIES_FROM_BROWSER
+                    )
 
-        except Exception as e:
-            safe_push_log(f"⚠️ Title extraction {strategy['name']} error: {e}")
-            continue
+                    help_msg = "🔞 Age-restricted content.\n\n"
 
-    # All strategies failed
-    safe_push_log("⚠️ Could not retrieve video title, using default")
-    return "video"
+                    if not cookie_file_exists and not browser_configured:
+                        help_msg += (
+                            "🔐 **Authentication required!** This video requires sign-in to verify age.\n\n"
+                            "**Solutions:**\n"
+                            "1. 📁 **Add cookies file** (recommended):\n"
+                            "   - Export cookies from your browser while signed in to YouTube\n"
+                            "   - Place file at: `cookies/youtube_cookies.txt`\n"
+                            "   - Set YOUTUBE_COOKIES_FILE_PATH in .env\n\n"
+                            "2. 🌐 **Use browser cookies**:\n"
+                            "   - Set COOKIES_FROM_BROWSER=chrome (or firefox, brave, etc.)\n"
+                            "   - Make sure you're signed in to YouTube in that browser\n\n"
+                            "[Documentation](docs/usage.md#-authentication--private-content)"
+                        )
+                    else:
+                        help_msg += (
+                            "🔐 Cookies are configured but age verification failed.\n\n"
+                            "**Possible causes:**\n"
+                            "1. 🔄 **Cookies may be expired** - refresh them from your browser\n"
+                            "2. 👤 **Not signed in** - make sure you're logged into YouTube when exporting cookies\n"
+                            "3. 🔞 **Account age verification** - your YouTube account may need age verification\n\n"
+                        )
+
+                        if cookie_file_exists:
+                            help_msg += f"📁 Current cookies file: `{YOUTUBE_COOKIES_FILE_PATH}`\n"
+                        if browser_configured:
+                            help_msg += (
+                                f"🌐 Browser configured: `{COOKIES_FROM_BROWSER}`\n"
+                            )
+
+                    return {"error": help_msg}
+
+                return {"error": f"yt-dlp failed: {error_msg}"}
+
+        # Parse JSON output
+        try:
+            info = json.loads(result.stdout)
+
+            # Save JSON to file for later use with yt-dlp --load-info-json
+            try:
+                with open(json_output_path, "w", encoding="utf-8") as f:
+                    json.dump(info, f, indent=2, ensure_ascii=False)
+                safe_push_log(f"💾 URL info saved to {json_output_path}")
+            except Exception as e:
+                # Non-critical error - continue even if file write fails
+                safe_push_log(f"⚠️ Could not save URL info to file: {e}")
+
+            # Store in session state for global access
+            st.session_state["url_info"] = info
+            st.session_state["url_info_path"] = str(json_output_path)
+
+            return info
+        except json.JSONDecodeError as e:
+            return {"error": f"Failed to parse JSON: {str(e)}"}
+
+    except subprocess.TimeoutExpired:
+        return {
+            "error": "Request timed out (max 45 seconds). Try again or check your connection."
+        }
+    except Exception as e:
+        return {"error": f"Unexpected error: {str(e)}"}
+
+
+def display_url_info(url_info: Dict) -> None:
+    """
+    Display URL analysis information in a user-friendly, visually appealing format.
+
+    Args:
+        url_info: Dict from url_analysis() containing video/playlist info
+    """
+    if not url_info:
+        return
+
+    # Check for errors first
+    if "error" in url_info:
+        st.error(f"❌ &nbsp; {t('error_analyzing_url')}: {url_info['error']}")
+        return
+
+    # Get extractor info for platform-specific display
+    extractor = url_info.get("extractor", "").lower()
+    extractor_key = url_info.get("extractor_key", "").lower()
+    # media_id = url_info.get("id")
+
+    # Determine platform icon/emoji
+    platform_emoji = "🎬"
+    platform_name = "Video"
+    if "youtube" in extractor or "youtube" in extractor_key:
+        platform_emoji = "▶️"  # YouTube play button (red)
+        platform_name = "YouTube"
+    elif "vimeo" in extractor:
+        platform_emoji = "🎞️"  # Vimeo film
+        platform_name = "Vimeo"
+    elif "dailymotion" in extractor:
+        platform_emoji = "🎥"  # Dailymotion camera
+        platform_name = "Dailymotion"
+    elif "instagram" in extractor:
+        platform_emoji = "📸"  # Instagram camera
+        platform_name = "Instagram"
+
+    # Determine if it's a playlist or single video
+    is_playlist = url_info.get("_type") == "playlist" or "entries" in url_info
+
+    if is_playlist:
+        # ===== PLAYLIST INFORMATION =====
+        title = url_info.get("title", "Unknown Playlist")
+        entries_count = len(url_info.get("entries", []))
+        uploader = url_info.get("uploader", url_info.get("channel", ""))
+
+        # For flat-playlist mode, use playlist_count if available
+        if "playlist_count" in url_info:
+            entries_count = url_info["playlist_count"]
+
+        # Get first video info if available
+        first_video_title = ""
+        if url_info.get("entries") and len(url_info["entries"]) > 0:
+            first_video = url_info["entries"][0]
+            if isinstance(first_video, dict) and "title" in first_video:
+                first_video_title = first_video["title"]
+
+        # Build compact playlist info
+        playlist_info_items = []
+
+        playlist_info_items.append(
+            f'<span style="color: #e2e8f0;">&nbsp; {platform_emoji} &nbsp; {platform_name} Playlist</span>'
+        )
+        if uploader:
+            playlist_info_items.append(
+                f'<span style="color: #e2e8f0;">👤 &nbsp; {uploader}</span>'
+            )
+        playlist_info_items.append(
+            f'<span style="color: #e2e8f0;">📊 &nbsp; {entries_count} videos</span>'
+        )
+        if first_video_title:
+            # Truncate long titles for first video
+            truncated_title = (
+                first_video_title[:50] + "..."
+                if len(first_video_title) > 50
+                else first_video_title
+            )
+            playlist_info_items.append(
+                f'<span style="color: #94a3b8; font-size: 0.85em;">📹 &nbsp; {truncated_title}</span>'
+            )
+
+        playlist_info_line = (
+            ' <span style="color: #4ade80;">&nbsp; &nbsp; &nbsp;</span> '.join(
+                playlist_info_items
+            )
+            if playlist_info_items
+            else ""
+        )
+
+        # Display everything in one compact card
+        st.html(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #1e3a2e 0%, #2d5a45 100%);
+                border-radius: 12px;
+                padding: 18px;
+                border-left: 5px solid #4ade80;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                margin: 10px 0;
+            ">
+                <h2 style="
+                    color: #ffffff;
+                    font-size: 1.3em;
+                    font-weight: 600;
+                    margin: 0 0 12px 0;
+                    line-height: 1.3;
+                ">
+                    {title}
+                </h2>
+                
+                {f'''<div style="
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px 12px;
+                    font-size: 0.9em;
+                    padding-left: 12px;
+                ">
+                    {playlist_info_line}
+                </div>''' if playlist_info_line else ''}
+            </div>
+            """
+        )
+
+    elif url_info.get("_type") == "video" or "duration" in url_info:
+        # ===== SINGLE VIDEO INFORMATION =====
+        title = url_info.get("title", "Unknown Video")
+        duration = url_info.get("duration", 0)
+        view_count = url_info.get("view_count")
+        like_count = url_info.get("like_count")
+        uploader = url_info.get("uploader", url_info.get("channel", ""))
+
+        # Format data for display
+        duration_str = fmt_hhmmss(int(duration)) if duration and duration > 0 else ""
+        views_formatted = f"{view_count:,}".replace(",", " ") if view_count else ""
+        likes_formatted = (
+            f"{like_count:,}".replace(",", " ") if like_count and like_count > 0 else ""
+        )
+
+        # Build compact inline stats
+        stats_items = []
+        stats_items.append(
+            f'<span style="color: #e2e8f0;">&nbsp; {platform_emoji} &nbsp; {platform_name} Video</span>'
+        )
+        if uploader:
+            stats_items.append(
+                f'<span style="color: #e2e8f0;">👤 &nbsp; {uploader}</span>'
+            )
+        if duration > 0:
+            stats_items.append(
+                f'<span style="color: #e2e8f0;">⏱️ &nbsp; {duration_str}</span>'
+            )
+        if view_count:
+            stats_items.append(
+                f'<span style="color: #e2e8f0;">👁️ &nbsp; {views_formatted}</span>'
+            )
+        if like_count is not None and like_count > 0:
+            stats_items.append(
+                f'<span style="color: #e2e8f0;">👍 &nbsp; {likes_formatted}</span>'
+            )
+
+        stats_line = (
+            ' <span style="color: #4ade80;">&nbsp; &nbsp;</span> '.join(stats_items)
+            if stats_items
+            else ""
+        )
+
+        # Display everything in one compact card
+        st.html(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #1e3a2e 0%, #2d5a45 100%);
+                border-radius: 12px;
+                padding: 18px;
+                border-left: 5px solid #4ade80;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                margin: 10px 0;
+            ">                
+                <h2 style="
+                    color: #ffffff;
+                    font-size: 1.3em;
+                    font-weight: 600;
+                    margin: 0 0 12px 0;
+                    line-height: 1.3;
+                ">
+                    {title}
+                </h2>
+                
+                {f'''<div style="
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px 12px;
+                    font-size: 0.9em;
+                    padding-left: 12px;
+                ">
+                    {stats_line}
+                </div>''' if stats_line else ''}
+            </div>
+            """
+        )
+
+    else:
+        # Unknown format - not a video or playlist
+        st.error(f"❌ {t('error_invalid_url_type')}")
+        st.caption(t("url_invalid_content"))
+
+
+def get_url_info() -> Optional[Dict]:
+    """
+    Get the stored URL info from session state.
+
+    Returns:
+        Dict with URL information or None if not available
+    """
+    return st.session_state.get("url_info", None)
+
+
+def get_url_info_path() -> Optional[Path]:
+    """
+    Get the path to the saved URL info JSON file.
+
+    Returns:
+        Path to url_info.json or None if not available
+    """
+    path_str = st.session_state.get("url_info_path", None)
+    if path_str and Path(path_str).exists():
+        return Path(path_str)
+    return None
 
 
 def analyze_video_on_url_change(url: str) -> None:
@@ -2874,395 +1685,6 @@ def get_cached_video_analysis(url: str) -> Tuple[Dict[str, bool], List[Dict]]:
 # transfer_analysis_logs_to_main function removed - no longer needed with synchronous approach
 
 
-# --- 2) Retrieve raw SponsorBlock data ---
-def fetch_sponsorblock_segments(
-    url_or_id: str,
-    categories=("sponsor", "selfpromo", "interaction", "intro", "outro", "preview"),
-    api=SPONSORBLOCK_API,
-    timeout=15,
-):
-    """
-    Fetch SponsorBlock segments for a video.
-
-    Args:
-        url_or_id: Video URL or YouTube video ID
-        categories: Categories to fetch
-        api: SponsorBlock API endpoint
-        timeout: Request timeout
-
-    Returns:
-        List of segments or empty list if unavailable/error
-    """
-    try:
-        # Extract video ID - this will return empty string for non-YouTube URLs
-        vid = url_or_id if len(url_or_id) == 11 else video_id_from_url(url_or_id)
-
-        # If no valid YouTube video ID found, return empty list (not an error)
-        if not vid or len(vid) != 11:
-            return []
-
-        # Validate that the video ID contains only valid characters
-        if not vid.replace("-", "").replace("_", "").isalnum():
-            return []
-
-        r = requests.get(
-            f"{api}/api/skipSegments",
-            params={"videoID": vid, "categories": json.dumps(list(categories))},
-            timeout=timeout,
-        )
-
-        # Handle different status codes appropriately
-        if r.status_code == 404:
-            # No sponsor segments found for this video (normal case)
-            return []
-        elif r.status_code == 400:
-            # Bad request - likely invalid video ID format
-            return []
-        elif r.status_code == 403:
-            # Forbidden - video might be private or restricted
-            return []
-        elif r.status_code >= 500:
-            # Server error - SponsorBlock API issue
-            return []
-
-        r.raise_for_status()
-
-        # Parse response
-        raw = r.json()
-        if not isinstance(raw, list):
-            return []
-
-        segments = []
-        for x in raw:
-            try:
-                if isinstance(x, dict) and "segment" in x and "category" in x:
-                    segment_data = x["segment"]
-                    if isinstance(segment_data, list) and len(segment_data) >= 2:
-                        segments.append(
-                            {
-                                "start": float(segment_data[0]),
-                                "end": float(segment_data[1]),
-                                "category": x["category"],
-                            }
-                        )
-            except (ValueError, TypeError, KeyError):
-                # Skip malformed segment data
-                continue
-
-        return segments
-
-    except requests.exceptions.Timeout:
-        # Timeout - SponsorBlock API is slow
-        return []
-    except requests.exceptions.ConnectionError:
-        # Network issues
-        return []
-    except requests.exceptions.RequestException:
-        # Other request errors
-        return []
-    except Exception:
-        # Any other unexpected error
-        return []
-
-
-# --- 3) Cleanup/sort/merge (optional) ---
-def merge_overlaps(segments, margin=0.0):
-    """Merge overlapping segments (keeping main 'sponsor' category as priority)."""
-    segs = sorted(
-        [
-            (max(0.0, s["start"] - margin), s["end"] + margin, s["category"])
-            for s in segments
-        ]
-    )
-    merged = []
-    for a, b, cat in segs:
-        if not merged or a > merged[-1][1]:
-            merged.append([a, b, {cat}])
-        else:
-            merged[-1][1] = max(merged[-1][1], b)
-            merged[-1][2].add(cat)
-    return [{"start": a, "end": b, "categories": sorted(cats)} for a, b, cats in merged]
-
-
-# --- 4) Build intervals to keep + map timecodes after removal ---
-def invert_segments(segments, total_duration):
-    """Returns the intervals [start,end) to keep when removing 'segments'."""
-    keep = []
-    cur = 0.0
-    for s in sorted(segments, key=lambda x: x["start"]):
-        a, b = max(0.0, s["start"]), min(total_duration, s["end"])
-        if a > cur:
-            keep.append((cur, a))
-        cur = max(cur, b)
-    if cur < total_duration:
-        keep.append((cur, total_duration))
-    return keep
-
-
-def build_time_remap(segments, total_duration):
-    """
-    Builds a mapping original_time -> time_after_cut.
-    Returns a `remap(t)` function + a list of cumulative jumps.
-    """
-    keep = invert_segments(segments, total_duration)
-    # Build pairs (orig_start, orig_end, new_start)
-    mapping = []
-    new_t = 0.0
-    for a, b in keep:
-        mapping.append((a, b, new_t))
-        new_t += b - a
-
-    def remap(t: float):
-        for a, b, ns in mapping:
-            if t < a:
-                # We're in a cut zone before this block
-                return ns
-            if a <= t <= b:
-                return ns + (t - a)
-        # t beyond or in a final cut zone -> clamp to final duration
-        return mapping[-1][2] if mapping else 0.0
-
-    return remap, mapping
-
-
-# --- 5) Helper to recalculate an interval (start,end) after cutting ---
-def remap_interval(start, end, remap):
-    s2 = remap(start)
-    e2 = remap(end)
-    # If start/end fall WITHIN a removed segment, remap returns to the useful edge.
-    # We protect against s2>e2: we clamp and possibly signal an empty interval.
-    if e2 < s2:
-        e2 = s2
-    return (s2, e2)
-
-
-def get_sponsorblock_segments(
-    url: str, cookies_part: List[str], categories: List[str] = None
-) -> List[Dict]:
-    """
-    Retrieves SponsorBlock segments from a video via direct API.
-    Returns a list of segments with 'start' and 'end' in seconds.
-
-    Args:
-        url: Video URL
-        cookies_part: Cookie parameters (not used for direct API)
-        categories: List of categories to retrieve (default: all)
-    """
-    try:
-        push_log(t("log_fetching_sponsorblock"))
-
-        # Check if this is a YouTube URL
-        from urllib.parse import urlparse
-
-        parsed_url = urlparse(url)
-        is_youtube = parsed_url.netloc.endswith(
-            "youtube.com"
-        ) or parsed_url.netloc.endswith("youtu.be")
-
-        # Use specified categories or default ones
-        if categories is None:
-            categories = [
-                "sponsor",
-                "selfpromo",
-                "interaction",
-                "intro",
-                "outro",
-                "preview",
-            ]
-
-        # Try to fetch segments regardless of platform
-        segments = fetch_sponsorblock_segments(url, categories=categories)
-
-        if segments:
-            # Display summary of found segments by category
-            category_counts = {}
-            total_duration = 0
-            for seg in segments:
-                cat = seg["category"]
-                duration = seg["end"] - seg["start"]
-                category_counts[cat] = category_counts.get(cat, 0) + 1
-                total_duration += duration
-
-            push_log(t("log_found_segments", count=len(segments)))
-
-            # Display concise summary
-            summary_parts = []
-            for category, count in sorted(category_counts.items()):
-                summary_parts.append(f"{category}: {count}")
-
-            push_log(f"📋 Categories found: {', '.join(summary_parts)}")
-            push_log(f"⏱️ Total sponsor content: {fmt_hhmmss(int(total_duration))}")
-
-            # Display detailed info for each segment
-            for seg in segments:
-                start_str = fmt_hhmmss(int(seg["start"]))
-                end_str = fmt_hhmmss(int(seg["end"]))
-                duration = int(seg["end"] - seg["start"])
-                push_log(
-                    t(
-                        "log_segment_info",
-                        type=seg["category"],
-                        start=start_str,
-                        end=end_str,
-                        duration=duration,
-                    )
-                )
-        else:
-            # No segments found - provide context-appropriate message
-            if is_youtube:
-                video_id = video_id_from_url(url)
-                if video_id:
-                    push_log(t("log_sponsorblock_no_data"))
-                    push_log(
-                        "💡 This YouTube video has no community-submitted sponsor segments"
-                    )
-                else:
-                    push_log("⚠️ Could not extract valid YouTube video ID from URL")
-            else:
-                push_log("ℹ️ SponsorBlock data not available for this platform")
-                push_log(f"🔗 Platform: {parsed_url.netloc}")
-                push_log("💡 SponsorBlock is a YouTube-specific community database")
-
-        return segments
-
-    except Exception as e:
-        push_log(t("log_sponsorblock_error", error=e))
-        return []
-
-
-def calculate_sponsor_overlap(
-    start_sec: int, end_sec: int, sponsor_segments: List[Dict]
-) -> Tuple[int, int]:
-    """
-    Calculates total sponsor time in the requested section and adjusts the end.
-
-    Args:
-        start_sec: Desired section start (seconds)
-        end_sec: Desired section end (seconds)
-        sponsor_segments: List of sponsor segments
-
-    Returns:
-        tuple: (sponsor_time_removed, new_end_adjusted_for_shortened_video)
-    """
-    if not sponsor_segments:
-        return 0, end_sec
-
-    total_sponsor_time = 0
-    overlapping_segments = []
-    # Find all sponsor segments that overlap with our section
-    for segment in sponsor_segments:
-        seg_start = segment["start"]
-        seg_end = segment["end"]
-
-        # Calculate the overlap
-        overlap_start = max(start_sec, seg_start)
-        overlap_end = min(end_sec, seg_end)
-
-        if overlap_start < overlap_end:
-            overlap_duration = overlap_end - overlap_start
-            total_sponsor_time += overlap_duration
-            overlapping_segments.append(
-                {
-                    **segment,
-                    "overlap_start": overlap_start,
-                    "overlap_end": overlap_end,
-                    "overlap_duration": overlap_duration,
-                }
-            )
-
-    # CORRECTED LOGIC:
-    # After sponsor removal by yt-dlp, the video is shortened
-    # We want to cut in this shortened video from start_sec to (end_sec -
-    # sponsor_time_removed)
-    adjusted_end = end_sec - total_sponsor_time
-
-    if overlapping_segments:
-        push_log(
-            t(
-                "log_sponsorblock_analysis",
-                start=fmt_hhmmss(start_sec),
-                end=fmt_hhmmss(end_sec),
-            )
-        )
-        for seg in overlapping_segments:
-            push_log(
-                t(
-                    "log_sponsorblock_segment_removed",
-                    type=seg.get("category", seg.get("type", "unknown")),
-                    start=fmt_hhmmss(int(seg["overlap_start"])),
-                    end=fmt_hhmmss(int(seg["overlap_end"])),
-                    duration=int(seg["overlap_duration"]),
-                )
-            )
-        push_log(t("log_total_sponsor_time", time=int(total_sponsor_time)))
-        push_log(
-            t(
-                "log_cut_until",
-                adjusted_end=fmt_hhmmss(int(adjusted_end)),
-                original_end=fmt_hhmmss(end_sec),
-            )
-        )
-        push_log(t("log_final_duration", duration=int(adjusted_end - start_sec)))
-
-    return int(total_sponsor_time), int(adjusted_end)
-
-
-def get_sponsorblock_config(sb_choice: str) -> Tuple[List[str], List[str]]:
-    """
-    Returns the SponsorBlock configuration based on user choice or dynamic detection.
-    Wrapper around core function with UI-specific dynamic sponsor detection.
-
-    Args:
-        sb_choice: User choice for SponsorBlock
-
-    Returns:
-        tuple: (remove_categories, mark_categories) - lists of categories to
-            remove/mark
-    """
-    # Check if we have dynamic sponsor detection results (UI-specific feature)
-    if (
-        "detected_sponsors" in st.session_state
-        and st.session_state.detected_sponsors
-        and (
-            "sponsors_to_remove" in st.session_state
-            or "sponsors_to_mark" in st.session_state
-        )
-    ):
-        remove_cats = st.session_state.get("sponsors_to_remove", [])
-        mark_cats = st.session_state.get("sponsors_to_mark", [])
-        return remove_cats, mark_cats
-
-    # Fallback to core preset configurations
-    return core_get_sponsorblock_config(sb_choice)
-
-
-def build_sponsorblock_params(sb_choice: str) -> List[str]:
-    """
-    Builds yt-dlp parameters for SponsorBlock based on user choice.
-
-    Args:
-        sb_choice: User choice for SponsorBlock
-
-    Returns:
-        list: yt-dlp parameters for SponsorBlock
-    """
-    # Use the core version for the actual logic
-    result = core_build_sponsorblock_params(sb_choice)
-
-    # Add UI logs for user feedback
-    if "--sponsorblock-remove" in result:
-        idx = result.index("--sponsorblock-remove")
-        if idx + 1 < len(result):
-            safe_push_log(f"SponsorBlock Remove: {result[idx + 1]}")
-
-    if "--sponsorblock-mark" in result:
-        idx = result.index("--sponsorblock-mark")
-        if idx + 1 < len(result):
-            safe_push_log(f"SponsorBlock Mark: {result[idx + 1]}")
-
-    return result
-
-
 def build_cookies_params() -> List[str]:
     """
     Builds cookie parameters based on user selection.
@@ -3300,6 +1722,32 @@ def build_cookies_params() -> List[str]:
         result = core_build_cookies_params(cookies_method="none")
         safe_push_log("🍪 No cookies authentication")
         return result
+
+
+def build_cookies_params_from_config() -> List[str]:
+    """
+    Builds cookie parameters from configuration settings (for early URL analysis).
+    Used before session_state is available.
+
+    Returns:
+        list: yt-dlp parameters for cookies
+    """
+    # Try cookies file first (most common for Docker/server setup)
+    if YOUTUBE_COOKIES_FILE_PATH and Path(YOUTUBE_COOKIES_FILE_PATH).exists():
+        return core_build_cookies_params(
+            cookies_method="file", cookies_file_path=YOUTUBE_COOKIES_FILE_PATH
+        )
+
+    # Try browser cookies if configured
+    if COOKIES_FROM_BROWSER and is_valid_browser(COOKIES_FROM_BROWSER):
+        return core_build_cookies_params(
+            cookies_method="browser",
+            browser_select=COOKIES_FROM_BROWSER,
+            browser_profile="",
+        )
+
+    # No cookies available
+    return []
 
 
 class DownloadMetrics:
@@ -3428,6 +1876,12 @@ url = st.text_input(
 # Store URL for manual analysis if needed
 if url and url.strip():
     analyze_video_on_url_change(url)
+
+    # Analyze URL and display information with spinner
+    with st.spinner(t("url_analysis_spinner")):
+        url_info = url_analysis(url.strip())
+        if url_info:
+            display_url_info(url_info)
 
 filename = st.text_input(t("video_name"), help=t("video_name_help"))
 
@@ -3560,10 +2014,11 @@ if "new_folder_created" in st.session_state:
     st.rerun()
 
 # subtitles multiselect from env
+# Default subtitles are determined by audio language preferences (LANGUAGE_PRIMARY, LANGUAGES_SECONDARIES)
 subs_selected = st.multiselect(
     t("subtitles_to_embed"),
     options=SUBTITLES_CHOICES,
-    default=[],
+    default=SUBTITLES_CHOICES,  # Pre-select subtitles based on audio preferences
     help=t("subtitles_help"),
 )
 
@@ -3745,7 +2200,7 @@ with st.expander(f"{t('cutting_title')}", expanded=False):
 
     # Cutting mode selection
     # st.markdown(f"**{t('cutting_mode_title')}**")
-    default_cutting_mode = CONFIG.get("CUTTING_MODE", "keyframes")
+    default_cutting_mode = settings.CUTTING_MODE
     cutting_mode_options = ["keyframes", "precise"]
     default_index = (
         cutting_mode_options.index(default_cutting_mode)
@@ -3829,538 +2284,51 @@ with st.expander(f"{t('cutting_title')}", expanded=False):
 
     st.info(t("sponsorblock_sections_info"))
 
-# Video quality selection with dynamic behavior
+# Video quality selection with new strategy
 with st.expander(f"{t('quality_title')}", expanded=False):
-    # Initialize session state for formats
-    if "available_formats" not in st.session_state:
-        st.session_state.available_formats = []
-    if "selected_format" not in st.session_state:
-        st.session_state.selected_format = "auto"
+    # Initialize session state for quality management
+    if "optimal_format_profiles" not in st.session_state:
+        st.session_state.optimal_format_profiles = []
+    if "chosen_format_profiles" not in st.session_state:
+        st.session_state.chosen_format_profiles = []
+    if "available_formats_list" not in st.session_state:
+        st.session_state.available_formats_list = []
 
-    # === 1. QUALITY PROFILES SECTION (FIRST) ===
-    st.subheader("🏆 Quality Profiles")
-    st.info(
-        "🎯 **Intelligent quality strategies** - HomeTube automatically selects the best codecs and formats for optimal quality and compatibility."
-    )
+    # st.info(
+    #     "🏆 **Smart quality selection** - Choose your strategy for optimal video quality and compatibility."
+    # )
 
-    # Download mode selection
-    download_mode = st.radio(
-        "Quality Strategy:",
-        options=["auto", "forced"],
+    # Determine default strategy based on QUALITY_DOWNGRADE setting
+    # If QUALITY_DOWNGRADE=false, default to "best_no_fallback" (no fallback on failure)
+    # If QUALITY_DOWNGRADE=true, default to "auto_best" (try multiple profiles)
+    default_strategy_index = 0 if settings.QUALITY_DOWNGRADE else 1
+
+    # Quality strategy selection
+    quality_strategy = st.radio(
+        t("quality_strategy_prompt"),
+        options=["auto_best", "best_no_fallback", "choose_profile", "choose_available"],
         format_func=lambda x: {
-            "auto": "🔄 Auto (Best Quality) - Recommended",
-            "forced": "🎯 Force Profile (No Fallback)",
+            "auto_best": t("quality_strategy_auto_best"),
+            "best_no_fallback": t("quality_strategy_best_no_fallback"),
+            "choose_profile": t("quality_strategy_choose_profile"),
+            "choose_available": t("quality_strategy_choose_available"),
         }[x],
-        index=0,
-        help="Auto mode tries profiles in order until success. Forced mode only tries your selected profile.",
-        key="download_mode",
-        horizontal=True,
+        index=default_strategy_index,
+        help=t("quality_strategy_help"),
+        key="quality_strategy",
+        horizontal=False,
     )
 
-    if download_mode == "auto":
-        st.info(
-            "🤖 **Auto Mode**: HomeTube will try all quality profiles in order (best to most compatible) and stop at the first success."
-        )
-
-        # Show dynamic profile generation based on available formats
-        if url:
-            clean_url = sanitize_url(url)
-
-            # Check if analysis is complete
-            analysis_complete = (
-                st.session_state.get("codecs_detected_for_url", "") == clean_url
-                and "available_codecs" in st.session_state
-            )
-
-            if analysis_complete:
-                _, available_formats = get_cached_video_analysis(clean_url)
-
-                if available_formats:
-                    # Generate optimal profile combinations
-                    optimal_combinations = get_optimal_profiles(
-                        available_formats, max_profiles=10
-                    )
-
-                    if optimal_combinations:
-                        st.success(
-                            f"🎯 **{len(optimal_combinations)} optimal combinations generated** (from available formats)"
-                        )
-
-                        with st.expander(
-                            "📋 Generated Profile Combinations (Auto Mode)",
-                            expanded=True,
-                        ):
-                            for i, combination in enumerate(optimal_combinations, 1):
-                                video_info = combination["video_format"]
-                                audio_info = combination["audio_format"]
-
-                                # Create detailed display
-                                quality_info = (
-                                    f"{video_info['resolution']}p"
-                                    f"@{video_info.get('fps', '?')}fps "
-                                    f"({video_info.get('vcodec', '?')}) + "
-                                    f"{audio_info.get('abr', '?')}kbps "
-                                    f"({audio_info.get('acodec', '?')})"
-                                )
-
-                                format_spec = combination["format_spec"]
-                                container = combination["container"].upper()
-
-                                st.write(f"✅ {i}. **{combination['profile_label']}**")
-                                st.write(f"   📊 Quality: {quality_info}")
-                                st.write(f"   🔧 Format: `{format_spec}` → {container}")
-                    else:
-                        # Use cached profile analysis from detect_video_quality_now
-                        available_profiles = st.session_state.get(
-                            "available_profiles", []
-                        )
-                        profile_summary = st.session_state.get("profile_summary", {})
-
-                        # If no cached analysis, fallback to live calculation
-                        if not available_profiles and not profile_summary:
-                            profile_summary = get_profile_availability_summary(
-                                available_formats
-                            )
-                            available_profiles = [
-                                name
-                                for name, info in profile_summary.items()
-                                if info["available"]
-                            ]
-
-                        if available_profiles:
-                            st.success(
-                                f"🎯 **{len(available_profiles)} profiles available** (from {len(QUALITY_PROFILES)} total)"
-                            )
-
-                            with st.expander(
-                                "📋 Available Profile Summary", expanded=True
-                            ):
-                                for profile_name in available_profiles:
-                                    info = profile_summary[profile_name]
-                                    st.write(f"✅ **{info['label']}**")
-                                    st.write(
-                                        f"   🎬 Video: {', '.join(info['video_matches'])}"
-                                    )
-                                    st.write(
-                                        f"   🔊 Audio: {', '.join(info['audio_matches'])}"
-                                    )
-                        else:
-                            st.warning(
-                                "⚠️ No profiles match available formats - will try all profiles as fallback"
-                            )
-                else:
-                    # No formats available - show static profile list
-                    with st.expander(
-                        "📋 All Profile Order (No Format Analysis)", expanded=False
-                    ):
-                        for i, profile in enumerate(QUALITY_PROFILES, 1):
-                            st.write(
-                                f"{i}. **{profile['label']}** - {profile['description']}"
-                            )
-            else:
-                # No analysis yet - encourage user to detect profiles
-                st.warning(
-                    "⚠️ **No profile analysis done yet** - Click '🔍 Detect Available Profiles' below to see which profiles work best for this video."
-                )
-
-                # Show all profiles as fallback
-                with st.expander(
-                    "📋 All Quality Profiles (Default Order)", expanded=False
-                ):
-                    st.info(
-                        "These profiles will be tried in order if no detection is performed:"
-                    )
-                    for i, profile in enumerate(QUALITY_PROFILES, 1):
-                        st.write(
-                            f"{i}. **{profile['label']}** - {profile['description']}"
-                        )
-        else:
-            # No URL yet - show all profiles with hint
-            st.info(
-                "💡 Enter a video URL above, then use '🔍 Detect Available Profiles' to see optimal profiles for that video"
-            )
-            with st.expander("📋 Default Profile Order (Auto Mode)", expanded=False):
-                st.info(
-                    "These profiles will be tried in order when no specific detection is performed:"
-                )
-                for i, profile in enumerate(QUALITY_PROFILES, 1):
-                    st.write(f"{i}. **{profile['label']}** - {profile['description']}")
-
-        # Store auto mode
-        selected_profile = None
-
-    else:
-        st.warning(
-            "🔒 **Forced Mode**: Only your selected profile will be tried. Download will fail if this specific combination is unavailable."
-        )
-
-        # Check if we have dynamic profile analysis results
-        if url:
-            clean_url = sanitize_url(url)
-            analysis_complete = (
-                st.session_state.get("codecs_detected_for_url", "") == clean_url
-                and "available_codecs" in st.session_state
-            )
-
-            if analysis_complete:
-                _, available_formats = get_cached_video_analysis(clean_url)
-
-                if available_formats:
-                    # Generate optimal profile combinations (same as auto mode)
-                    optimal_combinations = get_optimal_profiles(
-                        available_formats, max_profiles=10
-                    )
-
-                    if optimal_combinations:
-                        st.success(
-                            f"🎯 **{len(optimal_combinations)} real detected profiles available** (same as Auto Mode)"
-                        )
-
-                        # Create selectbox with real detected combinations
-                        def format_combination_option(combination_idx):
-                            combination = optimal_combinations[combination_idx]
-                            video_info = combination["video_format"]
-                            audio_info = combination["audio_format"]
-
-                            quality_info = (
-                                f"{video_info['resolution']}p"
-                                f"@{video_info.get('fps', '?')}fps "
-                                f"({video_info.get('vcodec', '?')}) + "
-                                f"{audio_info.get('abr', '?')}kbps "
-                                f"({audio_info.get('acodec', '?')})"
-                            )
-
-                            return f"{combination['profile_label']} | {quality_info}"
-
-                        selected_combination_idx = st.selectbox(
-                            "Select detected profile combination:",
-                            options=list(range(len(optimal_combinations))),
-                            format_func=format_combination_option,
-                            index=0,
-                            help="These are the real detected and matched profiles for this specific video.",
-                            key="quality_profile_combination",
-                        )
-
-                        # Get the selected combination
-                        selected_combination = optimal_combinations[
-                            selected_combination_idx
-                        ]
-
-                        # Store the combination for download use - convert to profile-like structure
-                        dynamic_profile = {
-                            "name": selected_combination["profile_name"],
-                            "label": selected_combination["profile_label"],
-                            "format": selected_combination["format_spec"],
-                            "format_sort": f"res:{selected_combination['video_format']['resolution']},fps,+size,br",
-                            "extra_args": selected_combination["extra_args"],
-                            "container": selected_combination["container"],
-                            "priority": selected_combination["priority"],
-                            "_dynamic_combination": selected_combination,  # Store original for reference
-                        }
-
-                        # Store in session state for download logic
-                        st.session_state["dynamic_profile_selected"] = dynamic_profile
-                        selected_profile = dynamic_profile[
-                            "name"
-                        ]  # Store name for compatibility
-
-                        # Show detailed info about selected combination
-                        st.info(f"🎯 **{selected_combination['profile_label']}**")
-
-                        video_info = selected_combination["video_format"]
-                        audio_info = selected_combination["audio_format"]
-
-                        st.write(
-                            f"📊 **Quality**: {video_info['resolution']}p@{video_info.get('fps', '?')}fps ({video_info.get('vcodec', '?')}) + {audio_info.get('abr', '?')}kbps ({audio_info.get('acodec', '?')})"
-                        )
-                        st.write(
-                            f"🔧 **Format**: `{selected_combination['format_spec']}` → {selected_combination['container'].upper()}"
-                        )
-
-                        # Show available combinations preview
-                        with st.expander(
-                            "📋 All Detected Profile Combinations", expanded=False
-                        ):
-                            for i, combination in enumerate(optimal_combinations, 1):
-                                video_info = combination["video_format"]
-                                audio_info = combination["audio_format"]
-
-                                quality_info = (
-                                    f"{video_info['resolution']}p"
-                                    f"@{video_info.get('fps', '?')}fps "
-                                    f"({video_info.get('vcodec', '?')}) + "
-                                    f"{audio_info.get('abr', '?')}kbps "
-                                    f"({audio_info.get('acodec', '?')})"
-                                )
-
-                                format_spec = combination["format_spec"]
-                                container = combination["container"].upper()
-
-                                status_icon = (
-                                    "🎯" if i - 1 == selected_combination_idx else "📋"
-                                )
-                                st.write(
-                                    f"{status_icon} {i}. **{combination['profile_label']}**"
-                                )
-                                st.write(f"   📊 Quality: {quality_info}")
-                                st.write(f"   🔧 Format: `{format_spec}` → {container}")
-
-                    else:
-                        # Fallback to static profiles if no dynamic combinations found
-                        st.warning(
-                            "⚠️ No dynamic profiles generated - using static profiles as fallback"
-                        )
-
-                        selected_profile = st.selectbox(
-                            "Select quality profile:",
-                            options=[profile["name"] for profile in QUALITY_PROFILES],
-                            format_func=lambda x: next(
-                                p["label"] for p in QUALITY_PROFILES if p["name"] == x
-                            ),
-                            index=get_default_profile_index(),
-                            help="Using static profiles as fallback. Try 'Detect Available Profiles' for better options.",
-                            key="quality_profile",
-                        )
-
-                        # Show selected profile details
-                        profile = get_profile_by_name(selected_profile)
-                        if profile:
-                            st.info(f"🎯 **{profile['label']}**")
-                            st.write(f"📋 {profile['description']}")
-                            st.write(format_profile_codec_info(profile))
-                else:
-                    # No formats available - fallback to static profiles
-                    st.warning(
-                        "⚠️ No formats detected - using static profiles as fallback"
-                    )
-
-                    selected_profile = st.selectbox(
-                        "Select quality profile:",
-                        options=[profile["name"] for profile in QUALITY_PROFILES],
-                        format_func=lambda x: next(
-                            p["label"] for p in QUALITY_PROFILES if p["name"] == x
-                        ),
-                        index=get_default_profile_index(),
-                        help="No formats detected. Try 'Detect Available Profiles' for better options.",
-                        key="quality_profile",
-                    )
-
-                    # Show selected profile details
-                    profile = get_profile_by_name(selected_profile)
-                    if profile:
-                        st.info(f"🎯 **{profile['label']}**")
-                        st.write(f"📋 {profile['description']}")
-                        st.write(format_profile_codec_info(profile))
-            else:
-                # No analysis yet - encourage detection
-                st.info(
-                    "💡 Click '🔍 Detect Available Profiles' below to see real detected profiles for this video"
-                )
-
-                selected_profile = st.selectbox(
-                    "Select quality profile:",
-                    options=[profile["name"] for profile in QUALITY_PROFILES],
-                    format_func=lambda x: next(
-                        p["label"] for p in QUALITY_PROFILES if p["name"] == x
-                    ),
-                    index=get_default_profile_index(),
-                    help="Use 'Detect Available Profiles' to see real matched profiles for this video.",
-                    key="quality_profile",
-                )
-
-                # Show selected profile details
-                profile = get_profile_by_name(selected_profile)
-                if profile:
-                    st.info(f"🎯 **{profile['label']}**")
-                    st.write(f"📋 {profile['description']}")
-                    st.write(format_profile_codec_info(profile))
-        else:
-            # No URL provided
-            selected_profile = st.selectbox(
-                "Select quality profile:",
-                options=[profile["name"] for profile in QUALITY_PROFILES],
-                format_func=lambda x: next(
-                    p["label"] for p in QUALITY_PROFILES if p["name"] == x
-                ),
-                index=get_default_profile_index(),
-                help="Enter a URL above and use 'Detect Available Profiles' to see real matched profiles.",
-                key="quality_profile",
-            )
-
-            # Show selected profile details
-            profile = get_profile_by_name(selected_profile)
-            if profile:
-                st.info(f"🎯 **{profile['label']}**")
-                st.write(f"📋 {profile['description']}")
-                st.write(format_profile_codec_info(profile))
-
-    # === 2. ADVANCED PROFILE OPTIONS ===
-    with st.expander("⚙️ Advanced Profile Options", expanded=False):
-        st.info(
-            "🔧 **Fine-tune profile behavior** - These options affect how the quality profiles above are applied."
-        )
-
-        prefer_free_formats = st.checkbox(
-            "Prefer free formats (WebM/Opus)",
-            value=True,
-            help="Prioritize open/free codecs when available. Automatically disabled for MP4 profiles.",
-            key="prefer_free_formats",
-        )
-
-        refuse_quality_downgrade = st.checkbox(
-            "Refuse quality downgrade",
-            value=False,
-            help="Fail download if premium codecs (AV1/Opus) are unavailable, instead of falling back to lower quality.",
-            key="refuse_quality_downgrade",
-        )
-
-    # === 3. FORMAT AND CODEC DETECTION ===
-    st.subheader("🔍 Detect Available Quality Profiles")
-    st.info(
-        "🎯 **Discover optimal profiles** - Analyze the video to find the best matching quality profiles available."
-    )
-
-    # Manual quality detection button and status in a single section
+    # Process strategy selection and update profiles
     if url and url.strip():
         clean_url = sanitize_url(url)
-        has_analysis = (
-            st.session_state.get("codecs_detected_for_url", "") == clean_url
-            and "available_codecs" in st.session_state
-        )
+        _process_quality_strategy(quality_strategy, clean_url)
 
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            if st.button(
-                "🔍 Detect Available Profiles",
-                help="Analyze video formats and generate matching quality profiles",
-                type="primary",
-            ):
-                detect_video_quality_now(url.strip())
-                st.rerun()
+    # Display strategy-specific content
+    _display_strategy_content(quality_strategy, url)
 
-        with col2:
-            if has_analysis:
-                # Analysis complete - show quality summary
-                _, cached_formats = get_cached_video_analysis(clean_url)
-                st.session_state.available_formats = cached_formats
-
-                if cached_formats:
-                    max_res = max(
-                        extract_resolution_value(f["resolution"])
-                        for f in cached_formats
-                    )
-                    if max_res >= 2160:
-                        st.success("✅ 4K+ quality available - profiles updated above")
-                    elif max_res >= 1080:
-                        st.success("✅ HD quality available - profiles updated above")
-                    else:
-                        st.success(
-                            "✅ Standard quality available - profiles updated above"
-                        )
-                else:
-                    st.success(
-                        "✅ Analysis complete - use manual format selection below"
-                    )
-            else:
-                st.info("💡 Click to detect optimal profiles for this video")
-    else:
-        st.info("💡 Enter a video URL above to analyze available quality profiles")
-
-    # === 4. DETECTED CODECS DISPLAY ===
-    if url:
-        clean_url = sanitize_url(url)
-
-        # Only show codec details if analysis is complete
-        cached_codecs, _ = get_cached_video_analysis(clean_url)
-
-        # Check if we have real analysis results (not just defaults)
-        has_real_analysis = (
-            st.session_state.get("codecs_detected_for_url", "") == clean_url
-            and "available_codecs" in st.session_state
-        )
-
-        if has_real_analysis and any(cached_codecs.values()):
-            st.markdown("### 🧬 Detected Video Codecs")
-
-            # Create columns for codec display
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.markdown("**📹 Video Codecs:**")
-                if cached_codecs.get("av01"):
-                    st.success("🏆 AV1 (Premium)")
-                else:
-                    st.error("❌ AV1 (Premium)")
-
-                if cached_codecs.get("vp9"):
-                    st.success("🥈 VP9 (Modern)")
-                else:
-                    st.error("❌ VP9 (Modern)")
-
-                if cached_codecs.get("h264"):
-                    st.success("📺 H.264 (Compatible)")
-                else:
-                    st.error("❌ H.264 (Compatible)")
-
-            with col2:
-                st.markdown("**🎵 Audio Codecs:**")
-                if cached_codecs.get("opus"):
-                    st.success("🎧 Opus (High Quality)")
-                else:
-                    st.error("❌ Opus (High Quality)")
-
-                if cached_codecs.get("aac"):
-                    st.success("🔊 AAC (Compatible)")
-                else:
-                    st.error("❌ AAC (Compatible)")
-
-            # Quality assessment
-            has_premium = cached_codecs.get("av01") and cached_codecs.get("opus")
-            has_modern = cached_codecs.get("vp9") and cached_codecs.get("opus")
-
-            if has_premium:
-                st.success(
-                    "🏆 **Premium Quality Available** - AV1 + Opus codecs detected"
-                )
-            elif has_modern:
-                st.info("🥈 **Modern Quality Available** - VP9 + Opus codecs detected")
-            else:
-                st.warning("📺 **Standard Quality Only** - Basic codecs available")
-
-    # === 5. MANUAL FORMAT SELECTION ===
-    with st.expander("🔧 Manual Format Selection", expanded=False):
-        st.info(
-            "🎯 **Override profiles** - Select a specific format from the detected list. This overrides the intelligent profile system above."
-        )
-        st.warning(
-            "⚠️ Advanced users only: This bypasses quality profiles and may result in format compatibility issues."
-        )
-
-        if st.session_state.available_formats:
-            format_options = [t("quality_auto_option")] + [
-                f"{fmt['resolution']} - {fmt['ext']} ({fmt['format_id']})"
-                for fmt in st.session_state.available_formats
-            ]
-
-            selected_format_display = st.selectbox(
-                t("quality_select_prompt"),
-                options=format_options,
-                index=0,
-                help="Legacy format selection - overrides profile system",
-                key="format_selector",
-            )
-
-            # Store the actual format ID for yt-dlp
-            if selected_format_display == t("quality_auto_option"):
-                st.session_state.selected_format = "auto"
-            else:
-                # Extract format ID from the display string
-                for fmt in st.session_state.available_formats:
-                    if f"({fmt['id']})" in selected_format_display:
-                        st.session_state.selected_format = fmt["id"]
-                        break
-        else:
-            st.info("💡 Use 'Detect Quality' above to populate format options here")
+    # Store final configuration in session state for download
+    st.session_state["download_quality_strategy"] = quality_strategy
 
 
 # Optional embedding section for chapter and subs
@@ -4371,7 +2339,7 @@ with st.expander(f"{t('embedding_title')}", expanded=False):
 
     embed_subs = st.checkbox(
         t("embed_subs"),
-        value=CONFIG.get("EMBED_SUBTITLES", "true").lower() == "true",
+        value=settings.EMBED_SUBTITLES,
         key="embed_subs",
         help=t("embed_subs_help"),
     )
@@ -4382,7 +2350,7 @@ with st.expander(f"{t('embedding_title')}", expanded=False):
 
     embed_chapters = st.checkbox(
         t("embed_chapters"),
-        value=CONFIG.get("EMBED_CHAPTERS", "true").lower() == "true",
+        value=settings.EMBED_CHAPTERS,
         key="embed_chapters",
         help=t("embed_chapters_help"),
     )
@@ -4518,7 +2486,7 @@ with st.expander(t("advanced_options"), expanded=False):
     # Custom yt-dlp arguments
     ytdlp_custom_args = st.text_input(
         t("ytdlp_custom_args"),
-        value=CONFIG.get("YTDLP_CUSTOM_ARGS", ""),
+        value=settings.YTDLP_CUSTOM_ARGS,
         placeholder=t("ytdlp_custom_args_placeholder"),
         help=t("ytdlp_custom_args_help"),
         key="ytdlp_custom_args",
@@ -4531,9 +2499,7 @@ with st.expander(t("advanced_options"), expanded=False):
 
     # Store current REMOVE_TMP_FILES setting in session state
     if "remove_tmp_files" not in st.session_state:
-        st.session_state.remove_tmp_files = (
-            CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true"
-        )
+        st.session_state.remove_tmp_files = should_remove_tmp_files()
 
     remove_tmp_files = st.checkbox(
         "Remove temporary files after processing",
@@ -4542,8 +2508,8 @@ with st.expander(t("advanced_options"), expanded=False):
         key="remove_tmp_files_checkbox",
     )
 
-    # Update CONFIG in real-time based on UI selection
-    CONFIG["REMOVE_TMP_FILES"] = "true" if remove_tmp_files else "false"
+    # Store in session state for UI state tracking
+    # Note: settings object is immutable, so we only track UI state here
     st.session_state.remove_tmp_files = remove_tmp_files
 
     if not remove_tmp_files:
@@ -4645,6 +2611,10 @@ def push_log(line: str):
 
     # Update the download button with current logs
     render_download_button()
+
+
+# Register this push_log function for use by other modules
+register_main_push_log(push_log)
 
 
 # Pending analysis logs system removed - using direct synchronous logging instead
@@ -5092,94 +3062,20 @@ if submitted:
     except Exception as e:
         push_log(f"⚠️ Could not analyze sponsor segments: {e}")
 
-    # Get centralized configuration
-    config = get_download_configuration()
-    download_mode = config["download_mode"]
-    selected_profile_name = config["selected_profile_name"]
-    selected_format = config["selected_format"]
-    refuse_quality_downgrade = config["refuse_quality_downgrade"]
+    # === NEW STRATEGY: Simple configuration from settings ===
+    # Get settings for quality preferences (used by new strategy internally)
+    # settings = get_settings()
+    push_log("🤖 Using new dynamic strategy with optimal format selection")
 
-    if download_mode == "forced" and selected_profile_name:
-        # Check if selected_profile_name is a dynamic profile object or a string
-        if isinstance(selected_profile_name, dict):
-            # Dynamic profile object
-            selected_profile = selected_profile_name
-            push_log(f"🔒 Forced profile mode (dynamic): {selected_profile['label']}")
-            if "_dynamic_combination" in selected_profile:
-                combination = selected_profile["_dynamic_combination"]
-                video_info = combination["video_format"]
-                audio_info = combination["audio_format"]
-                push_log(
-                    f"📊 Quality: {video_info['resolution']}p@{video_info.get('fps', '?')}fps ({video_info.get('vcodec', '?')}) + {audio_info.get('abr', '?')}kbps ({audio_info.get('acodec', '?')})"
-                )
-        else:
-            # Static profile name
-            selected_profile = get_profile_by_name(selected_profile_name)
-            if selected_profile:
-                push_log(
-                    f"🔒 Forced profile mode (static): {selected_profile['label']}"
-                )
-                push_log(f"📋 Description: {selected_profile['description']}")
-    else:
-        push_log("🤖 Auto mode: Will try all profiles in quality order")
-
-    if selected_format != "auto":
-        # Manual format override
-        format_spec = f"{selected_format}+ba/b"
-        push_log(t("log_quality_selected", format_id=selected_format))
-        quality_strategy_to_use = None  # Don't use profile system
-    else:
-        # Use profile system - determine format_spec based on mode
-        if download_mode == "forced" and selected_profile_name:
-            # Forced profile mode - handle both dynamic and static profiles
-            if isinstance(selected_profile_name, dict):
-                # Dynamic profile object
-                selected_profile = selected_profile_name
-            else:
-                # Static profile name
-                selected_profile = get_profile_by_name(selected_profile_name)
-
-            if selected_profile:
-                # Get format string - either from profile or generate it
-                if "format" in selected_profile:
-                    format_spec = selected_profile["format"]
-                else:
-                    format_spec = generate_format_string_from_profile(selected_profile)
-
-                push_log(f"🎯 Format: {format_spec}")
-                format_sort = selected_profile.get("format_sort", "res,fps,+size,br")
-                push_log(f"📊 Sort: {format_sort}")
-
-                # Add format_sort to profile if missing for compatibility
-                quality_strategy_to_use = selected_profile.copy()
-                quality_strategy_to_use["format"] = format_spec
-                quality_strategy_to_use["format_sort"] = format_sort
-            else:
-                # Fallback to auto if profile not found
-                format_spec = "bv*+ba/b"
-                quality_strategy_to_use = None
-        else:
-            # Auto mode - profiles will be tried in smart_download_with_profiles
-            format_spec = (
-                "bv*+ba/b"  # Placeholder, actual formats determined by profiles
-            )
-            quality_strategy_to_use = "auto_profiles"  # Signal to use profile system
+    # === NEW STRATEGY: Always use dynamic format selection ===
+    # The new strategy dynamically selects the best AV1/VP9 formats available
+    push_log("🤖 Using new dynamic strategy with optimal format selection")
+    quality_strategy_to_use = "auto_profiles"  # Always use the new strategy
+    format_spec = "bv*+ba/b"  # Placeholder - actual formats determined by get_profiles_with_formats_id_to_download()
 
     # --- yt-dlp base command construction
-    # Determine container based on profile selection, not arbitrary cutting logic
-    force_mp4 = False  # Default: respect profile container choice
-
-    # Only force MP4 in very specific legacy cases where profiles don't specify container
-    if quality_strategy_to_use and isinstance(quality_strategy_to_use, dict):
-        # Profile system: respect the profile's container choice
-        profile_container = quality_strategy_to_use.get("container", "mkv").lower()
-        force_mp4 = profile_container == "mp4"
-    elif quality_strategy_to_use == "auto_profiles":
-        # Auto profile system: let profiles decide container individually
-        force_mp4 = False  # Profiles will specify their own containers
-    else:
-        # Legacy system fallback: only force MP4 for compatibility if no profile system
-        force_mp4 = do_cut and subs_selected and not quality_strategy_to_use
+    # New strategy: Always use MKV container (better for modern codecs)
+    force_mp4 = False  # MKV supports all modern codecs better
 
     ytdlp_custom_args = st.session_state.get("ytdlp_custom_args", "")
 
@@ -5299,59 +3195,23 @@ if submitted:
     status_placeholder.info(t("status_downloading_simple"))
 
     # Use intelligent fallback with retry strategies
-    # Check if profile system should be used (new system vs legacy fallback)
-    if quality_strategy_to_use == "auto_profiles" or isinstance(
-        quality_strategy_to_use, dict
-    ):
-        # Premium quality mode: try all strategies with progressive fallback
-        if download_mode == "forced" and selected_profile_name:
-            push_log(f"🔒 FORCED PROFILE MODE: {selected_profile_name}")
-            ret_dl, error_msg = smart_download_with_profiles(
-                base_output,
-                tmp_subfolder_dir,
-                embed_chapters,
-                embed_subs,
-                force_mp4,
-                ytdlp_custom_args,
-                clean_url,
-                "forced",
-                selected_profile_name,
-                refuse_quality_downgrade,
-                do_cut,
-                subs_selected,
-                sb_choice,
-                progress_placeholder,
-                status_placeholder,
-                info_placeholder,
-            )
-        else:
-            push_log(
-                "🤖 AUTO PROFILE MODE: Testing all profiles with intelligent fallback"
-            )
-            ret_dl, error_msg = smart_download_with_profiles(
-                base_output,
-                tmp_subfolder_dir,
-                embed_chapters,
-                embed_subs,
-                force_mp4,
-                ytdlp_custom_args,
-                clean_url,
-                "auto",
-                None,
-                refuse_quality_downgrade,
-                do_cut,
-                subs_selected,
-                sb_choice,
-                progress_placeholder,
-                status_placeholder,
-                info_placeholder,
-            )
-    else:
-        # Standard quality mode: use existing fallback
-        push_log("📺 STANDARD QUALITY MODE: Using classic client fallback")
-        ret_dl, error_msg = smart_download_with_fallback(
-            cmd_base,
+    # NEW STRATEGY: Always use dynamic profile selection
+    if quality_strategy_to_use == "auto_profiles":
+        push_log("🤖 Auto mode: Will try all profiles in quality order")
+        ret_dl, error_msg = smart_download_with_profiles(
+            base_output,
+            tmp_subfolder_dir,
+            embed_chapters,
+            embed_subs,
+            force_mp4,
+            ytdlp_custom_args,
             clean_url,
+            "auto",  # Always use auto mode with new strategy
+            None,  # No target profile - let new strategy decide
+            False,  # refuse_quality_downgrade = False (allow fallback)
+            do_cut,
+            subs_selected,
+            sb_choice,
             progress_placeholder,
             status_placeholder,
             info_placeholder,
@@ -5360,29 +3220,18 @@ if submitted:
     # Handle cancellation
     if ret_dl == -1:
         status_placeholder.info(t("cleaning_temp_files"))
-        cleanup_temp_files(base_output, tmp_subfolder_dir, "download")
+        cleanup_tmp_files(base_output, tmp_subfolder_dir, "download")
         status_placeholder.success(t("cleanup_complete"))
 
         # Mark download as finished
         st.session_state.download_finished = True
         st.stop()
 
-    # Search for the final file in TMP subfolder (prioritize profile container format)
+    # Search for the final file in TMP subfolder (prioritize MKV format from new strategy)
     final_tmp = None
 
-    # Get the expected container format from current profile
-    preferred_ext = None
-    if "current_attempting_profile" in st.session_state:
-        for profile in QUALITY_PROFILES:
-            if profile["label"] == st.session_state["current_attempting_profile"]:
-                preferred_ext = f".{profile.get('container', 'mkv').lower()}"
-                break
-
-    # Search order: preferred extension first, then others
+    # New strategy prefers MKV, but search all common formats
     search_extensions = [".mkv", ".mp4", ".webm"]
-    if preferred_ext and preferred_ext in search_extensions:
-        search_extensions.remove(preferred_ext)
-        search_extensions.insert(0, preferred_ext)
 
     for ext in search_extensions:
         p = tmp_subfolder_dir / f"{base_output}{ext}"
@@ -5446,7 +3295,7 @@ if submitted:
 
         if cut_output.exists():
             try:
-                if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                if should_remove_tmp_files():
                     cut_output.unlink()
                     push_log("🗑️ Removed existing cut output file")
                 else:
@@ -5506,71 +3355,14 @@ if submitted:
         else:
             push_log("📹 Step 3 - MUX: Cutting video (no subtitles)")
 
-        # Build video cutting command
-        cmd_cut = [
-            "ffmpeg",
-            "-y",
-            "-loglevel",
-            "warning",
-            "-ss",
-            str(actual_start),
-            "-t",
-            str(duration),
-            "-i",
-            str(final_tmp),
-        ]
-
-        # Add processed subtitle inputs
-        for lang, srt_file in processed_subtitle_files:
-            cmd_cut.extend(["-i", str(srt_file)])
-
-        # Video and audio mappings
-        cmd_cut.extend(
-            [
-                "-map",
-                "0:v:0",
-                "-map",
-                "0:a?",
-            ]
-        )
-
-        # Subtitle mappings
-        for i, (lang, _) in enumerate(processed_subtitle_files):
-            cmd_cut.extend(["-map", f"{i+1}:0"])
-
-        # Exclude attached pictures
-        cmd_cut.extend(["-map", "-0:m:attached_pic"])
-
-        # Stream copy to preserve quality, with format-appropriate subtitle codec
-        if cut_ext == ".mp4":
-            # MP4 format: use mov_text for subtitle compatibility
-            cmd_cut.extend(["-c:v", "copy", "-c:a", "copy", "-c:s", "mov_text"])
-        else:
-            # MKV format: use SRT for maximum compatibility
-            cmd_cut.extend(["-c:v", "copy", "-c:a", "copy", "-c:s", "srt"])
-
-        # Subtitle metadata
-        if processed_subtitle_files:
-            first_lang = processed_subtitle_files[0][0]
-            cmd_cut.extend(
-                [
-                    "-disposition:s:0",
-                    "default",
-                    "-metadata:s:s:0",
-                    f"language={first_lang}",
-                ]
-            )
-
-        # Additional options for perfect sync
-        cmd_cut.extend(
-            [
-                "-shortest",
-                "-avoid_negative_ts",
-                "make_zero",
-                "-max_interleave_delta",
-                "0",
-                str(cut_output),
-            ]
+        # Build video cutting command using dedicated utility function
+        cmd_cut = build_cut_command(
+            final_tmp=final_tmp,
+            actual_start=actual_start,
+            duration=duration,
+            processed_subtitle_files=processed_subtitle_files,
+            cut_output=cut_output,
+            cut_ext=cut_ext,
         )
 
         # === EXECUTE FINAL CUTTING COMMAND ===
@@ -5587,7 +3379,7 @@ if submitted:
             # Handle cancellation during cutting
             if ret_cut == -1:
                 status_placeholder.info(t("cleaning_temp_files"))
-                cleanup_temp_files(base_output, tmp_subfolder_dir, "cutting")
+                cleanup_tmp_files(base_output, tmp_subfolder_dir, "cutting")
                 status_placeholder.success(t("cleanup_complete"))
 
                 # Mark download as finished
@@ -5610,7 +3402,7 @@ if submitted:
 
         if final_cut_name.exists():
             try:
-                if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                if should_remove_tmp_files():
                     final_cut_name.unlink()
                     push_log("🗑️ Removed existing final file")
                 else:
@@ -5620,7 +3412,7 @@ if submitted:
             except Exception:
                 pass
         # In debug mode, copy instead of rename to preserve intermediate files
-        if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "false":
+        if not should_remove_tmp_files():
             push_log(
                 f"🔍 Debug mode: Copying cut file to preserve intermediate {cut_output.name}"
             )
@@ -5656,7 +3448,7 @@ if submitted:
         # Delete the original complete file to save space
         try:
             if final_tmp.exists() and final_tmp != final_source:
-                if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                if should_remove_tmp_files():
                     final_tmp.unlink()
                     push_log("🗑️ Removed original file after cutting")
                 else:
@@ -5727,7 +3519,7 @@ if submitted:
                     safe_push_log("✅ Subtitles successfully embedded manually")
 
                     # Clean up subtitle files after successful embedding
-                    if CONFIG.get("REMOVE_TMP_FILES", "true").lower() == "true":
+                    if should_remove_tmp_files():
                         for sub_file in subtitle_files_to_embed:
                             try:
                                 sub_file.unlink()
@@ -5751,7 +3543,7 @@ if submitted:
 
     # === CLEANUP EXTRA FILES ===
     # Clean up temporary files now that cutting and metadata are complete
-    cleanup_temp_files(base_output, tmp_subfolder_dir, "subtitles")
+    cleanup_tmp_files(base_output, tmp_subfolder_dir, "subtitles")
 
     # Measure final processed file size before moving
     if final_source.exists():
@@ -5798,7 +3590,3 @@ if submitted:
 
 
 # Application runs automatically when loaded by Streamlit
-
-
-# === SIMPLIFIED LOGGING ===
-# No more complex thread-based logging - everything is synchronous now!

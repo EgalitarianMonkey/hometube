@@ -23,7 +23,8 @@ help:
 	@echo "  update-reqs      - Run update-requirements.sh script directly"
 	@echo ""
 	@echo "🧪 Testing (universal - works with any Python environment):"
-	@echo "  test             - Run fast tests (recommended for development)"
+	@echo "  test             - Run all fast tests including external (local dev)"
+	@echo "  test-ci          - Run CI tests (no external/network/slow)"
 	@echo "  test-fast-with-e2e - Run fast tests + E2E functions test (recommended)"
 	@echo "  test-all         - Run all tests including slow ones"
 	@echo "  test-unit        - Run unit tests only"
@@ -36,7 +37,8 @@ help:
 	@echo "  test-coverage    - Run tests with coverage report"
 	@echo ""
 	@echo "⚡ UV Commands (faster, requires UV):"
-	@echo "  uv-test          - Run fast tests with UV"
+	@echo "  uv-test          - Run fast tests with UV (includes external)"
+	@echo "  uv-test-ci       - Run CI tests with UV (no external/network/slow)"
 	@echo "  uv-test-all      - Run all tests with UV"
 	@echo "  uv-lint          - Run linting with UV"
 	@echo ""
@@ -94,8 +96,12 @@ update-deps:
 update-reqs:
 	./scripts/update-requirements.sh
 # === UNIVERSAL TESTING COMMANDS (work with any Python environment) ===
-# Run basic tests (fast, no network)
+# Run all fast tests including external (for local development with yt-dlp installed)
 test:
+	python -m pytest tests/ -v --tb=short -m "not slow and not network"
+
+# Run CI tests (excludes external, network, and slow tests)
+test-ci:
 	python -m pytest tests/ -v --tb=short -m "not slow and not external and not network"
 
 # Run fast tests including E2E functions test
@@ -154,13 +160,17 @@ test-coverage:
 	python -m pytest tests/ --cov=app.utils --cov=app.translations --cov-report=html --cov-report=term-missing --cov-fail-under=70
 
 # === UV-SPECIFIC COMMANDS (faster, for UV users) ===
-# Run tests with UV (faster)
+# Run tests with UV (includes external tests)
 uv-test:
-	uv run pytest tests/ -v --tb=short -m "not slow and not external"
+	uv run pytest tests/ -v --tb=short -m "not slow and not network"
 
 # Run all tests with UV
 uv-test-all:
 	uv run pytest tests/ -v --tb=short
+
+# Run CI tests with UV
+uv-test-ci:
+	uv run pytest tests/ -v --tb=short -m "not slow and not external and not network"
 
 # Run linting with UV
 uv-lint:
@@ -302,7 +312,7 @@ docker-test: docker-build
 	@echo "🔍 Verifying image labels..."
 	@IMAGE_NAME=$$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "hometube.*:latest" | head -1); \
 	if [ -n "$$IMAGE_NAME" ]; then \
-		echo "� Image: $$IMAGE_NAME"; \
+		echo "🎆 Image: $$IMAGE_NAME"; \
 		echo ""; \
 		echo "📋 Labels:"; \
 		docker inspect $$IMAGE_NAME --format '{{ json .Config.Labels }}' | jq '{ \

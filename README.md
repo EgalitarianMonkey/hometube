@@ -168,26 +168,33 @@ Custom yt-dlp arguments can be added directly from the UI or set by default for 
 
 **🔀 Smart Conflict Resolution**: HomeTube automatically detects and resolves conflicts between base settings and custom arguments, giving priority to your custom preferences while maintaining system stability.
 
-### 🎯 Smart Quality Profiles System
+### 🎯 Smart Quality System
 
-HomeTube uses **dynamic profile detection** with a **curated 4-tier quality matrix**, generating **up to 10 optimal combinations** per video based on real-time format analysis:
+HomeTube uses **intelligent quality detection** that analyzes each video and automatically selects the **best available formats** with a **simple 2-profile strategy**:
 
-- **🏆 MKV – AV1 + Opus**: Ultimate quality with next-gen codecs  
-- **🥇 MKV – VP9 + Opus**: Premium fallback with excellent compression  
-- **🥈 MP4 – AV1 + AAC**: Modern codec support for mobile & smart TVs  
-- **🥉 MP4 – H.264 + AAC**: Maximum compatibility, works everywhere, legacy-safe  
+**🔍 How It Works:**
+- **📊 Real-time Analysis** → Detects all available video formats and codecs
+- **🏆 Smart Ranking** → Prioritizes modern codecs (AV1 > VP9 > H.264) and audio quality (Opus > AAC)
+- **🎯 Optimal Selection** → Generates up to 2 best profiles from actual available formats
+- **🔄 Intelligent Fallback** → Tries best quality first, then second-best if needed
 
-**Enhanced Detection:**  
-- **🔍 Real-time Analysis** → Detects available codecs and formats for each video  
-- **🧪 Smart Generation** → Creates multiple quality combinations from detected streams  
-- **🎯 Intelligent Matching** → Uses actual format IDs instead of generic fallbacks  
+**Quality Profiles Generated:**
+1. **🥇 Best Available** → Highest resolution with most modern codec (e.g., 4K AV1 + Opus)
+2. **🥈 Fallback Option** → Next best combination (e.g., 4K VP9 + Opus)
 
-**Download Modes:**  
-- **🔄 Auto Mode** → Smart fallback through all detected profile combinations  
-- **🎯 Force Profile** → Select from real detected profiles with specific codecs  
-- **🚫 Refuse Downgrade** → Stop at first failure instead of accepting lower quality  
+**Download Strategies:**
+- **🔄 Auto Best (Default)** → Tries up to 2 optimal profiles automatically until success
+- **🏆 Best Only** → Only attempts highest quality, no fallback (stops if unavailable)
+- **🎯 Choose Profile** → Manually select from detected optimal profiles
+- **📋 Choose Format** → Advanced: select specific format IDs from all available formats
 
-👉 [Full details on quality profiles & strategies](docs/usage.md#-quality-profiles--download-modes)
+**🚀 Benefits:**
+- ✅ Always gets the best quality actually available for each video
+- ✅ No generic fallbacks - uses real format analysis
+- ✅ Fast downloads with minimal retries (max 2 attempts)
+- ✅ Supports all modern codecs: AV1, VP9, H.264, Opus, AAC
+
+👉 [Full details on quality detection & strategies](docs/usage.md#-quality-profiles--download-modes)
 
 ### 🎯 Smart Download Management
 
@@ -459,17 +466,22 @@ HomeTube configuration is managed through the `.env` file:
 | `YOUTUBE_COOKIES_FILE_PATH` | Authentication for private videos | **Must be defined** (or `COOKIES_FROM_BROWSER`) | `/config/youtube_cookies.txt` |
 | `COOKIES_FROM_BROWSER` | Cookies auth directly from active local browser |  | `chrome,firefox,brave,chromium,edge,opera,safari,vivaldi,whale` |
 | `BROWSER_SELECT` | Default browser for cookie extraction | `chrome` | `chrome,firefox,edge,safari` |
+| **Localization** | | | |
+| `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` | `en,fr` |
+| **Audio Language Preferences** | | | |
+| `LANGUAGE_PRIMARY` | Primary audio language preference | `en` | `en,fr,es,de,ja` |
+| `LANGUAGES_SECONDARIES` | Secondary audio languages (comma-separated) | _(empty)_ | `en,es,de` |
+| `LANGUAGE_PRIMARY_INCLUDE_SUBTITLES` | Include subtitles for primary language | `true` | `true,false` |
+| `VO_FIRST` | Prioritize original voice (VO) before primary language | `true` | `true,false` |
 | **Quality & Download Preferences** | | | |
-| `QUALITY_PROFILE` | Download quality profiles to test. HomeTube proposes 4 main profiles. `auto`, by default, will strategically go through all of them and stop when success | `auto` | `auto,mkv_av1_opus,mkv_vp9_opus,mp4_av1_aac,mp4_h264_aac` |
 | `VIDEO_QUALITY_MAX` | Maximum video resolution limit | `max` | `max,2160,1440,1080,720,480,360` |
+| `QUALITY_DOWNGRADE` | Allow quality downgrade if best profile fails (false = best quality only, no fallback) | `true` | `true,false` |
 | `EMBED_CHAPTERS` | Embed chapters by default | `true` | `true,false` |
 | `EMBED_SUBTITLES` | Embed subtitles by default | `true` | `true,false` |
 | `CUTTING_MODE` | Video cutting precision | `keyframes` | `keyframes,precise` |
-| **Localization** | | | |
-| `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` | `en,fr` |
-| `SUBTITLES_CHOICES` | Subtitles' languages proposals | `en` | `en,fr,es` |
 | **Advanced Options** | | | |
 | `YTDLP_CUSTOM_ARGS` | Custom yt-dlp arguments |  | `--max-filesize 5M --write-info-json` |
+| `REMOVE_TMP_FILES` | Remove temporary files after processing | `true` | `true,false` (set to false for debugging) |
 | **Docker-specific Variables** | | | |
 | `VIDEOS_FOLDER_DOCKER_HOST` | Host videos folder in Docker context | **Must be defined** | `/mnt/data/videos` if in Docker container else `/downloads` |
 | `TMP_DOWNLOAD_FOLDER_DOCKER_HOST` | Host tmp download videos folder in Docker context | **Must be defined** | `/mnt/data/hometube/tmp` if in Docker container else `./tmp` |

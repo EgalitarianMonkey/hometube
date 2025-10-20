@@ -79,4 +79,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=5 \
     CMD wget -qO- http://127.0.0.1:8501/_stcore/health || exit 1
 
 ENTRYPOINT ["/sbin/tini","--"]
-CMD ["streamlit","run","app/main.py","--server.headless=true","--server.address=0.0.0.0","--server.enableCORS=false","--server.enableXsrfProtection=false"]
+CMD ["python","-m","streamlit","run","app/main.py","--server.headless=true","--server.address=0.0.0.0","--server.enableCORS=false","--server.enableXsrfProtection=false"]

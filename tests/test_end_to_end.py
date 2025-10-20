@@ -12,7 +12,8 @@ class TestEndToEndDownload:
     # @pytest.mark.slow
     def test_real_hometube_functions(self):
         """Test using actual HomeTube core functions for command building."""
-        from app.utils import sanitize_filename, video_id_from_url, is_valid_cookie_file
+        from app.file_system_utils import sanitize_filename, is_valid_cookie_file
+        from app.medias_utils import video_id_from_url
         from app.core import (
             build_base_ytdlp_command,
             build_cookies_params,
@@ -119,7 +120,8 @@ class TestEndToEndDownload:
         """Test that actually downloads a real YouTube video using HomeTube functions with ULTIMATE QUALITY."""
         import subprocess
         import time
-        from app.utils import sanitize_filename, video_id_from_url, is_valid_cookie_file
+        from app.file_system_utils import sanitize_filename, is_valid_cookie_file
+        from app.medias_utils import video_id_from_url
         from app.core import (
             build_base_ytdlp_command,
             build_cookies_params,

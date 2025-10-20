@@ -77,7 +77,8 @@ def download_video(url, filename, **options):
     setup_environment()
 
     # Import necessary modules
-    from app.main import sanitize_url, ensure_dir
+    from app.medias_utils import sanitize_url
+    from app.file_system_utils import ensure_dir
     import subprocess
 
     try:
