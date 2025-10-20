@@ -5,7 +5,6 @@ This module provides functions to analyze audio and video formats
 from yt-dlp JSON output to optimize download strategies.
 """
 
-import re
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 import json
@@ -14,64 +13,21 @@ import shlex
 
 from app.config import get_settings
 
+# Import URL utilities from url_utils module for re-export (backward compatibility)
+# ruff: noqa: F401
+from app.url_utils import (
+    sanitize_url,
+    video_id_from_url,
+    load_url_info_from_file,
+    check_url_info_integrity,
+)
+
 s = get_settings()
 
 
-# === URL UTILITIES ===
-
-
-def sanitize_url(url: str) -> str:
-    """
-    Clean and validate URL, removing YouTube timestamp parameters.
-
-    Args:
-        url: URL to sanitize
-
-    Returns:
-        Cleaned URL
-    """
-    if not url:
-        return ""
-
-    url = url.strip()
-
-    # Add protocol if missing
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-
-    # Remove YouTube timestamp parameters (HomeTube specific)
-    url = url.split("&t=")[0]
-    url = url.split("?t=")[0]
-
-    return url
-
-
-def video_id_from_url(url: str) -> str:
-    """
-    Extract video ID from YouTube URL.
-
-    Args:
-        url: YouTube URL
-
-    Returns:
-        Video ID or empty string if not found
-    """
-    if not url:
-        return ""
-
-    # Standard YouTube URL patterns
-    patterns = [
-        r"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})",
-        r"youtube\.com/v/([a-zA-Z0-9_-]{11})",
-        r"youtube\.com/shorts/([a-zA-Z0-9_-]{11})",  # Support for Shorts
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-
-    return ""
+# Note: URL utility functions (sanitize_url, video_id_from_url, etc.)
+# have been moved to app/url_utils.py for better organization.
+# They are re-exported here for backward compatibility.
 
 
 # === AUDIO FORMAT ANALYSIS ===
@@ -534,29 +490,6 @@ def analyze_video_formats(
     return sorted_videos
 
 
-def load_url_info_from_file(file_path: Path) -> Optional[Dict]:
-    """
-    Load URL info from a JSON file.
-
-    Args:
-        file_path: Path to the JSON file (e.g., tmp/url_info.json)
-
-    Returns:
-        Dictionary with URL info or None if error
-    """
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return None
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON file {file_path}: {e}")
-        return None
-    except Exception as e:
-        print(f"Error loading URL info from {file_path}: {e}")
-        return None
-
-
 def get_format_details(url_info: Dict, format_id: str) -> Optional[Dict]:
     """
     Get detailed information about a specific format.
@@ -577,47 +510,6 @@ def get_format_details(url_info: Dict, format_id: str) -> Optional[Dict]:
             return fmt
 
     return None
-
-
-def check_url_info_integrity(url_info: Dict) -> bool:
-    """
-    Check if url_info contains premium formats (AV1 or VP9).
-
-    Sometimes YouTube returns limited format information (only h264),
-    even when premium formats are available. This function detects
-    incomplete responses that should be retried.
-
-    Args:
-        url_info: Dictionary from yt-dlp JSON output
-
-    Returns:
-        bool: True if premium formats (AV1/VP9) are present, False if only h264
-    """
-    if not url_info or "error" in url_info:
-        return False
-
-    formats = url_info.get("formats", [])
-    if not formats:
-        return False
-
-    # Check for premium codecs in video formats
-    for fmt in formats:
-        vcodec = fmt.get("vcodec", "").lower()
-
-        # Skip audio-only formats
-        if vcodec == "none":
-            continue
-
-        # Check for AV1 codec
-        if "av01" in vcodec or "av1" in vcodec:
-            return True
-
-        # Check for VP9 codec
-        if "vp9" in vcodec or "vp09" in vcodec:
-            return True
-
-    # If we only found h264/avc formats, this might be incomplete
-    return False
 
 
 def get_available_formats(url_info: Dict) -> List[Dict]:

@@ -41,10 +41,13 @@ try:
         get_available_formats,
         get_video_title,
         customize_video_metadata,
+    )
+    from .url_utils import (
+        should_reuse_url_info,
+        save_url_info,
         sanitize_url,
         check_url_info_integrity,
     )
-    from .url_utils import should_reuse_url_info, save_url_info
     from .subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
@@ -105,10 +108,13 @@ except ImportError:
         get_available_formats,
         get_video_title,
         customize_video_metadata,
+    )
+    from url_utils import (
+        should_reuse_url_info,
+        save_url_info,
         sanitize_url,
         check_url_info_integrity,
     )
-    from url_utils import should_reuse_url_info, save_url_info
     from subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
