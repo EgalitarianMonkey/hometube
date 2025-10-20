@@ -1061,27 +1061,75 @@ def url_analysis(url: str) -> Optional[Dict]:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if result.returncode != 0:
-            # If first attempt fails, try with extractor retries and no cache
-            safe_push_log("⚠️ First attempt failed, retrying with enhanced options...")
-            cmd_retry = [
-                "yt-dlp",
-                "-J",
-                "--skip-download",
-                "--flat-playlist",
-                "--playlist-end",
-                "1",
-                "--user-agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "--extractor-retries",
-                "3",  # Retry failed extractors
-                "--no-cache-dir",  # Don't use cache that might be stale
-                *cookies_params,
-                sanitize_url(url),
-            ]
-
-            result = subprocess.run(
-                cmd_retry, capture_output=True, text=True, timeout=45
+            # Check if error is authentication-related (age restriction, bot detection, etc.)
+            error_msg = result.stderr if result.stderr else ""
+            needs_auth = any(
+                [
+                    "Sign in to confirm" in error_msg,
+                    "confirm your age" in error_msg,
+                    "age" in error_msg.lower() and "restricted" in error_msg.lower(),
+                    "inappropriate for some users" in error_msg,
+                    "requires authentication" in error_msg,
+                    "login required" in error_msg,
+                ]
             )
+
+            # If first attempt failed and we have cookies available, try with cookies
+            if needs_auth and cookies_params:
+                safe_push_log("🔐 Authentication required, retrying with cookies...")
+                cmd_with_auth = [
+                    "yt-dlp",
+                    "-J",
+                    "--skip-download",
+                    "--flat-playlist",
+                    "--playlist-end",
+                    "1",
+                    "--user-agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "--extractor-retries",
+                    "3",
+                    "--no-cache-dir",
+                    *cookies_params,
+                    sanitize_url(url),
+                ]
+
+                result = subprocess.run(
+                    cmd_with_auth, capture_output=True, text=True, timeout=45
+                )
+
+                if result.returncode == 0:
+                    safe_push_log("✅ Authentication successful with cookies")
+                    # Continue to JSON parsing below
+                else:
+                    error_msg = (
+                        result.stderr[:400] if result.stderr else "Unknown error"
+                    )
+
+            # If still failing or no cookies available, try enhanced retry without auth
+            if result.returncode != 0:
+                safe_push_log("⚠️ Retrying with enhanced options...")
+                cmd_retry = [
+                    "yt-dlp",
+                    "-J",
+                    "--skip-download",
+                    "--flat-playlist",
+                    "--playlist-end",
+                    "1",
+                    "--user-agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "--extractor-retries",
+                    "3",
+                    "--no-cache-dir",
+                ]
+                # Only add cookies if we haven't tried them yet
+                if not needs_auth and cookies_params:
+                    cmd_retry.extend(cookies_params)
+
+                cmd_retry.append(sanitize_url(url))
+
+                result = subprocess.run(
+                    cmd_retry, capture_output=True, text=True, timeout=45
+                )
 
             if result.returncode != 0:
                 error_msg = result.stderr[:400] if result.stderr else "Unknown error"
@@ -1121,6 +1169,51 @@ def url_analysis(url: str) -> Optional[Dict]:
                             "2. ⏳ **Wait 5-10 minutes** before retrying\n"
                             "3. 🌐 **Try from a different IP** if using VPN/proxy\n"
                             "4. 🍪 **Verify cookies file is valid** (not corrupted)\n\n"
+                        )
+
+                        if cookie_file_exists:
+                            help_msg += f"📁 Current cookies file: `{YOUTUBE_COOKIES_FILE_PATH}`\n"
+                        if browser_configured:
+                            help_msg += (
+                                f"🌐 Browser configured: `{COOKIES_FROM_BROWSER}`\n"
+                            )
+
+                    return {"error": help_msg}
+
+                # Check for age restriction error
+                elif "confirm your age" in error_msg or (
+                    "age" in error_msg.lower() and "restricted" in error_msg.lower()
+                ):
+                    cookie_file_exists = (
+                        YOUTUBE_COOKIES_FILE_PATH
+                        and Path(YOUTUBE_COOKIES_FILE_PATH).exists()
+                    )
+                    browser_configured = COOKIES_FROM_BROWSER and is_valid_browser(
+                        COOKIES_FROM_BROWSER
+                    )
+
+                    help_msg = "🔞 Age-restricted content.\n\n"
+
+                    if not cookie_file_exists and not browser_configured:
+                        help_msg += (
+                            "🔐 **Authentication required!** This video requires sign-in to verify age.\n\n"
+                            "**Solutions:**\n"
+                            "1. 📁 **Add cookies file** (recommended):\n"
+                            "   - Export cookies from your browser while signed in to YouTube\n"
+                            "   - Place file at: `cookies/youtube_cookies.txt`\n"
+                            "   - Set YOUTUBE_COOKIES_FILE_PATH in .env\n\n"
+                            "2. 🌐 **Use browser cookies**:\n"
+                            "   - Set COOKIES_FROM_BROWSER=chrome (or firefox, brave, etc.)\n"
+                            "   - Make sure you're signed in to YouTube in that browser\n\n"
+                            "[Documentation](docs/usage.md#-authentication--private-content)"
+                        )
+                    else:
+                        help_msg += (
+                            "🔐 Cookies are configured but age verification failed.\n\n"
+                            "**Possible causes:**\n"
+                            "1. 🔄 **Cookies may be expired** - refresh them from your browser\n"
+                            "2. 👤 **Not signed in** - make sure you're logged into YouTube when exporting cookies\n"
+                            "3. 🔞 **Account age verification** - your YouTube account may need age verification\n\n"
                         )
 
                         if cookie_file_exists:
@@ -1244,7 +1337,7 @@ def display_url_info(url_info: Dict) -> None:
             )
 
         playlist_info_line = (
-            ' <span style="color: #4ade80;">&nbsp; &nbsp; &nbsp; &nbsp;</span> '.join(
+            ' <span style="color: #4ade80;">&nbsp; &nbsp; &nbsp;</span> '.join(
                 playlist_info_items
             )
             if playlist_info_items
@@ -1323,9 +1416,7 @@ def display_url_info(url_info: Dict) -> None:
             )
 
         stats_line = (
-            ' <span style="color: #4ade80;">&nbsp; &nbsp; &nbsp; &nbsp;</span> '.join(
-                stats_items
-            )
+            ' <span style="color: #4ade80;">&nbsp; &nbsp;</span> '.join(stats_items)
             if stats_items
             else ""
         )
