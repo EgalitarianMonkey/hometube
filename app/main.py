@@ -254,6 +254,16 @@ def _process_quality_strategy(quality_strategy: str, url: str) -> None:
         # Get or create unique folder for this video URL
         video_tmp_dir = get_video_tmp_dir(url)
 
+        # Check if we already have a cached download - skip format probing if so
+        existing_video_tracks = tmp_files.find_video_tracks(video_tmp_dir)
+        if existing_video_tracks:
+            safe_push_log(f"✅ Found cached video: {existing_video_tracks[0].name}")
+            safe_push_log("⚡ Skipping format probing - will reuse cached file")
+            # Set minimal session state to allow download flow to continue
+            st.session_state.optimal_format_profiles = []
+            st.session_state.chosen_format_profiles = []
+            return
+
         # Check if url_info.json exists in the unique video folder
         json_path = video_tmp_dir / "url_info.json"
         if not json_path.exists():
