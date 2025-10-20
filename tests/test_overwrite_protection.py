@@ -1,21 +1,23 @@
 """Tests for video overwrite protection"""
 
-from pathlib import Path
-import pytest
-
 
 class TestOverwriteProtectionConfig:
     """Test ALLOW_OVERWRITE_EXISTING_VIDEO configuration"""
 
     def test_default_is_false(self):
         """Test that ALLOW_OVERWRITE_EXISTING_VIDEO defaults to false (protection enabled)"""
-        from app.config import get_settings
+        from app.config import _DEFAULTS, _to_bool
 
-        settings = get_settings()
+        # Check the default value in _DEFAULTS dictionary
+        default_value_str = _DEFAULTS["ALLOW_OVERWRITE_EXISTING_VIDEO"]
+        default_value = _to_bool(
+            default_value_str, True
+        )  # If not set, would default to True
+
         # Should default to False to protect existing files
         assert (
-            settings.ALLOW_OVERWRITE_EXISTING_VIDEO is False
-        ), "ALLOW_OVERWRITE_EXISTING_VIDEO should default to False for safety"
+            default_value is False
+        ), f"ALLOW_OVERWRITE_EXISTING_VIDEO should default to False for safety, got {default_value_str}"
 
     def test_config_structure(self):
         """Test that config includes ALLOW_OVERWRITE_EXISTING_VIDEO"""
@@ -99,9 +101,8 @@ class TestOverwriteBehavior:
         Scenario: File exists, ALLOW_OVERWRITE_EXISTING_VIDEO=false
         Expected: Download should be skipped
         """
-        from app.config import get_settings
-
-        settings = get_settings()
+        # Test the logic independently of actual config
+        allow_overwrite = False  # Simulate protection enabled
 
         dest_dir = tmp_path / "videos"
         dest_dir.mkdir()
@@ -119,9 +120,7 @@ class TestOverwriteBehavior:
         ]
 
         # File exists and overwrite is disabled -> should skip
-        should_skip = (
-            len(existing_files) > 0 and not settings.ALLOW_OVERWRITE_EXISTING_VIDEO
-        )
+        should_skip = len(existing_files) > 0 and not allow_overwrite
 
         assert (
             should_skip is True

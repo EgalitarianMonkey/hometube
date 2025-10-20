@@ -183,7 +183,7 @@ def get_settings() -> Settings:
         QUALITY_DOWNGRADE=_to_bool(config["QUALITY_DOWNGRADE"], True),
         EMBED_CHAPTERS=_to_bool(config["EMBED_CHAPTERS"], True),
         EMBED_SUBTITLES=_to_bool(config["EMBED_SUBTITLES"], True),
-        REMOVE_TMP_FILES=_to_bool(config["REMOVE_TMP_FILES"], True),
+        REMOVE_TMP_FILES=_to_bool(config["REMOVE_TMP_FILES"], False),
         ALLOW_OVERWRITE_EXISTING_VIDEO=_to_bool(
             config["ALLOW_OVERWRITE_EXISTING_VIDEO"], False
         ),

@@ -579,6 +579,47 @@ def get_format_details(url_info: Dict, format_id: str) -> Optional[Dict]:
     return None
 
 
+def check_url_info_integrity(url_info: Dict) -> bool:
+    """
+    Check if url_info contains premium formats (AV1 or VP9).
+
+    Sometimes YouTube returns limited format information (only h264),
+    even when premium formats are available. This function detects
+    incomplete responses that should be retried.
+
+    Args:
+        url_info: Dictionary from yt-dlp JSON output
+
+    Returns:
+        bool: True if premium formats (AV1/VP9) are present, False if only h264
+    """
+    if not url_info or "error" in url_info:
+        return False
+
+    formats = url_info.get("formats", [])
+    if not formats:
+        return False
+
+    # Check for premium codecs in video formats
+    for fmt in formats:
+        vcodec = fmt.get("vcodec", "").lower()
+
+        # Skip audio-only formats
+        if vcodec == "none":
+            continue
+
+        # Check for AV1 codec
+        if "av01" in vcodec or "av1" in vcodec:
+            return True
+
+        # Check for VP9 codec
+        if "vp9" in vcodec or "vp09" in vcodec:
+            return True
+
+    # If we only found h264/avc formats, this might be incomplete
+    return False
+
+
 def get_available_formats(url_info: Dict) -> List[Dict]:
     """
     Extract all available video formats from url_info for user selection.

@@ -1,8 +1,6 @@
 """Tests for file operation utilities (copy_file, move_file, cleanup)"""
 
-import tempfile
 from pathlib import Path
-import pytest
 
 
 class TestFileOperations:

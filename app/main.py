@@ -42,6 +42,7 @@ try:
         get_video_title,
         customize_video_metadata,
         sanitize_url,
+        check_url_info_integrity,
     )
     from .subtitles_utils import (
         embed_subtitles_manually,
@@ -104,6 +105,7 @@ except ImportError:
         get_video_title,
         customize_video_metadata,
         sanitize_url,
+        check_url_info_integrity,
     )
     from subtitles_utils import (
         embed_subtitles_manually,
@@ -1200,6 +1202,88 @@ def url_analysis(url: str) -> Optional[Dict]:
         # Parse JSON output
         try:
             info = json.loads(result.stdout)
+
+            # === INTEGRITY CHECK WITH SMART RETRY ===
+            # Check if we got premium formats (AV1/VP9) for videos (not playlists)
+            is_video = info.get("_type") == "video" or "duration" in info
+
+            if is_video:
+                has_premium_formats = check_url_info_integrity(info)
+
+                if not has_premium_formats:
+                    safe_push_log(
+                        "⚠️ Limited formats detected (h264 only), retrying for premium formats..."
+                    )
+
+                    # Try up to 2 additional attempts with different strategies
+                    best_info = info  # Keep first result as fallback
+                    max_retries = 2
+
+                    for retry_num in range(1, max_retries + 1):
+                        safe_push_log(
+                            f"🔄 Retry {retry_num}/{max_retries} for premium formats..."
+                        )
+
+                        # Build retry command with enhanced parameters
+                        retry_cmd = [
+                            "yt-dlp",
+                            "-J",
+                            "--skip-download",
+                            "--user-agent",
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                            "--extractor-retries",
+                            "3",
+                            "--no-cache-dir",  # Force fresh fetch
+                        ]
+
+                        # Add cookies if available
+                        if cookies_params:
+                            retry_cmd.extend(cookies_params)
+
+                        retry_cmd.append(clean_url)
+
+                        try:
+                            retry_result = subprocess.run(
+                                retry_cmd, capture_output=True, text=True, timeout=45
+                            )
+
+                            if retry_result.returncode == 0:
+                                retry_info = json.loads(retry_result.stdout)
+
+                                # Check if this attempt got premium formats
+                                if check_url_info_integrity(retry_info):
+                                    safe_push_log(
+                                        f"✅ Premium formats found on retry {retry_num}"
+                                    )
+                                    info = retry_info
+                                    break
+                                else:
+                                    # Keep the result with most formats
+                                    retry_formats_count = len(
+                                        retry_info.get("formats", [])
+                                    )
+                                    best_formats_count = len(
+                                        best_info.get("formats", [])
+                                    )
+
+                                    if retry_formats_count > best_formats_count:
+                                        best_info = retry_info
+                                        safe_push_log(
+                                            f"📊 Retry {retry_num} has more formats ({retry_formats_count} vs {best_formats_count})"
+                                        )
+
+                        except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+                            safe_push_log(f"⚠️ Retry {retry_num} failed: {str(e)[:100]}")
+                            continue
+
+                    # If no retry succeeded with premium formats, use best result
+                    if not check_url_info_integrity(info):
+                        info = best_info
+                        safe_push_log(
+                            "⚠️ No premium formats found after retries, using best available"
+                        )
+                else:
+                    safe_push_log("✅ Premium formats (AV1/VP9) detected")
 
             # Save JSON to file for later use with yt-dlp --load-info-json
             try:
