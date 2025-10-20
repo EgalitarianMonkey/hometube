@@ -157,10 +157,61 @@ When copying to the final location:
 ✅ Generic names are filesystem-safe  
 ✅ Original name preserved in `job.json`  
 
+### Cache Preservation
+✅ **`video-{FORMAT_ID}.{ext}` is always preserved** for future reuse  
+✅ **`final.{ext}` is created by COPY, not MOVE** (keeps source intact)  
+✅ No automatic cleanup in normal workflow  
+✅ Manual cleanup available via `REMOVE_TMP_FILES` configuration  
+
+This ensures that:
+- Re-downloading the same video skips download instantly
+- Processing can be re-run without re-downloading
+- Debugging is possible with all intermediate files available
+
 ### Debugging
 ✅ Clear file names show purpose  
 ✅ Format ID visible in video filename  
 ✅ Easy to inspect tmp folder contents  
+✅ All intermediate files preserved by default  
+
+## Configuration
+
+### Temporary File Retention
+
+By default, HomeTube **preserves all temporary files** for resilience and caching:
+
+```bash
+# Default behavior (recommended for resilience)
+REMOVE_TMP_FILES=false
+```
+
+This ensures:
+- ✅ Fast resume on interrupted downloads
+- ✅ Instant skip when re-downloading same video
+- ✅ Debugging with all intermediate files
+- ✅ No wasted bandwidth re-downloading
+
+### Manual Cleanup
+
+To enable automatic cleanup after processing:
+
+```bash
+# Enable cleanup (not recommended for most users)
+REMOVE_TMP_FILES=true
+```
+
+**Note**: Even with cleanup enabled, files are only removed after successful completion. Interrupted operations always preserve files for resume.
+
+### Disk Space Management
+
+If disk space is a concern:
+
+1. **Monitor tmp folder size**: `du -sh tmp/`
+2. **Manual cleanup**: Remove old video folders when done
+3. **Selective cleanup**: Keep only recent downloads in cache
+4. **Use SSD**: Fast storage improves overall performance
+
+The tmp folder size grows with the number of processed videos, but enables instant resume and cache benefits.
 
 ## Code Example
 
