@@ -26,6 +26,7 @@ try:
         ensure_dir,
         cleanup_tmp_files,
         should_remove_tmp_files,
+        move_file,
     )
     from .display_utils import (
         fmt_hhmmss,
@@ -38,7 +39,6 @@ try:
         get_video_title,
         customize_video_metadata,
         sanitize_url,
-        video_id_from_url,
     )
     from .subtitles_utils import (
         embed_subtitles_manually,
@@ -57,14 +57,6 @@ try:
         log_authentication_error_hint,
         log_format_unavailable_error_hint,
         register_main_push_log,
-    )
-
-    from .file_system_utils import (
-        list_subdirs_recursive,
-        cleanup_tmp_files,
-        should_remove_tmp_files,
-        ensure_dir,
-        move_file,
     )
     from .cut_utils import (
         get_keyframes,
@@ -106,7 +98,6 @@ except ImportError:
         get_video_title,
         customize_video_metadata,
         sanitize_url,
-        video_id_from_url,
     )
     from subtitles_utils import (
         embed_subtitles_manually,
@@ -140,7 +131,12 @@ except ImportError:
     )
 
 # Configuration import (must be after translations for configure_language)
-from app.config import get_settings, ensure_folders_exist, print_config_summary
+from app.config import (
+    get_settings,
+    ensure_folders_exist,
+    print_config_summary,
+    get_default_subtitle_languages,
+)
 
 # === CONSTANTS ===
 
@@ -156,8 +152,10 @@ VIDEOS_FOLDER, TMP_DOWNLOAD_FOLDER = ensure_folders_exist()
 # Extract commonly used settings for backward compatibility
 YOUTUBE_COOKIES_FILE_PATH = settings.YOUTUBE_COOKIES_FILE_PATH
 COOKIES_FROM_BROWSER = settings.COOKIES_FROM_BROWSER
-SUBTITLES_CHOICES = settings.SUBTITLES_CHOICES
 IN_CONTAINER = settings.IN_CONTAINER
+
+# Get default subtitle languages based on audio preferences
+SUBTITLES_CHOICES = get_default_subtitle_languages()
 
 # Print configuration summary in development mode
 if __name__ == "__main__" or settings.DEBUG:
@@ -1043,6 +1041,19 @@ def url_analysis(url: str) -> Optional[Dict]:
         # Prepare output path for JSON file
         json_output_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
 
+        # Build cookies parameters from config (important to avoid bot detection)
+        # Use config-based cookies since session_state may not be available yet
+        cookies_params = build_cookies_params_from_config()
+
+        # Log cookie status for debugging
+        if cookies_params:
+            if "--cookies" in cookies_params:
+                safe_push_log("🍪 URL analysis using cookies file")
+            elif "--cookies-from-browser" in cookies_params:
+                safe_push_log("🍪 URL analysis using browser cookies")
+        else:
+            safe_push_log("⚠️ URL analysis without cookies - may trigger bot detection")
+
         # Run yt-dlp with JSON output, skip download, flat playlist mode
         cmd = [
             "yt-dlp",
@@ -1057,7 +1068,78 @@ def url_analysis(url: str) -> Optional[Dict]:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if result.returncode != 0:
-            return {"error": f"yt-dlp failed: {result.stderr[:200]}"}
+            # If first attempt fails, try with extractor retries and no cache
+            safe_push_log("⚠️ First attempt failed, retrying with enhanced options...")
+            cmd_retry = [
+                "yt-dlp",
+                "-J",
+                "--skip-download",
+                "--flat-playlist",
+                "--playlist-end",
+                "1",
+                "--user-agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "--extractor-retries",
+                "3",  # Retry failed extractors
+                "--no-cache-dir",  # Don't use cache that might be stale
+                *cookies_params,
+                sanitize_url(url),
+            ]
+
+            result = subprocess.run(
+                cmd_retry, capture_output=True, text=True, timeout=45
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr[:400] if result.stderr else "Unknown error"
+
+                # Check for bot detection error
+                if "Sign in to confirm you're not a bot" in error_msg:
+                    # Provide helpful guidance based on current setup
+                    cookie_file_exists = (
+                        YOUTUBE_COOKIES_FILE_PATH
+                        and Path(YOUTUBE_COOKIES_FILE_PATH).exists()
+                    )
+                    browser_configured = COOKIES_FROM_BROWSER and is_valid_browser(
+                        COOKIES_FROM_BROWSER
+                    )
+
+                    help_msg = "⚠️ YouTube bot detection triggered.\n\n"
+
+                    if not cookie_file_exists and not browser_configured:
+                        help_msg += (
+                            "🔐 **No cookies configured!** This is likely why you're blocked.\n\n"
+                            "**Solutions:**\n"
+                            "1. 📁 **Add cookies file** (recommended for servers):\n"
+                            "   - Export cookies from your browser (see docs/usage.md)\n"
+                            "   - Place file at: `cookies/youtube_cookies.txt`\n"
+                            "   - Set YOUTUBE_COOKIES_FILE_PATH in .env\n\n"
+                            "2. 🌐 **Use browser cookies** (local development):\n"
+                            "   - Set COOKIES_FROM_BROWSER=chrome (or firefox, brave, etc.)\n"
+                            "   - Works if browser is on same machine\n\n"
+                            "3. ⏳ **Wait a few minutes** and try again\n\n"
+                            "[Documentation](docs/usage.md#-authentication--private-content)"
+                        )
+                    else:
+                        help_msg += (
+                            "🔐 Cookies are configured but YouTube still blocked the request.\n\n"
+                            "**Try these solutions:**\n"
+                            "1. 🔄 **Refresh your cookies** (they may be expired)\n"
+                            "2. ⏳ **Wait 5-10 minutes** before retrying\n"
+                            "3. 🌐 **Try from a different IP** if using VPN/proxy\n"
+                            "4. 🍪 **Verify cookies file is valid** (not corrupted)\n\n"
+                        )
+
+                        if cookie_file_exists:
+                            help_msg += f"📁 Current cookies file: `{YOUTUBE_COOKIES_FILE_PATH}`\n"
+                        if browser_configured:
+                            help_msg += (
+                                f"🌐 Browser configured: `{COOKIES_FROM_BROWSER}`\n"
+                            )
+
+                    return {"error": help_msg}
+
+                return {"error": f"yt-dlp failed: {error_msg}"}
 
         # Parse JSON output
         try:
@@ -1081,7 +1163,9 @@ def url_analysis(url: str) -> Optional[Dict]:
             return {"error": f"Failed to parse JSON: {str(e)}"}
 
     except subprocess.TimeoutExpired:
-        return {"error": "Request timed out after 30 seconds"}
+        return {
+            "error": "Request timed out (max 45 seconds). Try again or check your connection."
+        }
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -1493,6 +1577,32 @@ def build_cookies_params() -> List[str]:
         return result
 
 
+def build_cookies_params_from_config() -> List[str]:
+    """
+    Builds cookie parameters from configuration settings (for early URL analysis).
+    Used before session_state is available.
+
+    Returns:
+        list: yt-dlp parameters for cookies
+    """
+    # Try cookies file first (most common for Docker/server setup)
+    if YOUTUBE_COOKIES_FILE_PATH and Path(YOUTUBE_COOKIES_FILE_PATH).exists():
+        return core_build_cookies_params(
+            cookies_method="file", cookies_file_path=YOUTUBE_COOKIES_FILE_PATH
+        )
+
+    # Try browser cookies if configured
+    if COOKIES_FROM_BROWSER and is_valid_browser(COOKIES_FROM_BROWSER):
+        return core_build_cookies_params(
+            cookies_method="browser",
+            browser_select=COOKIES_FROM_BROWSER,
+            browser_profile="",
+        )
+
+    # No cookies available
+    return []
+
+
 class DownloadMetrics:
     """Class to manage download progress metrics and display"""
 
@@ -1757,10 +1867,11 @@ if "new_folder_created" in st.session_state:
     st.rerun()
 
 # subtitles multiselect from env
+# Default subtitles are determined by audio language preferences (LANGUAGE_PRIMARY, LANGUAGES_SECONDARIES)
 subs_selected = st.multiselect(
     t("subtitles_to_embed"),
     options=SUBTITLES_CHOICES,
-    default=[],
+    default=SUBTITLES_CHOICES,  # Pre-select subtitles based on audio preferences
     help=t("subtitles_help"),
 )
 

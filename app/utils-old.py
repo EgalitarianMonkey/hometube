@@ -14,22 +14,6 @@ This file will be removed in a future version.
 
 import warnings
 
-# Re-export functions from their new locations for backward compatibility
-from .file_system_utils import (
-    sanitize_filename,
-    is_valid_cookie_file,
-    is_valid_browser,
-)
-from .display_utils import (
-    fmt_hhmmss,
-    parse_time_like,
-)
-from .medias_utils import (
-    sanitize_url,
-    video_id_from_url,
-)
-from .cut_utils import invert_segments, invert_segments_tuples
-
 
 def __getattr__(name):
     """Warn users about deprecated imports."""

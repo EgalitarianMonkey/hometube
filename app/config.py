@@ -48,7 +48,6 @@ _DEFAULTS = {
     "COOKIES_FROM_BROWSER": "",
     # === Localization ===
     "UI_LANGUAGE": "en",
-    "SUBTITLES_CHOICES": "en",
     # === Audio Language Preferences ===
     "LANGUAGE_PRIMARY": "en",  # Primary audio language (e.g., "fr", "en", "es")
     "LANGUAGES_SECONDARIES": "",  # Secondary languages, comma-separated (e.g., "en,es,de")
@@ -103,7 +102,6 @@ class Settings:
 
     # Localization
     UI_LANGUAGE: str
-    SUBTITLES_CHOICES: list[str]
 
     # Audio Language Preferences
     LANGUAGE_PRIMARY: str
@@ -164,7 +162,6 @@ def get_settings() -> Settings:
         cookies_path = None
 
     # 3️⃣ Parse lists and booleans
-    subtitles_choices = _to_list(config["SUBTITLES_CHOICES"])
     languages_secondaries = _to_list(config["LANGUAGES_SECONDARIES"])
 
     return Settings(
@@ -173,7 +170,6 @@ def get_settings() -> Settings:
         YOUTUBE_COOKIES_FILE_PATH=cookies_path,
         COOKIES_FROM_BROWSER=config["COOKIES_FROM_BROWSER"].strip().lower(),
         UI_LANGUAGE=config["UI_LANGUAGE"],
-        SUBTITLES_CHOICES=subtitles_choices,
         LANGUAGE_PRIMARY=config["LANGUAGE_PRIMARY"].strip().lower(),
         LANGUAGES_SECONDARIES=languages_secondaries,
         LANGUAGE_PRIMARY_INCLUDE_SUBTITLES=_to_bool(
@@ -237,6 +233,51 @@ def ensure_folders_exist() -> tuple[Path, Path]:
     return videos_folder, tmp_folder
 
 
+def get_default_subtitle_languages() -> list[str]:
+    """
+    Get the list of subtitle languages to download based on audio preferences.
+
+    This determines which subtitles should be pre-selected in the UI based on:
+    - LANGUAGE_PRIMARY: Primary audio language
+    - LANGUAGE_PRIMARY_INCLUDE_SUBTITLES: Whether to include subtitles for primary language
+    - LANGUAGES_SECONDARIES: Additional audio languages that should have subtitles
+
+    The returned list is used to:
+    1. Pre-check subtitle checkboxes in the UI
+    2. Download subtitles automatically when embedding is enabled
+
+    Returns:
+        list[str]: Deduplicated list of language codes (e.g., ['en', 'fr', 'es'])
+                   Empty list if no languages should be auto-selected
+
+    Examples:
+        >>> # With LANGUAGE_PRIMARY="fr", LANGUAGE_PRIMARY_INCLUDE_SUBTITLES=true
+        >>> get_default_subtitle_languages()
+        ['fr']
+
+        >>> # With LANGUAGE_PRIMARY="en", LANGUAGES_SECONDARIES="fr,es", INCLUDE=true
+        >>> get_default_subtitle_languages()
+        ['en', 'fr', 'es']
+
+        >>> # With LANGUAGE_PRIMARY="en", INCLUDE=false, SECONDARIES="fr"
+        >>> get_default_subtitle_languages()
+        ['fr']
+    """
+    settings = get_settings()
+    subtitle_langs = []
+
+    # Add primary language if requested
+    if settings.LANGUAGE_PRIMARY_INCLUDE_SUBTITLES and settings.LANGUAGE_PRIMARY:
+        subtitle_langs.append(settings.LANGUAGE_PRIMARY.lower())
+
+    # Add secondary languages (they always get subtitles)
+    for lang in settings.LANGUAGES_SECONDARIES:
+        if lang and lang.lower() not in subtitle_langs:
+            subtitle_langs.append(lang.lower())
+
+    return subtitle_langs
+
+
 def print_config_summary() -> None:
     """Print a summary of the current configuration for debugging"""
     s = get_settings()
@@ -274,7 +315,6 @@ def print_config_summary() -> None:
     # Localization
     print("\n🌐 Localization:")
     print(f"   UI Language: {s.UI_LANGUAGE}")
-    print(f"   Subtitle languages: {', '.join(s.SUBTITLES_CHOICES) or '(none)'}")
 
     # Audio preferences
     print("\n🎵 Audio Language Preferences:")
@@ -282,6 +322,11 @@ def print_config_summary() -> None:
     print(f"   Secondaries: {', '.join(s.LANGUAGES_SECONDARIES) or '(none)'}")
     print(f"   VO first: {s.VO_FIRST}")
     print(f"   Include subtitles for primary: {s.LANGUAGE_PRIMARY_INCLUDE_SUBTITLES}")
+
+    # Show computed default subtitle languages
+    default_subs = get_default_subtitle_languages()
+    if default_subs:
+        print(f"   → Default subtitles: {', '.join(default_subs)}")
 
     # Quality
     print("\n🎬 Video Quality:")

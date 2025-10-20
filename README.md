@@ -461,7 +461,6 @@ HomeTube configuration is managed through the `.env` file:
 | `BROWSER_SELECT` | Default browser for cookie extraction | `chrome` | `chrome,firefox,edge,safari` |
 | **Localization** | | | |
 | `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` | `en,fr` |
-| `SUBTITLES_CHOICES` | Subtitle languages proposals | `en` | `en,fr,es` |
 | **Audio Language Preferences** | | | |
 | `LANGUAGE_PRIMARY` | Primary audio language preference | `en` | `en,fr,es,de,ja` |
 | `LANGUAGES_SECONDARIES` | Secondary audio languages (comma-separated) | _(empty)_ | `en,es,de` |

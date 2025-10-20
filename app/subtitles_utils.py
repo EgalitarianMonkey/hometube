@@ -220,39 +220,92 @@ def has_embedded_subtitles(video_path: Path) -> bool:
 def normalize_language_code(lang_code: str) -> str:
     """
     Normalize language code to 2-letter ISO 639-1 format for comparison.
-    
+
     Handles both 2-letter (ISO 639-1) and 3-letter (ISO 639-2) codes.
-    
+
     Args:
         lang_code: Language code (2 or 3 letters)
-        
+
     Returns:
         str: Normalized 2-letter language code
     """
     lang_lower = lang_code.lower().strip()
-    
+
     # Map of 3-letter to 2-letter codes
     iso639_2_to_1 = {
-        "eng": "en", "fre": "fr", "fra": "fr", "ger": "de", "deu": "de",
-        "spa": "es", "ita": "it", "por": "pt", "dut": "nl", "nld": "nl",
-        "swe": "sv", "nor": "no", "dan": "da", "fin": "fi", "ice": "is",
-        "pol": "pl", "cze": "cs", "ces": "cs", "slo": "sk", "slk": "sk",
-        "hun": "hu", "rum": "ro", "ron": "ro", "bul": "bg", "scr": "hr",
-        "hrv": "hr", "scc": "sr", "srp": "sr", "slv": "sl", "est": "et",
-        "lav": "lv", "lit": "lt", "gre": "el", "ell": "el", "tur": "tr",
-        "rus": "ru", "ukr": "uk", "bel": "be", "jpn": "ja", "kor": "ko",
-        "chi": "zh", "zho": "zh", "tha": "th", "vie": "vi", "ind": "id",
-        "may": "ms", "msa": "ms", "tgl": "tl", "hin": "hi", "ben": "bn",
-        "tam": "ta", "tel": "te", "mal": "ml", "kan": "kn", "urd": "ur",
-        "per": "fa", "fas": "fa", "ara": "ar", "heb": "he", "cat": "ca",
-        "baq": "eu", "eus": "eu", "glg": "gl", "wel": "cy", "cym": "cy",
-        "gle": "ga", "mlt": "mt",
+        "eng": "en",
+        "fre": "fr",
+        "fra": "fr",
+        "ger": "de",
+        "deu": "de",
+        "spa": "es",
+        "ita": "it",
+        "por": "pt",
+        "dut": "nl",
+        "nld": "nl",
+        "swe": "sv",
+        "nor": "no",
+        "dan": "da",
+        "fin": "fi",
+        "ice": "is",
+        "pol": "pl",
+        "cze": "cs",
+        "ces": "cs",
+        "slo": "sk",
+        "slk": "sk",
+        "hun": "hu",
+        "rum": "ro",
+        "ron": "ro",
+        "bul": "bg",
+        "scr": "hr",
+        "hrv": "hr",
+        "scc": "sr",
+        "srp": "sr",
+        "slv": "sl",
+        "est": "et",
+        "lav": "lv",
+        "lit": "lt",
+        "gre": "el",
+        "ell": "el",
+        "tur": "tr",
+        "rus": "ru",
+        "ukr": "uk",
+        "bel": "be",
+        "jpn": "ja",
+        "kor": "ko",
+        "chi": "zh",
+        "zho": "zh",
+        "tha": "th",
+        "vie": "vi",
+        "ind": "id",
+        "may": "ms",
+        "msa": "ms",
+        "tgl": "tl",
+        "hin": "hi",
+        "ben": "bn",
+        "tam": "ta",
+        "tel": "te",
+        "mal": "ml",
+        "kan": "kn",
+        "urd": "ur",
+        "per": "fa",
+        "fas": "fa",
+        "ara": "ar",
+        "heb": "he",
+        "cat": "ca",
+        "baq": "eu",
+        "eus": "eu",
+        "glg": "gl",
+        "wel": "cy",
+        "cym": "cy",
+        "gle": "ga",
+        "mlt": "mt",
     }
-    
+
     # If 3-letter code, convert to 2-letter
     if len(lang_lower) == 3:
         return iso639_2_to_1.get(lang_lower, lang_lower)
-    
+
     # Already 2-letter or unknown
     return lang_lower
 
@@ -285,10 +338,14 @@ def check_required_subtitles_embedded(
     # Normalize all language codes to 2-letter format for comparison
     normalized_embedded = [normalize_language_code(lang) for lang in embedded_languages]
     normalized_required = [normalize_language_code(lang) for lang in required_languages]
-    
+
     # Debug logging to show normalization
-    safe_push_log(f"🔍 Required languages: {required_languages} → normalized: {normalized_required}")
-    safe_push_log(f"🔍 Embedded languages: {embedded_languages} → normalized: {normalized_embedded}")
+    safe_push_log(
+        f"🔍 Required languages: {required_languages} → normalized: {normalized_required}"
+    )
+    safe_push_log(
+        f"🔍 Embedded languages: {embedded_languages} → normalized: {normalized_embedded}"
+    )
 
     # Check if all required languages are present
     missing_languages = []
@@ -298,7 +355,9 @@ def check_required_subtitles_embedded(
 
     if missing_languages:
         safe_push_log(f"❌ Missing subtitle languages: {', '.join(missing_languages)}")
-        safe_push_log(f"� Note: Language codes are normalized for comparison (e.g., 'eng' → 'en')")
+        safe_push_log(
+            "ℹ️ Note: Language codes are normalized for comparison (e.g., 'eng' → 'en')"
+        )
         return False
     else:
         safe_push_log(
