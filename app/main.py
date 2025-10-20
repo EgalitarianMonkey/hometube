@@ -309,7 +309,12 @@ def _process_quality_strategy(quality_strategy: str, url: str) -> None:
         if quality_strategy in ["auto_best", "best_no_fallback", "choose_profile"]:
             # Load url_info to analyze audio tracks
             language_primary = settings.LANGUAGE_PRIMARY or "en"
-            languages_secondaries = settings.LANGUAGES_SECONDARIES or ""
+            # Convert list to comma-separated string
+            languages_secondaries = (
+                ",".join(settings.LANGUAGES_SECONDARIES)
+                if settings.LANGUAGES_SECONDARIES
+                else ""
+            )
             vo_first = settings.VO_FIRST
 
             # Analyze audio formats
@@ -520,7 +525,12 @@ def _get_optimal_profiles_from_json() -> List[Dict]:
 
         # Get language preferences from settings
         language_primary = settings.LANGUAGE_PRIMARY or "en"
-        languages_secondaries = settings.LANGUAGES_SECONDARIES or ""
+        # Convert list to comma-separated string
+        languages_secondaries = (
+            ",".join(settings.LANGUAGES_SECONDARIES)
+            if settings.LANGUAGES_SECONDARIES
+            else ""
+        )
         vo_first = settings.VO_FIRST
 
         # Analyze audio formats
@@ -1188,22 +1198,22 @@ def display_url_info(url_info: Dict) -> None:
     # Get extractor info for platform-specific display
     extractor = url_info.get("extractor", "").lower()
     extractor_key = url_info.get("extractor_key", "").lower()
-    media_id = url_info.get("id")
+    # media_id = url_info.get("id")
 
     # Determine platform icon/emoji
     platform_emoji = "🎬"
     platform_name = "Video"
     if "youtube" in extractor or "youtube" in extractor_key:
-        platform_emoji = "▶️"  # YouTube play button
+        platform_emoji = "▶️"  # YouTube play button (red)
         platform_name = "YouTube"
     elif "vimeo" in extractor:
-        platform_emoji = "🎬"
+        platform_emoji = "�️"  # Vimeo film
         platform_name = "Vimeo"
     elif "dailymotion" in extractor:
-        platform_emoji = "🎥"
+        platform_emoji = "🎥"  # Dailymotion camera
         platform_name = "Dailymotion"
     elif "instagram" in extractor:
-        platform_emoji = "🎥"
+        platform_emoji = "📸"  # Instagram camera
         platform_name = "Instagram"
 
     # Determine if it's a playlist or single video
@@ -1213,39 +1223,84 @@ def display_url_info(url_info: Dict) -> None:
         # ===== PLAYLIST INFORMATION =====
         title = url_info.get("title", "Unknown Playlist")
         entries_count = len(url_info.get("entries", []))
+        uploader = url_info.get("uploader", url_info.get("channel", ""))
 
         # For flat-playlist mode, use playlist_count if available
         if "playlist_count" in url_info:
             entries_count = url_info["playlist_count"]
 
-        # Display with platform branding
-        st.success(f"📋 &nbsp; **{platform_name} {t('playlist_type')} _{media_id}_**")
-
-        # Title in a nice container
-        # st.markdown(f"&nbsp; &nbsp; 🎬 &nbsp; &nbsp; **{title}**")
-
-        # title = info.get("title", "Titre inconnu")
-        st.markdown(
-            f"""
-            <h2 style="font-weight:600; font-size:1.6em; margin-top:0;">
-                &nbsp; &nbsp; 🎬 &nbsp; {title}
-            </h2>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # Video count with icon
-        st.markdown(
-            f"&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; **{t('playlist_type')}:** {entries_count} videos"
-        )
-
-        # Show first video info if available
+        # Get first video info if available
+        first_video_title = ""
         if url_info.get("entries") and len(url_info["entries"]) > 0:
             first_video = url_info["entries"][0]
             if isinstance(first_video, dict) and "title" in first_video:
-                st.caption(
-                    f"&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; 📹 {t('url_first_video')}: _{first_video['title']}_"
-                )
+                first_video_title = first_video["title"]
+
+        # Build compact playlist info
+        playlist_info_items = []
+
+        playlist_info_items.append(
+            f'<span style="color: #e2e8f0;">&nbsp; {platform_emoji} &nbsp; {platform_name} Playlist</span>'
+        )
+        if uploader:
+            playlist_info_items.append(
+                f'<span style="color: #e2e8f0;">👤 &nbsp; {uploader}</span>'
+            )
+        playlist_info_items.append(
+            f'<span style="color: #e2e8f0;">📊 &nbsp; {entries_count} videos</span>'
+        )
+        if first_video_title:
+            # Truncate long titles for first video
+            truncated_title = (
+                first_video_title[:50] + "..."
+                if len(first_video_title) > 50
+                else first_video_title
+            )
+            playlist_info_items.append(
+                f'<span style="color: #94a3b8; font-size: 0.85em;">📹 &nbsp; {truncated_title}</span>'
+            )
+
+        playlist_info_line = (
+            ' <span style="color: #4ade80;">&nbsp; &nbsp; &nbsp; &nbsp;</span> '.join(
+                playlist_info_items
+            )
+            if playlist_info_items
+            else ""
+        )
+
+        # Display everything in one compact card
+        st.html(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #1e3a2e 0%, #2d5a45 100%);
+                border-radius: 12px;
+                padding: 18px;
+                border-left: 5px solid #4ade80;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                margin: 10px 0;
+            ">
+                <h2 style="
+                    color: #ffffff;
+                    font-size: 1.3em;
+                    font-weight: 600;
+                    margin: 0 0 12px 0;
+                    line-height: 1.3;
+                ">
+                    {title}
+                </h2>
+                
+                {f'''<div style="
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px 12px;
+                    font-size: 0.9em;
+                    padding-left: 12px;
+                ">
+                    {playlist_info_line}
+                </div>''' if playlist_info_line else ''}
+            </div>
+            """
+        )
 
     elif url_info.get("_type") == "video" or "duration" in url_info:
         # ===== SINGLE VIDEO INFORMATION =====
@@ -1255,58 +1310,76 @@ def display_url_info(url_info: Dict) -> None:
         like_count = url_info.get("like_count")
         uploader = url_info.get("uploader", url_info.get("channel", ""))
 
-        # Display with platform branding
-        st.success(
-            f"{platform_emoji} &nbsp; **{platform_name} {t('video_type')} _{media_id}_**"
+        # Format data for display
+        duration_str = fmt_hhmmss(int(duration)) if duration and duration > 0 else ""
+        views_formatted = f"{view_count:,}".replace(",", " ") if view_count else ""
+        likes_formatted = (
+            f"{like_count:,}".replace(",", " ") if like_count and like_count > 0 else ""
         )
 
-        # Title in a nice container
-        # st.markdown(f"#### {title}")
-        # st.markdown(f"**{title}**")
-
-        # title = info.get("title", "Titre inconnu")
-
-        st.markdown(
-            f"""
-            <h2 style="font-weight:600; font-size:1.6em; margin-top:0;">
-                &nbsp; &nbsp; 🎬 &nbsp; {title}
-            </h2>
-            """,
-            unsafe_allow_html=True,
+        # Build compact inline stats
+        stats_items = []
+        stats_items.append(
+            f'<span style="color: #e2e8f0;">&nbsp; {platform_emoji} &nbsp; {platform_name} Video</span>'
         )
-
-        # Author/Channel
         if uploader:
-            st.markdown(
-                f"&nbsp; &nbsp; &nbsp; &nbsp; **{t('url_author')}:** {uploader}"
+            stats_items.append(
+                f'<span style="color: #e2e8f0;">👤 &nbsp; {uploader}</span>'
             )
-
-        # Stats on one line (duration, views, likes)
-        stats_parts = []
-
-        # Duration
-        if duration and duration > 0:
-            duration_str = fmt_hhmmss(int(duration))
-            stats_parts.append(f"⏱️ &nbsp; {duration_str}")
-
-        # Views
-        if view_count is not None and view_count > 0:
-            views_formatted = f"{view_count:,}".replace(",", " ")
-            stats_parts.append(f"👁️ &nbsp; {views_formatted} {t('url_views')}")
-
-        # Likes
+        if duration > 0:
+            stats_items.append(
+                f'<span style="color: #e2e8f0;">⏱️ &nbsp; {duration_str}</span>'
+            )
+        if view_count:
+            stats_items.append(
+                f'<span style="color: #e2e8f0;">👁️ &nbsp; {views_formatted}</span>'
+            )
         if like_count is not None and like_count > 0:
-            likes_formatted = f"{like_count:,}".replace(",", " ")
-            stats_parts.append(f"👍 &nbsp; {likes_formatted} {t('url_likes')}")
-
-        # Display all stats on one line
-        if stats_parts:
-            st.markdown(
-                "&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;"
-                + "&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;".join(
-                    stats_parts
-                )
+            stats_items.append(
+                f'<span style="color: #e2e8f0;">👍 &nbsp; {likes_formatted}</span>'
             )
+
+        stats_line = (
+            ' <span style="color: #4ade80;">&nbsp; &nbsp; &nbsp; &nbsp;</span> '.join(
+                stats_items
+            )
+            if stats_items
+            else ""
+        )
+
+        # Display everything in one compact card
+        st.html(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #1e3a2e 0%, #2d5a45 100%);
+                border-radius: 12px;
+                padding: 18px;
+                border-left: 5px solid #4ade80;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                margin: 10px 0;
+            ">                
+                <h2 style="
+                    color: #ffffff;
+                    font-size: 1.3em;
+                    font-weight: 600;
+                    margin: 0 0 12px 0;
+                    line-height: 1.3;
+                ">
+                    {title}
+                </h2>
+                
+                {f'''<div style="
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px 12px;
+                    font-size: 0.9em;
+                    padding-left: 12px;
+                ">
+                    {stats_line}
+                </div>''' if stats_line else ''}
+            </div>
+            """
+        )
 
     else:
         # Unknown format - not a video or playlist
@@ -2147,10 +2220,9 @@ with st.expander(f"{t('quality_title')}", expanded=False):
     if "available_formats_list" not in st.session_state:
         st.session_state.available_formats_list = []
 
-    st.subheader("🏆 Quality Strategy")
-    st.info(
-        "🏆 **Smart quality selection** - Choose your strategy for optimal video quality and compatibility."
-    )
+    # st.info(
+    #     "🏆 **Smart quality selection** - Choose your strategy for optimal video quality and compatibility."
+    # )
 
     # Determine default strategy based on QUALITY_DOWNGRADE setting
     # If QUALITY_DOWNGRADE=false, default to "best_no_fallback" (no fallback on failure)
@@ -2159,7 +2231,7 @@ with st.expander(f"{t('quality_title')}", expanded=False):
 
     # Quality strategy selection
     quality_strategy = st.radio(
-        "Select your quality strategy:",
+        "Select a download quality profile mode:",
         options=["auto_best", "best_no_fallback", "choose_profile", "choose_available"],
         format_func=lambda x: {
             "auto_best": "🔄 Auto Best Qualities (Recommended)",
