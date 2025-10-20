@@ -67,6 +67,7 @@ markers = [
     "integration: Integration tests",
     "slow: Slow tests",
     "network: Tests requiring network access",
+    "external: Tests requiring external tools (yt-dlp, ffmpeg, etc.)",
     "performance: Performance tests",
     "stress: Stress tests",
 ]

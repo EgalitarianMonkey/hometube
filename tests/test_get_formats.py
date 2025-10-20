@@ -7,10 +7,13 @@ Tests cover:
 - Instagram videos (native format)
 - Profile validation (format_id, ext, height, vcodec, protocol)
 - Deduplication of identical profiles
+
+Note: These tests require yt-dlp to be installed and are marked with @pytest.mark.external
 """
 
 import sys
 from pathlib import Path
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -21,8 +24,9 @@ from app.medias_utils import (
 )
 
 
+@pytest.mark.external
 class TestGetFormatsMonoLang:
-    """Test suite for mono-language video format selection"""
+    """Test suite for mono-language video format selection (requires yt-dlp)"""
 
     def setup_method(self):
         """Load test data before each test"""
@@ -106,8 +110,9 @@ class TestGetFormatsMonoLang:
             assert has_av1 or has_vp9, "Should have either AV1 or VP9 codec in profiles"
 
 
+@pytest.mark.external
 class TestGetFormatsMultiLang:
-    """Test suite for multi-language video format selection"""
+    """Test suite for multi-language video format selection (requires yt-dlp)"""
 
     def setup_method(self):
         """Load test data before each test"""
@@ -201,8 +206,9 @@ class TestGetFormatsMultiLang:
             ), f"Should have at least 1080p resolution, got {height}p"
 
 
+@pytest.mark.external
 class TestGetFormatsInstagram:
-    """Test suite for Instagram video format selection"""
+    """Test suite for Instagram video format selection (requires yt-dlp)"""
 
     def setup_method(self):
         """Load test data before each test"""
@@ -248,8 +254,9 @@ class TestGetFormatsInstagram:
             ], f"Instagram should use mp4 or webm, got {ext}"
 
 
+@pytest.mark.external
 class TestGetFormatsEdgeCases:
-    """Test suite for edge cases and error handling"""
+    """Test suite for edge cases and error handling (requires yt-dlp)"""
 
     def test_empty_audio_formats(self):
         """Test handling of empty audio_formats list"""
