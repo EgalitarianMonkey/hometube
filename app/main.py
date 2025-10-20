@@ -2825,6 +2825,11 @@ if submitted:
     start_sec = parse_time_like(start_text)
     end_sec = parse_time_like(end_text)
 
+    # If only end is specified, start from the beginning (0)
+    if start_sec is None and end_sec is not None:
+        start_sec = 0
+        push_log("⏱️ Start time not specified, cutting from beginning (0s)")
+
     # Determine if we need to cut sections
     do_cut = start_sec is not None and end_sec is not None and end_sec > start_sec
 
