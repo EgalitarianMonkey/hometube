@@ -364,19 +364,13 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
     st.markdown("---")
 
     if quality_strategy == "auto_best":
-        st.info(
-            "🔄 **Auto Best Qualities**: Tries up to 2 optimal profiles (AV1 → VP9) until success."
-        )
+        st.info(t("quality_auto_best_desc"))
 
         optimal_profiles = st.session_state.get("optimal_format_profiles", [])
         if optimal_profiles:
-            st.success(
-                f"✅ {len(optimal_profiles)} optimal profiles generated for this video"
-            )
+            st.success(t("quality_profiles_generated", count=len(optimal_profiles)))
 
-            with st.expander(
-                "📋 Generated Profiles (will be tried in order)", expanded=True
-            ):
+            with st.expander(t("quality_profiles_list_title"), expanded=True):
                 for i, profile in enumerate(optimal_profiles, 1):
                     height = profile.get("height", "?")
                     vcodec = profile.get("vcodec", "unknown")
@@ -386,20 +380,16 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
                     st.markdown(f"**{i}. {height}p ({vcodec}) - {ext.upper()}**")
                     st.code(f"Format ID: {format_id}", language="text")
         else:
-            st.warning(
-                "⚠️ No optimal profiles generated yet. URL analysis may be needed."
-            )
+            st.warning(t("quality_no_profiles_warning"))
 
     elif quality_strategy == "best_no_fallback":
-        st.warning(
-            "🏆 **Best Quality Only**: Only the highest quality profile will be attempted. No fallback if it fails."
-        )
+        st.warning(t("quality_best_no_fallback_desc"))
 
         # Show quality downgrade setting
         st.checkbox(
-            "🚫 Refuse any quality downgrade",
+            t("quality_refuse_downgrade"),
             value=not settings.QUALITY_DOWNGRADE,
-            help="Stop download if the best profile fails (recommended for this mode)",
+            help=t("quality_refuse_downgrade_help"),
             key="refuse_quality_downgrade_best",
         )
 
@@ -411,15 +401,14 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
             ext = best_profile.get("ext", "unknown")
             format_id = best_profile.get("format_id", "unknown")
 
-            st.success(f"🎯 **Selected Profile**: {height}p ({vcodec}) - {ext.upper()}")
+            profile_str = f"{height}p ({vcodec}) - {ext.upper()}"
+            st.success(t("quality_selected_profile", profile=profile_str))
             st.code(f"Format ID: {format_id}", language="text")
         else:
-            st.warning("⚠️ Best profile not available yet. URL analysis may be needed.")
+            st.warning(t("quality_best_profile_not_available"))
 
     elif quality_strategy == "choose_profile":
-        st.info(
-            "🎯 **Choose Specific Profile**: Select one profile from the optimal list. Only that profile will be tried."
-        )
+        st.info(t("quality_choose_profile_desc"))
 
         optimal_profiles = st.session_state.get("optimal_format_profiles", [])
         if optimal_profiles:
@@ -432,7 +421,7 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
                 profile_options.append(label)
 
             selected_index = st.selectbox(
-                "Select profile:",
+                t("quality_select_profile_prompt"),
                 options=range(len(profile_options)),
                 format_func=lambda x: profile_options[x],
                 key="selected_profile_index",
@@ -447,37 +436,33 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
                 # Show selected profile details
                 selected_profile = optimal_profiles[selected_index]
                 format_id = selected_profile.get("format_id", "unknown")
-                st.success(f"✅ **Selected**: {profile_options[selected_index]}")
+                st.success(
+                    t("quality_selected", profile=profile_options[selected_index])
+                )
                 st.code(f"Format ID: {format_id}", language="text")
         else:
-            st.warning(
-                "⚠️ No profiles available for selection. URL analysis may be needed."
-            )
+            st.warning(t("quality_no_profiles_selection"))
 
     elif quality_strategy == "choose_available":
-        st.info(
-            "📋 **Choose from all Available**: Select any format from the complete list detected by yt-dlp."
-        )
-        st.warning(
-            "⚠️ **Advanced users only**: This bypasses the intelligent profile system."
-        )
+        st.info(t("quality_choose_available_desc"))
+        st.warning(t("quality_choose_available_warning"))
 
         available_formats = st.session_state.get("available_formats_list", [])
         if available_formats:
-            format_options = ["Auto (use profile system)"]
+            format_options = [t("quality_format_auto_option")]
             for fmt in available_formats:
                 format_options.append(f"{fmt['description']} - {fmt['format_id']}")
 
             selected_format = st.selectbox(
-                "Select format:",
+                t("quality_select_format_prompt"),
                 options=format_options,
                 key="selected_available_format",
             )
 
-            if selected_format != "Auto (use profile system)":
+            if selected_format != t("quality_format_auto_option"):
                 # Extract format_id from selection
                 format_id = selected_format.split(" - ")[-1]
-                st.success(f"✅ **Selected Format**: {selected_format}")
+                st.success(t("quality_selected_format", format=selected_format))
 
                 # Create a profile-like dict for consistency
                 for fmt in available_formats:
@@ -497,9 +482,7 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
                     "optimal_format_profiles", []
                 )
         else:
-            st.warning(
-                "⚠️ No formats available for selection. URL analysis may be needed."
-            )
+            st.warning(t("quality_no_formats_selection"))
 
 
 def _get_optimal_profiles_from_json() -> List[Dict]:
@@ -1207,7 +1190,7 @@ def display_url_info(url_info: Dict) -> None:
         platform_emoji = "▶️"  # YouTube play button (red)
         platform_name = "YouTube"
     elif "vimeo" in extractor:
-        platform_emoji = "�️"  # Vimeo film
+        platform_emoji = "🎞️"  # Vimeo film
         platform_name = "Vimeo"
     elif "dailymotion" in extractor:
         platform_emoji = "🎥"  # Dailymotion camera
@@ -2231,16 +2214,16 @@ with st.expander(f"{t('quality_title')}", expanded=False):
 
     # Quality strategy selection
     quality_strategy = st.radio(
-        "Select a download quality profile mode:",
+        t("quality_strategy_prompt"),
         options=["auto_best", "best_no_fallback", "choose_profile", "choose_available"],
         format_func=lambda x: {
-            "auto_best": "🔄 Auto Best Qualities (Recommended)",
-            "best_no_fallback": "🏆 Best Quality (No fallback)",
-            "choose_profile": "🎯 Choose Quality Profile",
-            "choose_available": "📋 Choose Quality Available",
+            "auto_best": t("quality_strategy_auto_best"),
+            "best_no_fallback": t("quality_strategy_best_no_fallback"),
+            "choose_profile": t("quality_strategy_choose_profile"),
+            "choose_available": t("quality_strategy_choose_available"),
         }[x],
         index=default_strategy_index,
-        help="Select your quality strategy. Auto tries multiple profiles for best compatibility.",
+        help=t("quality_strategy_help"),
         key="quality_strategy",
         horizontal=False,
     )
