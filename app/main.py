@@ -24,9 +24,7 @@ try:
         sanitize_filename,
         list_subdirs_recursive,
         ensure_dir,
-        cleanup_tmp_files,
         should_remove_tmp_files,
-        copy_file,
         get_unique_video_folder_name_from_url,
     )
     from .display_utils import (
@@ -48,6 +46,7 @@ try:
         sanitize_url,
         check_url_info_integrity,
     )
+    from . import tmp_files
     from .subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
@@ -91,9 +90,7 @@ except ImportError:
         sanitize_filename,
         list_subdirs_recursive,
         ensure_dir,
-        cleanup_tmp_files,
         should_remove_tmp_files,
-        copy_file,
         get_unique_video_folder_name_from_url,
     )
     from display_utils import (
@@ -115,6 +112,7 @@ except ImportError:
         sanitize_url,
         check_url_info_integrity,
     )
+    import tmp_files
     from subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
@@ -908,6 +906,11 @@ def _execute_profile_downloads(
 
             log_title(
                 f"📁 Container format: {profile.get('container', 'unknown').upper()}"
+            )
+
+            # Store format_id in session state for file renaming
+            st.session_state["downloaded_format_id"] = profile.get(
+                "format_id", "unknown"
             )
 
             return 0, ""
@@ -2901,6 +2904,34 @@ if submitted:
 
     base_output = filename  # without extension
 
+    # Save job configuration with intended filename for later use
+    job_config = {
+        "filename": base_output,
+        "url": clean_url,
+        "timestamp": time.time(),
+    }
+    tmp_files.save_job_config(tmp_subfolder_dir, job_config)
+
+    # Log download strategy
+    push_log("")
+    log_title("� Download Strategy")
+    push_log("  1️⃣  Download with readable name (yt-dlp compatibility)")
+    push_log("  2️⃣  Rename to generic names (resilience & independence)")
+    push_log("  3️⃣  Skip if generic files exist (resume support)")
+    push_log("")
+    push_log(f"📝 Target filename: {base_output}")
+
+    # Check if a generic video file already exists from a previous download
+    # This allows resilience in case of interruption during post-processing
+    existing_video_tracks = tmp_files.find_video_tracks(tmp_subfolder_dir)
+    existing_generic_file = existing_video_tracks[0] if existing_video_tracks else None
+
+    if existing_generic_file:
+        log_title("✅ Found cached download")
+        push_log(f"  📦 Existing file: {existing_generic_file.name}")
+        push_log("  🔄 Skipping download, reusing cached file")
+        push_log("")
+
     # Always check for SponsorBlock segments for this video (informational)
     push_log("🔍 Analyzing video for sponsor segments...")
     try:
@@ -3040,57 +3071,145 @@ if submitted:
     ]
 
     progress_placeholder.progress(0, text=t("status_preparation"))
-    status_placeholder.info(t("status_downloading_simple"))
 
-    # Use intelligent fallback with retry strategies
-    # NEW STRATEGY: Always use dynamic profile selection
-    if quality_strategy_to_use == "auto_profiles":
-        push_log("🤖 Auto mode: Will try all profiles in quality order")
-        ret_dl, error_msg = smart_download_with_profiles(
-            base_output,
-            tmp_subfolder_dir,
-            embed_chapters,
-            embed_subs,
-            force_mp4,
-            ytdlp_custom_args,
-            clean_url,
-            "auto",  # Always use auto mode with new strategy
-            None,  # No target profile - let new strategy decide
-            False,  # refuse_quality_downgrade = False (allow fallback)
-            do_cut,
-            subs_selected,
-            sb_choice,
-            progress_placeholder,
-            status_placeholder,
-            info_placeholder,
-        )
+    # Check if we can skip download by reusing existing generic file
+    if existing_generic_file:
+        status_placeholder.success(t("status_reusing_existing_file"))
+        ret_dl = 0  # Success code
+        push_log("⚡ Skipped download - using cached file")
+    else:
+        status_placeholder.info(t("status_downloading_simple"))
 
-    # Handle cancellation
-    if ret_dl == -1:
-        status_placeholder.info(t("cleaning_temp_files"))
-        cleanup_tmp_files(base_output, tmp_subfolder_dir, "download")
-        status_placeholder.success(t("cleanup_complete"))
+        # Use intelligent fallback with retry strategies
+        # NEW STRATEGY: Always use dynamic profile selection
+        if quality_strategy_to_use == "auto_profiles":
+            push_log("🤖 Auto mode: Will try all profiles in quality order")
+            ret_dl, error_msg = smart_download_with_profiles(
+                base_output,
+                tmp_subfolder_dir,
+                embed_chapters,
+                embed_subs,
+                force_mp4,
+                ytdlp_custom_args,
+                clean_url,
+                "auto",  # Always use auto mode with new strategy
+                None,  # No target profile - let new strategy decide
+                False,  # refuse_quality_downgrade = False (allow fallback)
+                do_cut,
+                subs_selected,
+                sb_choice,
+                progress_placeholder,
+                status_placeholder,
+                info_placeholder,
+            )
 
-        # Mark download as finished
-        st.session_state.download_finished = True
-        st.stop()
+        # Handle cancellation
+        if ret_dl == -1:
+            status_placeholder.info("Download cancelled")
+            # Note: Temporary files are kept for resilience
+            # Manual cleanup can be done via REMOVE_TMP_FILES setting
 
-    # Search for the final file in TMP subfolder (prioritize MKV format from new strategy)
+            # Mark download as finished
+            st.session_state.download_finished = True
+            st.stop()
+
+    # Search for the final file in TMP subfolder
+    # Priority: 1) Generic file (from cache/previous run) 2) Fresh download with original name
     final_tmp = None
 
-    # New strategy prefers MKV, but search all common formats
-    search_extensions = [".mkv", ".mp4", ".webm"]
+    # First check if we already found a generic file earlier (cache hit)
+    if existing_generic_file:
+        final_tmp = existing_generic_file
+        safe_push_log(f"✓ Using cached file: {final_tmp.name}")
+    else:
+        # New download - look for file with original name and rename to generic
+        safe_push_log("")
+        log_title("📦 Organizing downloaded files")
 
-    for ext in search_extensions:
-        p = tmp_subfolder_dir / f"{base_output}{ext}"
-        if p.exists():
-            final_tmp = p
-            safe_push_log(f"📄 Found output file: {p.name}")
-            break
+        search_extensions = [".mkv", ".mp4", ".webm"]
+        downloaded_file = None
 
-    if not final_tmp:
-        status_placeholder.error(t("error_download_failed"))
-        st.stop()
+        for ext in search_extensions:
+            p = tmp_subfolder_dir / f"{base_output}{ext}"
+            if p.exists():
+                downloaded_file = p
+                safe_push_log(f"  📄 Found: {p.name}")
+                break
+
+        if not downloaded_file:
+            status_placeholder.error(t("error_download_failed"))
+            st.stop()
+
+        # Get format_id from session (stored during download)
+        format_id = st.session_state.get("downloaded_format_id", "unknown")
+        safe_push_log(f"  🔍 Format ID from session: {format_id}")
+
+        # Rename to generic filename with format ID: video-{FORMAT_ID}.{ext}
+        generic_name = tmp_files.get_video_track_path(
+            tmp_subfolder_dir, format_id, downloaded_file.suffix.lstrip(".")
+        )
+        safe_push_log(f"  🔍 Target generic name: {generic_name.name}")
+
+        # Rename video file
+        try:
+            if generic_name.exists():
+                if should_remove_tmp_files():
+                    generic_name.unlink()
+                    safe_push_log(f"  🗑️ Removed existing: {generic_name.name}")
+                else:
+                    safe_push_log(
+                        f"  ⚠️ Generic file already exists: {generic_name.name}"
+                    )
+
+            safe_push_log(f"  🔄 Renaming: {downloaded_file} → {generic_name}")
+            downloaded_file.rename(generic_name)
+            safe_push_log(
+                f"  ✅ Video renamed: {downloaded_file.name} → {generic_name.name}"
+            )
+
+            # Verify the file exists after rename
+            if generic_name.exists():
+                size_mb = generic_name.stat().st_size / (1024 * 1024)
+                safe_push_log(
+                    f"  ✅ Verified: {generic_name.name} exists ({size_mb:.1f} MiB)"
+                )
+            else:
+                safe_push_log(
+                    f"  ❌ ERROR: {generic_name.name} doesn't exist after rename!"
+                )
+
+            final_tmp = generic_name
+        except Exception as e:
+            safe_push_log(f"  ⚠️ Could not rename video: {str(e)}")
+            final_tmp = downloaded_file
+
+        # Rename subtitle files to generic names
+        if subs_selected:
+            safe_push_log("")
+            safe_push_log("  📝 Organizing subtitle files...")
+            for lang in subs_selected:
+                original_sub = tmp_subfolder_dir / f"{base_output}.{lang}.srt"
+                if original_sub.exists():
+                    generic_sub = tmp_files.get_subtitle_path(
+                        tmp_subfolder_dir, lang, is_cut=False
+                    )
+                    try:
+                        original_sub.rename(generic_sub)
+                        safe_push_log(
+                            f"    ✅ {lang}: {original_sub.name} → {generic_sub.name}"
+                        )
+                    except Exception as e:
+                        safe_push_log(f"    ⚠️ Could not rename {lang}: {str(e)}")
+                else:
+                    safe_push_log(f"    ℹ️  No {lang} subtitle downloaded")
+
+        safe_push_log("")
+        log_title("✅ File organization complete")
+        safe_push_log(f"  📦 Video: {final_tmp.name}")
+        if subs_selected:
+            safe_push_log("  📝 Subtitles: subtitles.{lang}.srt format")
+        safe_push_log("  💡 Files are now independent of video title")
+        safe_push_log("")
 
     # === Measure downloaded file size ===
     downloaded_size = final_tmp.stat().st_size
@@ -3139,16 +3258,17 @@ if submitted:
         else:
             push_log(f"🎬 Cutting format: {source_ext} → {cut_ext} (converted)")
 
-        cut_output = tmp_subfolder_dir / f"{base_output}_cut{cut_ext}"
+        # Use generic name for cut output: final.{ext}
+        cut_output = tmp_files.get_final_path(tmp_subfolder_dir, cut_ext.lstrip("."))
 
         if cut_output.exists():
             try:
                 if should_remove_tmp_files():
                     cut_output.unlink()
-                    push_log("🗑️ Removed existing cut output file")
+                    push_log("🗑️ Removed existing final file")
                 else:
                     push_log(
-                        f"🔍 Debug mode: Keeping existing cut output file {cut_output.name}"
+                        f"🔍 Debug mode: Keeping existing final file {cut_output.name}"
                     )
             except Exception:
                 pass
@@ -3226,9 +3346,9 @@ if submitted:
 
             # Handle cancellation during cutting
             if ret_cut == -1:
-                status_placeholder.info(t("cleaning_temp_files"))
-                cleanup_tmp_files(base_output, tmp_subfolder_dir, "cutting")
-                status_placeholder.success(t("cleanup_complete"))
+                status_placeholder.info("Cutting cancelled")
+                # Note: Temporary files are kept for resilience and cache reuse
+                # Manual cleanup can be done via REMOVE_TMP_FILES setting
 
                 # Mark download as finished
                 st.session_state.download_finished = True
@@ -3241,39 +3361,12 @@ if submitted:
             st.error(t("error_ffmpeg", error=e))
             st.stop()
 
-        # Rename the cut file to the final name (without _cut suffix)
-        # Keep the same extension as the cut output
-        final_extension = cut_output.suffix  # .mkv, .mp4, etc.
-        final_cut_name = tmp_subfolder_dir / f"{base_output}{final_extension}"
+        # Cut output is already named correctly (final.{ext})
+        # No need to rename - it's already the final file with generic name
+        push_log(f"✅ Cut complete: {cut_output.name}")
 
-        push_log(f"📄 Final cut file: {final_cut_name.name}")
-
-        if final_cut_name.exists():
-            try:
-                if should_remove_tmp_files():
-                    final_cut_name.unlink()
-                    push_log("🗑️ Removed existing final file")
-                else:
-                    push_log(
-                        f"🔍 Debug mode: Keeping existing final file {final_cut_name.name}"
-                    )
-            except Exception:
-                pass
-        # In debug mode, copy instead of rename to preserve intermediate files
-        if not should_remove_tmp_files():
-            push_log(
-                f"🔍 Debug mode: Copying cut file to preserve intermediate {cut_output.name}"
-            )
-            import shutil
-
-            shutil.copy2(cut_output, final_cut_name)
-            push_log("✅ Cut file copied to final name (intermediate preserved)")
-        else:
-            cut_output.rename(final_cut_name)
-            push_log("✅ Cut file renamed to final name")
-
-        # The renamed cut file becomes our final source
-        final_source = final_cut_name
+        # The cut file is our final source (already correctly named)
+        final_source = cut_output
 
         # Measure cut file size
         if final_source.exists():
@@ -3304,8 +3397,38 @@ if submitted:
         except Exception as e:
             push_log(t("log_cleanup_warning", error=e))
     else:
-        # No cutting, use the original downloaded file
-        final_source = final_tmp  # === Cleanup + move
+        # No cutting - copy downloaded video to final.{ext} for consistency
+        # Keep the original video-{FORMAT_ID}.{ext} for cache reuse
+        push_log("📦 No cutting requested, preparing final file...")
+
+        final_path = tmp_files.get_final_path(
+            tmp_subfolder_dir, final_tmp.suffix.lstrip(".")
+        )
+
+        if final_tmp != final_path:
+            try:
+                # Remove existing final file if it exists
+                if final_path.exists():
+                    if should_remove_tmp_files():
+                        final_path.unlink()
+                        push_log("🗑️ Removed existing final file")
+                    else:
+                        push_log("🔍 Debug mode: Overwriting existing final file")
+
+                # Copy (not rename!) to final name, keeping original for cache
+                shutil.copy2(str(final_tmp), str(final_path))
+                push_log(f"� Copied: {final_tmp.name} → {final_path.name}")
+                push_log(f"💾 Kept original {final_tmp.name} for cache reuse")
+                final_source = final_path
+            except Exception as e:
+                push_log(f"⚠️ Could not copy to final, using original: {str(e)}")
+                final_source = final_tmp
+        else:
+            # Already has final name
+            final_source = final_tmp
+            push_log(
+                f"✓ File already has final name: {final_source.name}"
+            )  # === Cleanup + move
 
     # === METADATA CUSTOMIZATION ===
     # Customize metadata with user-provided title
@@ -3389,9 +3512,12 @@ if submitted:
         else:
             safe_push_log("✅ All required subtitles are already properly embedded")
 
-    # === CLEANUP EXTRA FILES ===
-    # Clean up temporary files now that cutting and metadata are complete
-    cleanup_tmp_files(base_output, tmp_subfolder_dir, "subtitles")
+    # === NO AUTOMATIC CLEANUP ===
+    # Temporary files are KEPT for resilience and cache reuse
+    # - video-{FORMAT_ID}.{ext} can be reused for future downloads
+    # - subtitles.{lang}.srt can be reused
+    # - final.{ext} can be reused for resume scenarios
+    # Manual cleanup: set REMOVE_TMP_FILES=true in .env or delete tmp/ folder
 
     # Measure final processed file size before copying
     if final_source.exists():
@@ -3400,9 +3526,24 @@ if submitted:
         push_log(f"📊 Processed file size: {processed_size_mb:.2f}MiB (before copy)")
 
     try:
-        # Copy file to destination (keeps original in tmp for resilience)
-        final_copied = copy_file(final_source, dest_dir)
+        # Get intended filename from job config
+        job_config = tmp_files.load_job_config(tmp_subfolder_dir)
+        if job_config and "filename" in job_config:
+            intended_filename = job_config["filename"]
+        else:
+            # Fallback to base_output if job config not found
+            intended_filename = base_output
+
+        # Build final destination path with intended filename
+        final_ext = final_source.suffix
+        final_destination = dest_dir / f"{intended_filename}{final_ext}"
+
+        # Copy file with intended name
+        shutil.copy2(str(final_source), str(final_destination))
+        push_log(f"✅ Copied to: {final_destination.name}")
         push_log(f"📋 Original kept in: {final_source.parent.name}/{final_source.name}")
+
+        final_copied = final_destination
         progress_placeholder.progress(100, text=t("status_completed"))
 
         # Get final file size for accurate display

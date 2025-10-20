@@ -352,7 +352,7 @@ class TestSubtitleUtils:
         lang, output_file = result[0]
         assert lang == "en"
         assert output_file.exists()
-        assert output_file.name == f"{base_name}-cut-final.en.srt"
+        assert output_file.name == "subtitles-cut.en.srt"  # Generic name
 
         # Verify content
         content = output_file.read_text(encoding="utf-8")

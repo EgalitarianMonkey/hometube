@@ -42,10 +42,12 @@ def find_subtitle_files_optimized(
     for lang in subtitle_languages:
         # Define search patterns in order of preference
         if is_cut:
-            # For cut videos, prioritize processed files
+            # For cut videos, prioritize processed generic files first
             patterns = [
+                f"subtitles-cut.{lang}.srt",  # NEW: Generic cut subtitle name
                 f"{base_output}-cut-final.{lang}.srt",
                 f"{base_output}-cut.{lang}.srt",
+                f"subtitles.{lang}.srt",  # NEW: Generic original subtitle name
                 f"{base_output}.{lang}.srt",
                 f"{base_output}_{lang}.srt",
                 f"{base_output}-{lang}.srt",
@@ -59,9 +61,10 @@ def find_subtitle_files_optimized(
                 f"{base_output}.srt" if len(subtitle_languages) == 1 else None,
             ]
         else:
-            # For uncut videos, look for original files
+            # For uncut videos, prioritize generic files first
             patterns = [
-                f"{base_output}.{lang}.srt",
+                f"subtitles.{lang}.srt",  # NEW: Generic subtitle name (preferred)
+                f"{base_output}.{lang}.srt",  # Legacy: video title-based name
                 f"{base_output}_{lang}.srt",
                 f"{base_output}-{lang}.srt",
                 f"{base_output}.{lang}.vtt",
@@ -135,12 +138,14 @@ def process_subtitles_for_cutting(
         lang = subtitle_languages[i] if i < len(subtitle_languages) else "unknown"
         safe_push_log(f"📝 Processing subtitle file: {srt_file.name} ({lang})")
 
-        # Process this subtitle file
-        final_srt_file = tmp_subfolder_dir / f"{base_output}-cut-final.{lang}.srt"
+        # Process this subtitle file - use generic name for cut output
+        final_srt_file = tmp_subfolder_dir / f"subtitles-cut.{lang}.srt"
 
         if cut_subtitle_file(srt_file, start_time, duration, final_srt_file):
             processed_subtitle_files.append((lang, final_srt_file))
-            safe_push_log(f"✅ Successfully processed {lang} subtitles")
+            safe_push_log(
+                f"✅ Successfully processed {lang} subtitles → {final_srt_file.name}"
+            )
         else:
             safe_push_log(f"⚠️ Failed to process {lang} subtitles")
 
