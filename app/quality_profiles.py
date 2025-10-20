@@ -21,9 +21,11 @@ from typing import Dict, List, Optional, Tuple, Union
 try:
     from .process_utils import run_subprocess_safe
     from .logs_utils import safe_push_log, log_title
+    from .medias_utils import sanitize_url
 except ImportError:
     from process_utils import run_subprocess_safe
     from logs_utils import safe_push_log, log_title
+    from medias_utils import sanitize_url
 
 
 # Lazy imports to avoid circular dependencies
@@ -40,21 +42,6 @@ def _get_main_functions():
 
 
 # Logging functions are now imported from logs_utils
-
-
-def sanitize_url(url: str) -> str:
-    """Stub for medias_utils.sanitize_url"""
-    try:
-        from .medias_utils import sanitize_url as su
-
-        return su(url)
-    except ImportError:
-        try:
-            from medias_utils import sanitize_url as su
-
-            return su(url)
-        except ImportError:
-            return url
 
 
 def get_cached_video_analysis(url: str):

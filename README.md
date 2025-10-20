@@ -62,6 +62,7 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 - **⚙️ Advanced configurations**: Set any custom yt-dlp arguments (proxy, max-filesize, etc.)
 - **🔐 Cookies Authentication**: Essential for reliable downloads - unlocks restricted content and prevents signature errors
 - **📊 Quality Control**: Auto-select best quality or manual override
+- **🧠 Intelligent Caching**: Smart URL analysis reuse with quality verification - avoids re-downloading metadata unless format quality improves
 - **🎥 Video Sources**: **YouTube**, Reddit, Vimeo, Dailymotion, TikTok, Twitch, Facebook, Instagra, etc. [See complete list (1800+)](docs/supported-platforms.md) -->
 
 <!-- ## ⚡ Technical Highlights
@@ -479,9 +480,11 @@ HomeTube configuration is managed through the `.env` file:
 | `EMBED_CHAPTERS` | Embed chapters by default | `true` | `true,false` |
 | `EMBED_SUBTITLES` | Embed subtitles by default | `true` | `true,false` |
 | `CUTTING_MODE` | Video cutting precision | `keyframes` | `keyframes,precise` |
+| **Safety Options** | | | |
+| `ALLOW_OVERWRITE_EXISTING_VIDEO` | Allow overwriting existing videos in destination folder | `false` | `true,false` (false = protect existing files) |
 | **Advanced Options** | | | |
 | `YTDLP_CUSTOM_ARGS` | Custom yt-dlp arguments |  | `--max-filesize 5M --write-info-json` |
-| `REMOVE_TMP_FILES` | Remove temporary files after processing | `true` | `true,false` (set to false for debugging) |
+| `REMOVE_TMP_FILES` | Keep temporary files after processing for debugging and resilience | `false` | `true,false` (false = keep files for reuse) |
 | **Docker-specific Variables** | | | |
 | `VIDEOS_FOLDER_DOCKER_HOST` | Host videos folder in Docker context | **Must be defined** | `/mnt/data/videos` if in Docker container else `/downloads` |
 | `TMP_DOWNLOAD_FOLDER_DOCKER_HOST` | Host tmp download videos folder in Docker context | **Must be defined** | `/mnt/data/hometube/tmp` if in Docker container else `./tmp` |

@@ -24,9 +24,8 @@ try:
         sanitize_filename,
         list_subdirs_recursive,
         ensure_dir,
-        cleanup_tmp_files,
         should_remove_tmp_files,
-        move_file,
+        get_unique_video_folder_name_from_url,
     )
     from .display_utils import (
         fmt_hhmmss,
@@ -40,8 +39,14 @@ try:
         get_available_formats,
         get_video_title,
         customize_video_metadata,
-        sanitize_url,
     )
+    from .url_utils import (
+        should_reuse_url_info,
+        save_url_info,
+        sanitize_url,
+        check_url_info_integrity,
+    )
+    from . import tmp_files
     from .subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
@@ -85,9 +90,8 @@ except ImportError:
         sanitize_filename,
         list_subdirs_recursive,
         ensure_dir,
-        cleanup_tmp_files,
         should_remove_tmp_files,
-        move_file,
+        get_unique_video_folder_name_from_url,
     )
     from display_utils import (
         fmt_hhmmss,
@@ -101,8 +105,14 @@ except ImportError:
         get_available_formats,
         get_video_title,
         customize_video_metadata,
-        sanitize_url,
     )
+    from url_utils import (
+        should_reuse_url_info,
+        save_url_info,
+        sanitize_url,
+        check_url_info_integrity,
+    )
+    import tmp_files
     from subtitles_utils import (
         embed_subtitles_manually,
         process_subtitles_for_cutting,
@@ -241,10 +251,13 @@ def _process_quality_strategy(quality_strategy: str, url: str) -> None:
         return
 
     try:
-        # Check if url_info.json exists and is current
-        json_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+        # Get or create unique folder for this video URL
+        video_tmp_dir = get_video_tmp_dir(url)
+
+        # Check if url_info.json exists in the unique video folder
+        json_path = video_tmp_dir / "url_info.json"
         if not json_path.exists():
-            # Need to analyze URL first
+            # Need to analyze URL first (will create the folder and file)
             url_info = url_analysis(url)
             if not url_info:
                 safe_push_log("⚠️ Failed to analyze URL for quality strategy")
@@ -434,19 +447,25 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
             st.warning(t("quality_no_formats_selection"))
 
 
-def _get_optimal_profiles_from_json() -> List[Dict]:
+def _get_optimal_profiles_from_json(url: str) -> List[Dict]:
     """
     Get optimal download profiles using get_profiles_with_formats_id_to_download().
 
     This is a simple wrapper that calls get_profiles_with_formats_id_to_download() which now
     returns complete profiles with all necessary fields (label, name, container, etc.).
 
+    Args:
+        url: Video URL to get profiles for
+
     Returns:
         List of complete profile dicts ready for download, or empty list if error
     """
     try:
-        # Check if url_info.json exists
-        json_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+        # Get or create unique folder for this video URL
+        video_tmp_dir = get_video_tmp_dir(url)
+
+        # Check if url_info.json exists in the unique video folder
+        json_path = video_tmp_dir / "url_info.json"
         if not json_path.exists():
             safe_push_log("⚠️ url_info.json not found, cannot use profile strategy")
             return []
@@ -587,7 +606,7 @@ def smart_download_with_profiles(
     else:
         # Fallback to old method if no strategy profiles available
         safe_push_log("⚠️ No strategy profiles found, using fallback method")
-        profiles_to_try = _get_optimal_profiles_from_json()
+        profiles_to_try = _get_optimal_profiles_from_json(url)
 
     if not profiles_to_try:
         error_msg = "No profiles available for download. Please select a quality strategy first."
@@ -889,6 +908,11 @@ def _execute_profile_downloads(
                 f"📁 Container format: {profile.get('container', 'unknown').upper()}"
             )
 
+            # Store format_id in session state for file renaming
+            st.session_state["downloaded_format_id"] = profile.get(
+                "format_id", "unknown"
+            )
+
             return 0, ""
 
         # Handle profile failure
@@ -980,8 +1004,27 @@ def url_analysis(url: str) -> Optional[Dict]:
         return None
 
     try:
-        # Prepare output path for JSON file
-        json_output_path = TMP_DOWNLOAD_FOLDER / "url_info.json"
+        # Sanitize URL and create unique folder for this video
+        clean_url = sanitize_url(url)
+        unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
+        video_tmp_dir = TMP_DOWNLOAD_FOLDER / unique_folder_name
+        ensure_dir(video_tmp_dir)
+
+        # Store in session state for reuse across the application
+        st.session_state["video_tmp_dir"] = video_tmp_dir
+        st.session_state["unique_folder_name"] = unique_folder_name
+
+        # Prepare output path for JSON file in the unique video folder
+        json_output_path = video_tmp_dir / "url_info.json"
+
+        # === CHECK IF URL_INFO.JSON ALREADY EXISTS WITH GOOD INTEGRITY ===
+        should_reuse, existing_info = should_reuse_url_info(json_output_path)
+
+        if should_reuse and existing_info:
+            # Store in session state and return immediately (no download needed)
+            st.session_state["url_info"] = existing_info
+            st.session_state["url_info_path"] = str(json_output_path)
+            return existing_info
 
         # Build cookies parameters from config (important to avoid bot detection)
         # Use config-based cookies since session_state may not be available yet
@@ -1004,7 +1047,7 @@ def url_analysis(url: str) -> Optional[Dict]:
             "--flat-playlist",  # For playlists, get basic info without extracting all videos
             "--playlist-end",
             "1",  # Only first video for quick playlist detection
-            sanitize_url(url),
+            clean_url,
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -1039,7 +1082,7 @@ def url_analysis(url: str) -> Optional[Dict]:
                     "3",
                     "--no-cache-dir",
                     *cookies_params,
-                    sanitize_url(url),
+                    clean_url,
                 ]
 
                 result = subprocess.run(
@@ -1074,7 +1117,7 @@ def url_analysis(url: str) -> Optional[Dict]:
                 if not needs_auth and cookies_params:
                     cmd_retry.extend(cookies_params)
 
-                cmd_retry.append(sanitize_url(url))
+                cmd_retry.append(clean_url)
 
                 result = subprocess.run(
                     cmd_retry, capture_output=True, text=True, timeout=45
@@ -1180,14 +1223,90 @@ def url_analysis(url: str) -> Optional[Dict]:
         try:
             info = json.loads(result.stdout)
 
+            # === INTEGRITY CHECK WITH SMART RETRY ===
+            # Check if we got premium formats (AV1/VP9) for videos (not playlists)
+            is_video = info.get("_type") == "video" or "duration" in info
+
+            if is_video:
+                has_premium_formats = check_url_info_integrity(info)
+
+                if not has_premium_formats:
+                    safe_push_log(
+                        "⚠️ Limited formats detected (h264 only), retrying for premium formats..."
+                    )
+
+                    # Try up to 2 additional attempts with different strategies
+                    best_info = info  # Keep first result as fallback
+                    max_retries = 2
+
+                    for retry_num in range(1, max_retries + 1):
+                        safe_push_log(
+                            f"🔄 Retry {retry_num}/{max_retries} for premium formats..."
+                        )
+
+                        # Build retry command with enhanced parameters
+                        retry_cmd = [
+                            "yt-dlp",
+                            "-J",
+                            "--skip-download",
+                            "--user-agent",
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                            "--extractor-retries",
+                            "3",
+                            "--no-cache-dir",  # Force fresh fetch
+                        ]
+
+                        # Add cookies if available
+                        if cookies_params:
+                            retry_cmd.extend(cookies_params)
+
+                        retry_cmd.append(clean_url)
+
+                        try:
+                            retry_result = subprocess.run(
+                                retry_cmd, capture_output=True, text=True, timeout=45
+                            )
+
+                            if retry_result.returncode == 0:
+                                retry_info = json.loads(retry_result.stdout)
+
+                                # Check if this attempt got premium formats
+                                if check_url_info_integrity(retry_info):
+                                    safe_push_log(
+                                        f"✅ Premium formats found on retry {retry_num}"
+                                    )
+                                    info = retry_info
+                                    break
+                                else:
+                                    # Keep the result with most formats
+                                    retry_formats_count = len(
+                                        retry_info.get("formats", [])
+                                    )
+                                    best_formats_count = len(
+                                        best_info.get("formats", [])
+                                    )
+
+                                    if retry_formats_count > best_formats_count:
+                                        best_info = retry_info
+                                        safe_push_log(
+                                            f"📊 Retry {retry_num} has more formats ({retry_formats_count} vs {best_formats_count})"
+                                        )
+
+                        except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+                            safe_push_log(f"⚠️ Retry {retry_num} failed: {str(e)[:100]}")
+                            continue
+
+                    # If no retry succeeded with premium formats, use best result
+                    if not check_url_info_integrity(info):
+                        info = best_info
+                        safe_push_log(
+                            "⚠️ No premium formats found after retries, using best available"
+                        )
+                else:
+                    safe_push_log("✅ Premium formats (AV1/VP9) detected")
+
             # Save JSON to file for later use with yt-dlp --load-info-json
-            try:
-                with open(json_output_path, "w", encoding="utf-8") as f:
-                    json.dump(info, f, indent=2, ensure_ascii=False)
-                safe_push_log(f"💾 URL info saved to {json_output_path}")
-            except Exception as e:
-                # Non-critical error - continue even if file write fails
-                safe_push_log(f"⚠️ Could not save URL info to file: {e}")
+            save_url_info(json_output_path, info)
 
             # Store in session state for global access
             st.session_state["url_info"] = info
@@ -1322,6 +1441,37 @@ def get_url_info_path() -> Optional[Path]:
     if path_str and Path(path_str).exists():
         return Path(path_str)
     return None
+
+
+def get_video_tmp_dir(url: str) -> Path:
+    """
+    Get or create the unique temporary directory for a video URL.
+
+    Uses session state cache to avoid recalculating the folder name.
+    If not in cache, calculates it and stores it for reuse.
+
+    Args:
+        url: Video URL (will be sanitized internally)
+
+    Returns:
+        Path to the unique temporary directory for this video
+    """
+    # Check if we already have it in session state
+    cached_dir = st.session_state.get("video_tmp_dir")
+    if cached_dir and isinstance(cached_dir, Path):
+        return cached_dir
+
+    # Calculate and cache it
+    clean_url = sanitize_url(url)
+    unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
+    video_tmp_dir = TMP_DOWNLOAD_FOLDER / unique_folder_name
+    ensure_dir(video_tmp_dir)
+
+    # Store in session state for reuse
+    st.session_state["video_tmp_dir"] = video_tmp_dir
+    st.session_state["unique_folder_name"] = unique_folder_name
+
+    return video_tmp_dir
 
 
 def analyze_video_on_url_change(url: str) -> None:
@@ -2675,6 +2825,11 @@ if submitted:
     start_sec = parse_time_like(start_text)
     end_sec = parse_time_like(end_text)
 
+    # If only end is specified, start from the beginning (0)
+    if start_sec is None and end_sec is not None:
+        start_sec = 0
+        push_log("⏱️ Start time not specified, cutting from beginning (0s)")
+
     # Determine if we need to cut sections
     do_cut = start_sec is not None and end_sec is not None and end_sec > start_sec
 
@@ -2691,17 +2846,59 @@ if submitted:
 
     push_log(f"📁 Destination folder: {dest_dir}")
 
-    # Create temporary subfolder structure with same hierarchy
-    if video_subfolder == "/":
-        tmp_subfolder_dir = TMP_DOWNLOAD_FOLDER
-    else:
-        tmp_subfolder_dir = TMP_DOWNLOAD_FOLDER / video_subfolder
-        ensure_dir(tmp_subfolder_dir)
+    # Check if video already exists in destination (safety check)
+    if filename:
+        # Check all common video extensions
+        existing_files = []
+        for ext in [".mkv", ".mp4", ".webm", ".avi", ".mov"]:
+            potential_file = dest_dir / f"{filename}{ext}"
+            if potential_file.exists():
+                existing_files.append(potential_file)
 
-    push_log(t("log_temp_download_folder", folder=tmp_subfolder_dir))
+        if existing_files and not settings.ALLOW_OVERWRITE_EXISTING_VIDEO:
+            # File exists and overwrite is not allowed
+            log_title("⚠️ VIDEO ALREADY EXISTS - SKIPPING DOWNLOAD")
+            push_log("")
+            push_log(f"📁 Existing file: {existing_files[0].name}")
+            push_log(
+                f"📊 File size: {existing_files[0].stat().st_size / (1024 * 1024):.2f}MiB"
+            )
+            push_log("")
+            push_log("🛡️ Protection active: ALLOW_OVERWRITE_EXISTING_VIDEO=false")
+            push_log(
+                "ℹ️  To allow overwrites, set ALLOW_OVERWRITE_EXISTING_VIDEO=true in .env"
+            )
+            push_log("")
+            push_log("✅ Skipping download to protect existing file")
+
+            status_placeholder.warning(
+                f"⚠️ File already exists: {existing_files[0].name}\n\n"
+                "Download skipped to protect existing file.\n"
+                "To allow overwrites, set ALLOW_OVERWRITE_EXISTING_VIDEO=true"
+            )
+
+            # Mark download as finished
+            st.session_state.download_finished = True
+            st.stop()  # Stop execution here
 
     # build bases
     clean_url = sanitize_url(url)
+
+    # Get or create unique temporary folder for this specific video URL
+    # This ensures each video has its own isolated workspace
+    # Uses cached value from session state if url_analysis was already called
+    tmp_video_dir = get_video_tmp_dir(url)
+    unique_folder_name = st.session_state.get("unique_folder_name", "unknown")
+
+    # Create temporary subfolder structure within the unique video folder
+    if video_subfolder == "/":
+        tmp_subfolder_dir = tmp_video_dir
+    else:
+        tmp_subfolder_dir = tmp_video_dir / video_subfolder
+        ensure_dir(tmp_subfolder_dir)
+
+    push_log(f"🔧 Unique video workspace: {unique_folder_name}")
+    push_log(t("log_temp_download_folder", folder=tmp_subfolder_dir))
 
     # Setup cookies for yt-dlp operations
     cookies_part = build_cookies_params()
@@ -2711,6 +2908,34 @@ if submitted:
         filename = get_video_title(clean_url, cookies_part)
 
     base_output = filename  # without extension
+
+    # Save job configuration with intended filename for later use
+    job_config = {
+        "filename": base_output,
+        "url": clean_url,
+        "timestamp": time.time(),
+    }
+    tmp_files.save_job_config(tmp_subfolder_dir, job_config)
+
+    # Log download strategy
+    push_log("")
+    log_title("� Download Strategy")
+    push_log("  1️⃣  Download with readable name (yt-dlp compatibility)")
+    push_log("  2️⃣  Rename to generic names (resilience & independence)")
+    push_log("  3️⃣  Skip if generic files exist (resume support)")
+    push_log("")
+    push_log(f"📝 Target filename: {base_output}")
+
+    # Check if a generic video file already exists from a previous download
+    # This allows resilience in case of interruption during post-processing
+    existing_video_tracks = tmp_files.find_video_tracks(tmp_subfolder_dir)
+    existing_generic_file = existing_video_tracks[0] if existing_video_tracks else None
+
+    if existing_generic_file:
+        log_title("✅ Found cached download")
+        push_log(f"  📦 Existing file: {existing_generic_file.name}")
+        push_log("  🔄 Skipping download, reusing cached file")
+        push_log("")
 
     # Always check for SponsorBlock segments for this video (informational)
     push_log("🔍 Analyzing video for sponsor segments...")
@@ -2851,57 +3076,145 @@ if submitted:
     ]
 
     progress_placeholder.progress(0, text=t("status_preparation"))
-    status_placeholder.info(t("status_downloading_simple"))
 
-    # Use intelligent fallback with retry strategies
-    # NEW STRATEGY: Always use dynamic profile selection
-    if quality_strategy_to_use == "auto_profiles":
-        push_log("🤖 Auto mode: Will try all profiles in quality order")
-        ret_dl, error_msg = smart_download_with_profiles(
-            base_output,
-            tmp_subfolder_dir,
-            embed_chapters,
-            embed_subs,
-            force_mp4,
-            ytdlp_custom_args,
-            clean_url,
-            "auto",  # Always use auto mode with new strategy
-            None,  # No target profile - let new strategy decide
-            False,  # refuse_quality_downgrade = False (allow fallback)
-            do_cut,
-            subs_selected,
-            sb_choice,
-            progress_placeholder,
-            status_placeholder,
-            info_placeholder,
-        )
+    # Check if we can skip download by reusing existing generic file
+    if existing_generic_file:
+        status_placeholder.success(t("status_reusing_existing_file"))
+        ret_dl = 0  # Success code
+        push_log("⚡ Skipped download - using cached file")
+    else:
+        status_placeholder.info(t("status_downloading_simple"))
 
-    # Handle cancellation
-    if ret_dl == -1:
-        status_placeholder.info(t("cleaning_temp_files"))
-        cleanup_tmp_files(base_output, tmp_subfolder_dir, "download")
-        status_placeholder.success(t("cleanup_complete"))
+        # Use intelligent fallback with retry strategies
+        # NEW STRATEGY: Always use dynamic profile selection
+        if quality_strategy_to_use == "auto_profiles":
+            push_log("🤖 Auto mode: Will try all profiles in quality order")
+            ret_dl, error_msg = smart_download_with_profiles(
+                base_output,
+                tmp_subfolder_dir,
+                embed_chapters,
+                embed_subs,
+                force_mp4,
+                ytdlp_custom_args,
+                clean_url,
+                "auto",  # Always use auto mode with new strategy
+                None,  # No target profile - let new strategy decide
+                False,  # refuse_quality_downgrade = False (allow fallback)
+                do_cut,
+                subs_selected,
+                sb_choice,
+                progress_placeholder,
+                status_placeholder,
+                info_placeholder,
+            )
 
-        # Mark download as finished
-        st.session_state.download_finished = True
-        st.stop()
+        # Handle cancellation
+        if ret_dl == -1:
+            status_placeholder.info("Download cancelled")
+            # Note: Temporary files are kept for resilience
+            # Manual cleanup can be done via REMOVE_TMP_FILES setting
 
-    # Search for the final file in TMP subfolder (prioritize MKV format from new strategy)
+            # Mark download as finished
+            st.session_state.download_finished = True
+            st.stop()
+
+    # Search for the final file in TMP subfolder
+    # Priority: 1) Generic file (from cache/previous run) 2) Fresh download with original name
     final_tmp = None
 
-    # New strategy prefers MKV, but search all common formats
-    search_extensions = [".mkv", ".mp4", ".webm"]
+    # First check if we already found a generic file earlier (cache hit)
+    if existing_generic_file:
+        final_tmp = existing_generic_file
+        safe_push_log(f"✓ Using cached file: {final_tmp.name}")
+    else:
+        # New download - look for file with original name and rename to generic
+        safe_push_log("")
+        log_title("📦 Organizing downloaded files")
 
-    for ext in search_extensions:
-        p = tmp_subfolder_dir / f"{base_output}{ext}"
-        if p.exists():
-            final_tmp = p
-            safe_push_log(f"📄 Found output file: {p.name}")
-            break
+        search_extensions = [".mkv", ".mp4", ".webm"]
+        downloaded_file = None
 
-    if not final_tmp:
-        status_placeholder.error(t("error_download_failed"))
-        st.stop()
+        for ext in search_extensions:
+            p = tmp_subfolder_dir / f"{base_output}{ext}"
+            if p.exists():
+                downloaded_file = p
+                safe_push_log(f"  📄 Found: {p.name}")
+                break
+
+        if not downloaded_file:
+            status_placeholder.error(t("error_download_failed"))
+            st.stop()
+
+        # Get format_id from session (stored during download)
+        format_id = st.session_state.get("downloaded_format_id", "unknown")
+        safe_push_log(f"  🔍 Format ID from session: {format_id}")
+
+        # Rename to generic filename with format ID: video-{FORMAT_ID}.{ext}
+        generic_name = tmp_files.get_video_track_path(
+            tmp_subfolder_dir, format_id, downloaded_file.suffix.lstrip(".")
+        )
+        safe_push_log(f"  🔍 Target generic name: {generic_name.name}")
+
+        # Rename video file
+        try:
+            if generic_name.exists():
+                if should_remove_tmp_files():
+                    generic_name.unlink()
+                    safe_push_log(f"  🗑️ Removed existing: {generic_name.name}")
+                else:
+                    safe_push_log(
+                        f"  ⚠️ Generic file already exists: {generic_name.name}"
+                    )
+
+            safe_push_log(f"  🔄 Renaming: {downloaded_file} → {generic_name}")
+            downloaded_file.rename(generic_name)
+            safe_push_log(
+                f"  ✅ Video renamed: {downloaded_file.name} → {generic_name.name}"
+            )
+
+            # Verify the file exists after rename
+            if generic_name.exists():
+                size_mb = generic_name.stat().st_size / (1024 * 1024)
+                safe_push_log(
+                    f"  ✅ Verified: {generic_name.name} exists ({size_mb:.1f} MiB)"
+                )
+            else:
+                safe_push_log(
+                    f"  ❌ ERROR: {generic_name.name} doesn't exist after rename!"
+                )
+
+            final_tmp = generic_name
+        except Exception as e:
+            safe_push_log(f"  ⚠️ Could not rename video: {str(e)}")
+            final_tmp = downloaded_file
+
+        # Rename subtitle files to generic names
+        if subs_selected:
+            safe_push_log("")
+            safe_push_log("  📝 Organizing subtitle files...")
+            for lang in subs_selected:
+                original_sub = tmp_subfolder_dir / f"{base_output}.{lang}.srt"
+                if original_sub.exists():
+                    generic_sub = tmp_files.get_subtitle_path(
+                        tmp_subfolder_dir, lang, is_cut=False
+                    )
+                    try:
+                        original_sub.rename(generic_sub)
+                        safe_push_log(
+                            f"    ✅ {lang}: {original_sub.name} → {generic_sub.name}"
+                        )
+                    except Exception as e:
+                        safe_push_log(f"    ⚠️ Could not rename {lang}: {str(e)}")
+                else:
+                    safe_push_log(f"    ℹ️  No {lang} subtitle downloaded")
+
+        safe_push_log("")
+        log_title("✅ File organization complete")
+        safe_push_log(f"  📦 Video: {final_tmp.name}")
+        if subs_selected:
+            safe_push_log("  📝 Subtitles: subtitles.{lang}.srt format")
+        safe_push_log("  💡 Files are now independent of video title")
+        safe_push_log("")
 
     # === Measure downloaded file size ===
     downloaded_size = final_tmp.stat().st_size
@@ -2950,16 +3263,17 @@ if submitted:
         else:
             push_log(f"🎬 Cutting format: {source_ext} → {cut_ext} (converted)")
 
-        cut_output = tmp_subfolder_dir / f"{base_output}_cut{cut_ext}"
+        # Use generic name for cut output: final.{ext}
+        cut_output = tmp_files.get_final_path(tmp_subfolder_dir, cut_ext.lstrip("."))
 
         if cut_output.exists():
             try:
                 if should_remove_tmp_files():
                     cut_output.unlink()
-                    push_log("🗑️ Removed existing cut output file")
+                    push_log("🗑️ Removed existing final file")
                 else:
                     push_log(
-                        f"🔍 Debug mode: Keeping existing cut output file {cut_output.name}"
+                        f"🔍 Debug mode: Keeping existing final file {cut_output.name}"
                     )
             except Exception:
                 pass
@@ -3037,9 +3351,9 @@ if submitted:
 
             # Handle cancellation during cutting
             if ret_cut == -1:
-                status_placeholder.info(t("cleaning_temp_files"))
-                cleanup_tmp_files(base_output, tmp_subfolder_dir, "cutting")
-                status_placeholder.success(t("cleanup_complete"))
+                status_placeholder.info("Cutting cancelled")
+                # Note: Temporary files are kept for resilience and cache reuse
+                # Manual cleanup can be done via REMOVE_TMP_FILES setting
 
                 # Mark download as finished
                 st.session_state.download_finished = True
@@ -3052,39 +3366,12 @@ if submitted:
             st.error(t("error_ffmpeg", error=e))
             st.stop()
 
-        # Rename the cut file to the final name (without _cut suffix)
-        # Keep the same extension as the cut output
-        final_extension = cut_output.suffix  # .mkv, .mp4, etc.
-        final_cut_name = tmp_subfolder_dir / f"{base_output}{final_extension}"
+        # Cut output is already named correctly (final.{ext})
+        # No need to rename - it's already the final file with generic name
+        push_log(f"✅ Cut complete: {cut_output.name}")
 
-        push_log(f"📄 Final cut file: {final_cut_name.name}")
-
-        if final_cut_name.exists():
-            try:
-                if should_remove_tmp_files():
-                    final_cut_name.unlink()
-                    push_log("🗑️ Removed existing final file")
-                else:
-                    push_log(
-                        f"🔍 Debug mode: Keeping existing final file {final_cut_name.name}"
-                    )
-            except Exception:
-                pass
-        # In debug mode, copy instead of rename to preserve intermediate files
-        if not should_remove_tmp_files():
-            push_log(
-                f"🔍 Debug mode: Copying cut file to preserve intermediate {cut_output.name}"
-            )
-            import shutil
-
-            shutil.copy2(cut_output, final_cut_name)
-            push_log("✅ Cut file copied to final name (intermediate preserved)")
-        else:
-            cut_output.rename(final_cut_name)
-            push_log("✅ Cut file renamed to final name")
-
-        # The renamed cut file becomes our final source
-        final_source = final_cut_name
+        # The cut file is our final source (already correctly named)
+        final_source = cut_output
 
         # Measure cut file size
         if final_source.exists():
@@ -3115,8 +3402,38 @@ if submitted:
         except Exception as e:
             push_log(t("log_cleanup_warning", error=e))
     else:
-        # No cutting, use the original downloaded file
-        final_source = final_tmp  # === Cleanup + move
+        # No cutting - copy downloaded video to final.{ext} for consistency
+        # Keep the original video-{FORMAT_ID}.{ext} for cache reuse
+        push_log("📦 No cutting requested, preparing final file...")
+
+        final_path = tmp_files.get_final_path(
+            tmp_subfolder_dir, final_tmp.suffix.lstrip(".")
+        )
+
+        if final_tmp != final_path:
+            try:
+                # Remove existing final file if it exists
+                if final_path.exists():
+                    if should_remove_tmp_files():
+                        final_path.unlink()
+                        push_log("🗑️ Removed existing final file")
+                    else:
+                        push_log("🔍 Debug mode: Overwriting existing final file")
+
+                # Copy (not rename!) to final name, keeping original for cache
+                shutil.copy2(str(final_tmp), str(final_path))
+                push_log(f"� Copied: {final_tmp.name} → {final_path.name}")
+                push_log(f"💾 Kept original {final_tmp.name} for cache reuse")
+                final_source = final_path
+            except Exception as e:
+                push_log(f"⚠️ Could not copy to final, using original: {str(e)}")
+                final_source = final_tmp
+        else:
+            # Already has final name
+            final_source = final_tmp
+            push_log(
+                f"✓ File already has final name: {final_source.name}"
+            )  # === Cleanup + move
 
     # === METADATA CUSTOMIZATION ===
     # Customize metadata with user-provided title
@@ -3200,22 +3517,42 @@ if submitted:
         else:
             safe_push_log("✅ All required subtitles are already properly embedded")
 
-    # === CLEANUP EXTRA FILES ===
-    # Clean up temporary files now that cutting and metadata are complete
-    cleanup_tmp_files(base_output, tmp_subfolder_dir, "subtitles")
+    # === NO AUTOMATIC CLEANUP ===
+    # Temporary files are KEPT for resilience and cache reuse
+    # - video-{FORMAT_ID}.{ext} can be reused for future downloads
+    # - subtitles.{lang}.srt can be reused
+    # - final.{ext} can be reused for resume scenarios
+    # Manual cleanup: set REMOVE_TMP_FILES=true in .env or delete tmp/ folder
 
-    # Measure final processed file size before moving
+    # Measure final processed file size before copying
     if final_source.exists():
         processed_size = final_source.stat().st_size
         processed_size_mb = processed_size / (1024 * 1024)
-        push_log(f"📊 Processed file size: {processed_size_mb:.2f}MiB (before move)")
+        push_log(f"📊 Processed file size: {processed_size_mb:.2f}MiB (before copy)")
 
     try:
-        final_moved = move_file(final_source, dest_dir)
+        # Get intended filename from job config
+        job_config = tmp_files.load_job_config(tmp_subfolder_dir)
+        if job_config and "filename" in job_config:
+            intended_filename = job_config["filename"]
+        else:
+            # Fallback to base_output if job config not found
+            intended_filename = base_output
+
+        # Build final destination path with intended filename
+        final_ext = final_source.suffix
+        final_destination = dest_dir / f"{intended_filename}{final_ext}"
+
+        # Copy file with intended name
+        shutil.copy2(str(final_source), str(final_destination))
+        push_log(f"✅ Copied to: {final_destination.name}")
+        push_log(f"📋 Original kept in: {final_source.parent.name}/{final_source.name}")
+
+        final_copied = final_destination
         progress_placeholder.progress(100, text=t("status_completed"))
 
         # Get final file size for accurate display
-        final_file_size = final_moved.stat().st_size
+        final_file_size = final_copied.stat().st_size
         final_size_mb = final_file_size / (1024 * 1024)
         final_size_str = f"{final_size_mb:.2f}MiB"
 
@@ -3235,9 +3572,9 @@ if submitted:
 
         # Format full file path properly for display
         if video_subfolder == "/":
-            display_path = f"Videos/{final_moved.name}"
+            display_path = f"Videos/{final_copied.name}"
         else:
-            display_path = f"Videos/{video_subfolder}/{final_moved.name}"
+            display_path = f"Videos/{video_subfolder}/{final_copied.name}"
 
         status_placeholder.success(t("status_file_ready", subfolder=display_path))
         st.toast(t("toast_download_completed"), icon="✅")

@@ -8,6 +8,37 @@ This directory contains utility scripts for the HomeTube project.
 
 Automates dependency updates using uv.
 
+### `demo_url_reuse_cache.py`
+
+Demonstrates the intelligent URL analysis caching feature.
+
+**Usage:**
+```bash
+# Run from project root
+python scripts/demo_url_reuse_cache.py
+```
+
+**What it does:**
+- Creates mock URL info files with different format qualities
+- Tests the intelligent caching logic (reuse vs re-download decisions)
+- Shows visual output of all scenarios with pass/fail indicators
+
+**Scenarios tested:**
+- ❌ Video with h264 only → Should NOT reuse (limited quality)
+- ✅ Video with AV1 → Should reuse (premium quality)
+- ✅ Video with VP9 → Should reuse (premium quality)
+- ✅ Playlist → Should always reuse (no quality check needed)
+- ✅ Mixed formats with premium → Should reuse
+
+**When to use:**
+- Understanding how the URL caching feature works
+- Debugging caching behavior
+- Validating changes to `app/url_utils.py`
+
+### `update-requirements.sh`
+
+Automates dependency updates using uv.
+
 **Usage:**
 ```bash
 # Run from project root

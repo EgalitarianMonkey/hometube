@@ -86,7 +86,7 @@ class TestCoreFunctions:
 
     def test_sanitize_url(self):
         """Test sanitize_url function."""
-        from app.medias_utils import sanitize_url
+        from app.url_utils import sanitize_url
 
         assert sanitize_url("example.com") == "https://example.com"
         assert sanitize_url("https://example.com") == "https://example.com"

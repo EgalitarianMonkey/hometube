@@ -45,6 +45,105 @@ def sanitize_filename(name: str) -> str:
     return sanitized or "unnamed"
 
 
+def get_unique_video_folder_name_from_url(url: str) -> str:
+    """
+    Generate a unique folder name for a video based on its URL.
+
+    Extracts platform and video ID from the URL to create a consistent,
+    filesystem-safe folder name. The same URL will always produce the same folder name.
+
+    Supported platforms:
+    - YouTube: youtube-{video_id}
+    - YouTube Shorts: youtube-shorts-{video_id}
+    - Instagram: instagram-{post_id}
+    - TikTok: tiktok-{video_id}
+    - Vimeo: vimeo-{video_id}
+    - Dailymotion: dailymotion-{video_id}
+    - Other: generic-{hash}
+
+    Args:
+        url: Sanitized video URL (should be cleaned with sanitize_url first)
+
+    Returns:
+        Unique folder name string (e.g., "youtube-dQw4w9WgXcQ")
+
+    Examples:
+        >>> get_unique_video_folder_name_from_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        'youtube-dQw4w9WgXcQ'
+        >>> get_unique_video_folder_name_from_url("https://youtu.be/dQw4w9WgXcQ")
+        'youtube-dQw4w9WgXcQ'
+        >>> get_unique_video_folder_name_from_url("https://www.youtube.com/shorts/abc123")
+        'youtube-shorts-abc123'
+        >>> get_unique_video_folder_name_from_url("https://www.instagram.com/p/ABC123/")
+        'instagram-ABC123'
+        >>> get_unique_video_folder_name_from_url("https://www.tiktok.com/@user/video/1234567890")
+        'tiktok-1234567890'
+        >>> get_unique_video_folder_name_from_url("https://vimeo.com/123456789")
+        'vimeo-123456789'
+    """
+    if not url:
+        return "unknown"
+
+    # Clean URL for processing
+    url = url.strip()
+
+    # YouTube standard format: youtube.com/watch?v=VIDEO_ID
+    youtube_watch_match = re.search(
+        r"(?:youtube\.com/watch\?v=|youtube\.com/.*[?&]v=)([a-zA-Z0-9_-]{11})", url
+    )
+    if youtube_watch_match:
+        video_id = youtube_watch_match.group(1)
+        return f"youtube-{video_id}"
+
+    # YouTube short URL: youtu.be/VIDEO_ID
+    youtube_short_match = re.search(r"youtu\.be/([a-zA-Z0-9_-]{11})", url)
+    if youtube_short_match:
+        video_id = youtube_short_match.group(1)
+        return f"youtube-{video_id}"
+
+    # YouTube Shorts: youtube.com/shorts/VIDEO_ID
+    youtube_shorts_match = re.search(r"youtube\.com/shorts/([a-zA-Z0-9_-]+)", url)
+    if youtube_shorts_match:
+        video_id = youtube_shorts_match.group(1)
+        return f"youtube-shorts-{video_id}"
+
+    # Instagram: instagram.com/p/POST_ID or /reel/POST_ID or /tv/POST_ID
+    instagram_match = re.search(r"instagram\.com/(?:p|reel|tv)/([a-zA-Z0-9_-]+)", url)
+    if instagram_match:
+        post_id = instagram_match.group(1)
+        return f"instagram-{post_id}"
+
+    # TikTok: tiktok.com/@user/video/VIDEO_ID
+    tiktok_match = re.search(r"tiktok\.com/.*?/video/(\d+)", url)
+    if tiktok_match:
+        video_id = tiktok_match.group(1)
+        return f"tiktok-{video_id}"
+
+    # TikTok short URL: vm.tiktok.com/SHORT_CODE or vt.tiktok.com/SHORT_CODE
+    tiktok_short_match = re.search(r"v[mt]\.tiktok\.com/([a-zA-Z0-9]+)", url)
+    if tiktok_short_match:
+        short_code = tiktok_short_match.group(1)
+        return f"tiktok-{short_code}"
+
+    # Vimeo: vimeo.com/VIDEO_ID
+    vimeo_match = re.search(r"vimeo\.com/(\d+)", url)
+    if vimeo_match:
+        video_id = vimeo_match.group(1)
+        return f"vimeo-{video_id}"
+
+    # Dailymotion: dailymotion.com/video/VIDEO_ID
+    dailymotion_match = re.search(r"dailymotion\.com/video/([a-zA-Z0-9]+)", url)
+    if dailymotion_match:
+        video_id = dailymotion_match.group(1)
+        return f"dailymotion-{video_id}"
+
+    # Generic fallback: use hash of URL for unknown platforms
+    import hashlib
+
+    url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()[:12]
+    return f"generic-{url_hash}"
+
+
 def is_valid_cookie_file(file_path: str) -> bool:
     """
     Check if cookie file exists and is valid.
@@ -157,6 +256,25 @@ def move_file(src: Path, dest_dir: Path) -> Path:
     """Move file from source to destination directory"""
     target = dest_dir / src.name
     shutil.move(str(src), str(target))
+    return target
+
+
+def copy_file(src: Path, dest_dir: Path) -> Path:
+    """
+    Copy file from source to destination directory.
+
+    This preserves the original file in tmp for debugging and resilience.
+    Use this instead of move_file to keep all download artifacts for future reuse.
+
+    Args:
+        src: Source file path
+        dest_dir: Destination directory path
+
+    Returns:
+        Path: Path to the copied file
+    """
+    target = dest_dir / src.name
+    shutil.copy2(str(src), str(target))  # copy2 preserves metadata
     return target
 
 
