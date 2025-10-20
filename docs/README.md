@@ -30,6 +30,8 @@ Welcome to the Universal Video Downloader documentation! This index will guide y
 - **[Development Setup Guide](development-setup.md)** - Complete setup for all environments (Conda, UV, pip)
 - **[Development Guide](development.md)** - Setup development environment and contribute
 - **[Testing Documentation](testing.md)** - Complete testing framework and guidelines
+- **[Generic File Naming](generic-file-naming.md)** - Temporary file system and download resilience
+- **[Intelligent Caching](intelligent-caching.md)** - URL info caching and resume support
 - **[Testing Framework](development.md#testing-framework)** - Run and write tests
 - **[CI/CD Pipeline](development.md#ci-cd-pipeline)** - Automated workflows
 - **[Project Roadmap](todo.md)** - Planned features and improvements
