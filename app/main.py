@@ -31,6 +31,8 @@ try:
     from .display_utils import (
         fmt_hhmmss,
         parse_time_like,
+        build_info_items,
+        render_media_card,
     )
     from .medias_utils import (
         analyze_audio_formats,
@@ -90,6 +92,8 @@ except ImportError:
     from display_utils import (
         fmt_hhmmss,
         parse_time_like,
+        build_info_items,
+        render_media_card,
     )
     from medias_utils import (
         analyze_audio_formats,
@@ -1298,162 +1302,53 @@ def display_url_info(url_info: Dict) -> None:
     if is_playlist:
         # ===== PLAYLIST INFORMATION =====
         title = url_info.get("title", "Unknown Playlist")
-        entries_count = len(url_info.get("entries", []))
         uploader = url_info.get("uploader", url_info.get("channel", ""))
 
-        # For flat-playlist mode, use playlist_count if available
-        if "playlist_count" in url_info:
-            entries_count = url_info["playlist_count"]
-
-        # Get first video info if available
-        first_video_title = ""
-        if url_info.get("entries") and len(url_info["entries"]) > 0:
-            first_video = url_info["entries"][0]
-            if isinstance(first_video, dict) and "title" in first_video:
-                first_video_title = first_video["title"]
-
-        # Build compact playlist info
-        playlist_info_items = []
-
-        playlist_info_items.append(
-            f'<span style="color: #e2e8f0;">&nbsp; {platform_emoji} &nbsp; {platform_name} Playlist</span>'
-        )
-        if uploader:
-            playlist_info_items.append(
-                f'<span style="color: #e2e8f0;">👤 &nbsp; {uploader}</span>'
-            )
-        playlist_info_items.append(
-            f'<span style="color: #e2e8f0;">📊 &nbsp; {entries_count} videos</span>'
-        )
-        if first_video_title:
-            # Truncate long titles for first video
-            truncated_title = (
-                first_video_title[:50] + "..."
-                if len(first_video_title) > 50
-                else first_video_title
-            )
-            playlist_info_items.append(
-                f'<span style="color: #94a3b8; font-size: 0.85em;">📹 &nbsp; {truncated_title}</span>'
-            )
-
-        playlist_info_line = (
-            ' <span style="color: #4ade80;">&nbsp; &nbsp; &nbsp;</span> '.join(
-                playlist_info_items
-            )
-            if playlist_info_items
-            else ""
+        # Get playlist count
+        entries_count = url_info.get("playlist_count") or len(
+            url_info.get("entries", [])
         )
 
-        # Display everything in one compact card
-        st.html(
-            f"""
-            <div style="
-                background: linear-gradient(135deg, #1e3a2e 0%, #2d5a45 100%);
-                border-radius: 12px;
-                padding: 18px;
-                border-left: 5px solid #4ade80;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                margin: 10px 0;
-            ">
-                <h2 style="
-                    color: #ffffff;
-                    font-size: 1.3em;
-                    font-weight: 600;
-                    margin: 0 0 12px 0;
-                    line-height: 1.3;
-                ">
-                    {title}
-                </h2>
-                
-                {f'''<div style="
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 8px 12px;
-                    font-size: 0.9em;
-                    padding-left: 12px;
-                ">
-                    {playlist_info_line}
-                </div>''' if playlist_info_line else ''}
-            </div>
-            """
+        # Get first video title if available
+        first_video_title = None
+        entries = url_info.get("entries", [])
+        if entries and isinstance(entries[0], dict):
+            first_video_title = entries[0].get("title")
+
+        # Build info items using helper
+        info_items = build_info_items(
+            platform_emoji=platform_emoji,
+            platform_name=platform_name,
+            media_type="Playlist",
+            uploader=uploader,
+            entries_count=entries_count,
+            first_video_title=first_video_title,
         )
+
+        # Render card
+        st.html(render_media_card(title, info_items))
 
     elif url_info.get("_type") == "video" or "duration" in url_info:
         # ===== SINGLE VIDEO INFORMATION =====
         title = url_info.get("title", "Unknown Video")
+        uploader = url_info.get("uploader", url_info.get("channel", ""))
         duration = url_info.get("duration", 0)
         view_count = url_info.get("view_count")
         like_count = url_info.get("like_count")
-        uploader = url_info.get("uploader", url_info.get("channel", ""))
 
-        # Format data for display
-        duration_str = fmt_hhmmss(int(duration)) if duration and duration > 0 else ""
-        views_formatted = f"{view_count:,}".replace(",", " ") if view_count else ""
-        likes_formatted = (
-            f"{like_count:,}".replace(",", " ") if like_count and like_count > 0 else ""
+        # Build info items using helper
+        info_items = build_info_items(
+            platform_emoji=platform_emoji,
+            platform_name=platform_name,
+            media_type="Video",
+            uploader=uploader,
+            duration=duration,
+            view_count=view_count,
+            like_count=like_count,
         )
 
-        # Build compact inline stats
-        stats_items = []
-        stats_items.append(
-            f'<span style="color: #e2e8f0;">&nbsp; {platform_emoji} &nbsp; {platform_name} Video</span>'
-        )
-        if uploader:
-            stats_items.append(
-                f'<span style="color: #e2e8f0;">👤 &nbsp; {uploader}</span>'
-            )
-        if duration > 0:
-            stats_items.append(
-                f'<span style="color: #e2e8f0;">⏱️ &nbsp; {duration_str}</span>'
-            )
-        if view_count:
-            stats_items.append(
-                f'<span style="color: #e2e8f0;">👁️ &nbsp; {views_formatted}</span>'
-            )
-        if like_count is not None and like_count > 0:
-            stats_items.append(
-                f'<span style="color: #e2e8f0;">👍 &nbsp; {likes_formatted}</span>'
-            )
-
-        stats_line = (
-            ' <span style="color: #4ade80;">&nbsp; &nbsp;</span> '.join(stats_items)
-            if stats_items
-            else ""
-        )
-
-        # Display everything in one compact card
-        st.html(
-            f"""
-            <div style="
-                background: linear-gradient(135deg, #1e3a2e 0%, #2d5a45 100%);
-                border-radius: 12px;
-                padding: 18px;
-                border-left: 5px solid #4ade80;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                margin: 10px 0;
-            ">                
-                <h2 style="
-                    color: #ffffff;
-                    font-size: 1.3em;
-                    font-weight: 600;
-                    margin: 0 0 12px 0;
-                    line-height: 1.3;
-                ">
-                    {title}
-                </h2>
-                
-                {f'''<div style="
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 8px 12px;
-                    font-size: 0.9em;
-                    padding-left: 12px;
-                ">
-                    {stats_line}
-                </div>''' if stats_line else ''}
-            </div>
-            """
-        )
+        # Render card
+        st.html(render_media_card(title, info_items))
 
     else:
         # Unknown format - not a video or playlist
