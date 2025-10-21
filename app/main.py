@@ -552,7 +552,7 @@ def _get_optimal_profiles_from_json(url: str) -> List[Dict]:
 
 def smart_download_with_profiles(
     base_output: str,
-    tmp_subfolder_dir: Path,
+    tmp_video_dir: Path,
     embed_chapters: bool,
     embed_subs: bool,
     force_mp4: bool,
@@ -644,7 +644,7 @@ def smart_download_with_profiles(
     return _execute_profile_downloads(
         profiles_to_try,
         base_output,
-        tmp_subfolder_dir,
+        tmp_video_dir,
         embed_chapters,
         embed_subs,
         ytdlp_custom_args,
@@ -746,7 +746,7 @@ def _try_profile_with_clients(
 def _build_profile_command(
     profile: Dict,
     base_output: str,
-    tmp_subfolder_dir: Path,
+    tmp_video_dir: Path,
     embed_chapters: bool,
     embed_subs: bool,
     ytdlp_custom_args: str,
@@ -772,7 +772,7 @@ def _build_profile_command(
     # Build base command
     cmd_base = build_base_ytdlp_command(
         base_output,
-        tmp_subfolder_dir,
+        tmp_video_dir,
         format_string,
         embed_chapters,
         embed_subs,
@@ -842,7 +842,7 @@ def _get_profile_codec_info(profile: Dict) -> List[str]:
 def _execute_profile_downloads(
     profiles_to_try: List[Dict],
     base_output: str,
-    tmp_subfolder_dir: Path,
+    tmp_video_dir: Path,
     embed_chapters: bool,
     embed_subs: bool,
     ytdlp_custom_args: str,
@@ -879,7 +879,7 @@ def _execute_profile_downloads(
         cmd_base = _build_profile_command(
             profile,
             base_output,
-            tmp_subfolder_dir,
+            tmp_video_dir,
             embed_chapters,
             embed_subs,
             ytdlp_custom_args,
@@ -2900,15 +2900,10 @@ if submitted:
     tmp_video_dir = get_video_tmp_dir(url)
     unique_folder_name = st.session_state.get("unique_folder_name", "unknown")
 
-    # Create temporary subfolder structure within the unique video folder
-    if video_subfolder == "/":
-        tmp_subfolder_dir = tmp_video_dir
-    else:
-        tmp_subfolder_dir = tmp_video_dir / video_subfolder
-        ensure_dir(tmp_subfolder_dir)
-
+    # All temporary files are written to the root of the unique video folder
+    # The video_subfolder is only used when copying the final file to destination
     push_log(f"🔧 Unique video workspace: {unique_folder_name}")
-    push_log(t("log_temp_download_folder", folder=tmp_subfolder_dir))
+    push_log(t("log_temp_download_folder", folder=tmp_video_dir))
 
     # Setup cookies for yt-dlp operations
     cookies_part = build_cookies_params()
@@ -2925,7 +2920,7 @@ if submitted:
         "url": clean_url,
         "timestamp": time.time(),
     }
-    tmp_files.save_job_config(tmp_subfolder_dir, job_config)
+    tmp_files.save_job_config(tmp_video_dir, job_config)
 
     # Log download strategy
     push_log("")
@@ -2938,7 +2933,7 @@ if submitted:
 
     # Check if a generic video file already exists from a previous download
     # This allows resilience in case of interruption during post-processing
-    existing_video_tracks = tmp_files.find_video_tracks(tmp_subfolder_dir)
+    existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
     existing_generic_file = existing_video_tracks[0] if existing_video_tracks else None
 
     if existing_generic_file:
@@ -2983,7 +2978,7 @@ if submitted:
         # Legacy system - build base command normally
         common_base = build_base_ytdlp_command(
             base_output,
-            tmp_subfolder_dir,
+            tmp_video_dir,
             format_spec,
             embed_chapters,
             embed_subs,
@@ -3101,7 +3096,7 @@ if submitted:
             push_log("🤖 Auto mode: Will try all profiles in quality order")
             ret_dl, error_msg = smart_download_with_profiles(
                 base_output,
-                tmp_subfolder_dir,
+                tmp_video_dir,
                 embed_chapters,
                 embed_subs,
                 force_mp4,
@@ -3145,7 +3140,7 @@ if submitted:
         downloaded_file = None
 
         for ext in search_extensions:
-            p = tmp_subfolder_dir / f"{base_output}{ext}"
+            p = tmp_video_dir / f"{base_output}{ext}"
             if p.exists():
                 downloaded_file = p
                 safe_push_log(f"  📄 Found: {p.name}")
@@ -3161,7 +3156,7 @@ if submitted:
 
         # Rename to generic filename with format ID: video-{FORMAT_ID}.{ext}
         generic_name = tmp_files.get_video_track_path(
-            tmp_subfolder_dir, format_id, downloaded_file.suffix.lstrip(".")
+            tmp_video_dir, format_id, downloaded_file.suffix.lstrip(".")
         )
         safe_push_log(f"  🔍 Target generic name: {generic_name.name}")
 
@@ -3203,10 +3198,10 @@ if submitted:
             safe_push_log("")
             safe_push_log("  📝 Organizing subtitle files...")
             for lang in subs_selected:
-                original_sub = tmp_subfolder_dir / f"{base_output}.{lang}.srt"
+                original_sub = tmp_video_dir / f"{base_output}.{lang}.srt"
                 if original_sub.exists():
                     generic_sub = tmp_files.get_subtitle_path(
-                        tmp_subfolder_dir, lang, is_cut=False
+                        tmp_video_dir, lang, is_cut=False
                     )
                     try:
                         original_sub.rename(generic_sub)
@@ -3274,7 +3269,7 @@ if submitted:
             push_log(f"🎬 Cutting format: {source_ext} → {cut_ext} (converted)")
 
         # Use generic name for cut output: final.{ext}
-        cut_output = tmp_files.get_final_path(tmp_subfolder_dir, cut_ext.lstrip("."))
+        cut_output = tmp_files.get_final_path(tmp_video_dir, cut_ext.lstrip("."))
 
         if cut_output.exists():
             try:
@@ -3324,7 +3319,7 @@ if submitted:
         if subs_selected:
             processed_subtitle_files = process_subtitles_for_cutting(
                 base_output=base_output,
-                tmp_subfolder_dir=tmp_subfolder_dir,
+                tmp_video_dir=tmp_video_dir,
                 subtitle_languages=subs_selected,
                 start_time=actual_start,
                 duration=duration,
@@ -3417,7 +3412,7 @@ if submitted:
         push_log("📦 No cutting requested, preparing final file...")
 
         final_path = tmp_files.get_final_path(
-            tmp_subfolder_dir, final_tmp.suffix.lstrip(".")
+            tmp_video_dir, final_tmp.suffix.lstrip(".")
         )
 
         if final_tmp != final_path:
@@ -3492,7 +3487,7 @@ if submitted:
             # Find available subtitle files using optimized search
             subtitle_files_to_embed = find_subtitle_files_optimized(
                 base_output=base_output,
-                tmp_subfolder_dir=tmp_subfolder_dir,
+                tmp_video_dir=tmp_video_dir,
                 subtitle_languages=subs_selected,
                 is_cut=do_cut,
             )
@@ -3542,7 +3537,7 @@ if submitted:
 
     try:
         # Get intended filename from job config
-        job_config = tmp_files.load_job_config(tmp_subfolder_dir)
+        job_config = tmp_files.load_job_config(tmp_video_dir)
         if job_config and "filename" in job_config:
             intended_filename = job_config["filename"]
         else:

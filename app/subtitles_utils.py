@@ -21,7 +21,7 @@ except ImportError:
 
 def find_subtitle_files_optimized(
     base_output: str,
-    tmp_subfolder_dir: Path,
+    tmp_video_dir: Path,
     subtitle_languages: List[str],
     is_cut: bool = False,
 ) -> List[Path]:
@@ -30,7 +30,7 @@ def find_subtitle_files_optimized(
 
     Args:
         base_output: Base filename for outputs
-        tmp_subfolder_dir: Directory containing subtitle files
+        tmp_video_dir: Directory containing subtitle files
         subtitle_languages: List of language codes to find
         is_cut: Whether to look for cut subtitle files
 
@@ -81,7 +81,7 @@ def find_subtitle_files_optimized(
         # Search for files
         found_file = None
         for pattern in patterns:
-            candidate = tmp_subfolder_dir / pattern
+            candidate = tmp_video_dir / pattern
             if candidate.exists():
                 # Validate the file
                 if validate_subtitle_file(candidate):
@@ -102,7 +102,7 @@ def find_subtitle_files_optimized(
 
 def process_subtitles_for_cutting(
     base_output: str,
-    tmp_subfolder_dir: Path,
+    tmp_video_dir: Path,
     subtitle_languages: List[str],
     start_time: float,
     duration: float,
@@ -112,7 +112,7 @@ def process_subtitles_for_cutting(
 
     Args:
         base_output: Base filename for outputs
-        tmp_subfolder_dir: Directory containing subtitle files
+        tmp_video_dir: Directory containing subtitle files
         subtitle_languages: List of language codes to process
         start_time: Start time in seconds
         duration: Duration in seconds
@@ -131,7 +131,7 @@ def process_subtitles_for_cutting(
 
     # Use optimized file finding
     subtitle_files = find_subtitle_files_optimized(
-        base_output, tmp_subfolder_dir, subtitle_languages, is_cut=False
+        base_output, tmp_video_dir, subtitle_languages, is_cut=False
     )
 
     for i, srt_file in enumerate(subtitle_files):
@@ -139,7 +139,7 @@ def process_subtitles_for_cutting(
         safe_push_log(f"📝 Processing subtitle file: {srt_file.name} ({lang})")
 
         # Process this subtitle file - use generic name for cut output
-        final_srt_file = tmp_subfolder_dir / f"subtitles-cut.{lang}.srt"
+        final_srt_file = tmp_video_dir / f"subtitles-cut.{lang}.srt"
 
         if cut_subtitle_file(srt_file, start_time, duration, final_srt_file):
             processed_subtitle_files.append((lang, final_srt_file))
