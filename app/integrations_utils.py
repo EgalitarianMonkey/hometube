@@ -1,7 +1,5 @@
 """
-Utilities for interacting with a Jellyfin server.
-
-Provides helper functions to trigger a library scan after downloads complete.
+Post-download integrations (e.g., Jellyfin refresh hooks).
 """
 
 from __future__ import annotations
@@ -10,6 +8,8 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 import requests
+
+from app.config import get_settings
 
 
 DEFAULT_TIMEOUT = 10
@@ -22,11 +22,6 @@ class JellyfinScanResult:
     success: bool
     message: str
     status_code: Optional[int] = None
-
-
-def _normalize_base_url(base_url: str) -> str:
-    """Ensure the Jellyfin base URL does not end with a trailing slash."""
-    return base_url.rstrip("/") if base_url else base_url
 
 
 def trigger_jellyfin_library_scan(
@@ -55,7 +50,7 @@ def trigger_jellyfin_library_scan(
 
     logger = log or (lambda _: None)
     client = session or requests.Session()
-    normalized_url = _normalize_base_url(base_url)
+    normalized_url = base_url.rstrip("/")
     headers = {
         "X-Emby-Token": api_key.strip(),
     }
@@ -97,3 +92,34 @@ def trigger_jellyfin_library_scan(
         message=failure_message,
         status_code=response.status_code,
     )
+
+
+def post_download_actions(
+    log: Callable[[str], None],
+    log_title: Callable[[str], None],
+) -> None:
+    """
+    Execute media server integrations after a successful download.
+
+    Currently triggers a Jellyfin full-library refresh when configured.
+    """
+    settings = get_settings()
+    base_url = (settings.JELLYFIN_BASE_URL or "").strip()
+    api_key = (settings.JELLYFIN_API_KEY or "").strip()
+
+    if not (base_url and api_key):
+        return
+
+    log("")
+    log_title("📡 Jellyfin Integration")
+
+    result = trigger_jellyfin_library_scan(
+        base_url=base_url,
+        api_key=api_key,
+        log=log,
+    )
+
+    if result.success:
+        log(result.message)
+    else:
+        log(f"⚠️ {result.message}")

@@ -131,8 +131,8 @@ services:
 
 | Variable | Default Value | Description |
 |----------|---------------|-------------|
-| `JELLYFIN_BASE_URL` | *(empty)* | Base URL of your Jellyfin server (e.g., `https://jellyfin.local:8096`) |
-| `JELLYFIN_API_KEY` | *(empty)* | Jellyfin API key used for triggering library refreshes |
+| `JELLYFIN_BASE_URL` |  | Base URL of your Jellyfin server (e.g., `https://jellyfin.local:8096`) |
+| `JELLYFIN_API_KEY` |  | Jellyfin API key used for triggering library refreshes |
 
 ## Access
 
