@@ -77,6 +77,7 @@ try:
         get_sponsorblock_config,
         build_sponsorblock_params,
     )
+    from .integrations_utils import post_download_actions
 except ImportError:
     # Fallback for direct execution from app directory
     from translations import t, configure_language
@@ -143,6 +144,7 @@ except ImportError:
         get_sponsorblock_config,
         build_sponsorblock_params,
     )
+    from integrations_utils import post_download_actions
 
 # Configuration import (must be after translations for configure_language)
 from app.config import (
@@ -1730,7 +1732,9 @@ video_subfolder = st.selectbox(
     format_func=lambda x: (
         "📁 Root folder (/)"
         if x == "/"
-        else t("create_new_folder") if x == t("create_new_folder") else f"📁 {x}"
+        else t("create_new_folder")
+        if x == t("create_new_folder")
+        else f"📁 {x}"
     ),
     # Dynamic key for reset
     key=f"folder_selectbox_{st.session_state.folder_selectbox_key}",
@@ -2336,7 +2340,6 @@ with st.expander(t("advanced_options"), expanded=False):
             "🔍 **Debug mode active**: Temporary files will be preserved in the tmp/ folder for inspection."
         )
 
-
 # === DOWNLOAD BUTTON ===
 st.markdown("\n")
 st.markdown("\n")
@@ -2821,7 +2824,6 @@ if st.session_state.get("run_seq", 0) > 0 and not st.session_state.get(
 
 # Continue with download logic if submitted
 if submitted:
-
     if not url:
         st.error(t("error_provide_url"))
         st.stop()
@@ -3579,6 +3581,9 @@ if submitted:
 
         # Log the final file size for accuracy
         push_log(f"📊 Final file size: {final_size_str} (accurate measurement)")
+
+        # Trigger media-server integrations (Jellyfin, etc.)
+        post_download_actions(safe_push_log, log_title)
 
         # Format full file path properly for display
         if video_subfolder == "/":

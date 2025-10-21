@@ -127,6 +127,13 @@ services:
 | `BROWSER_SELECT` | `chrome` | Default browser for cookie extraction |
 | `REMOVE_TMP_FILES` | `true` | Remove temporary files after processing |
 
+### Media Server Integration
+
+| Variable | Default Value | Description |
+|----------|---------------|-------------|
+| `JELLYFIN_BASE_URL` |  | Base URL of your Jellyfin server (e.g., `https://jellyfin.local:8096`) |
+| `JELLYFIN_API_KEY` |  | Jellyfin API key used for triggering library refreshes |
+
 ## Access
 
 Once the container is started, access the application via:
