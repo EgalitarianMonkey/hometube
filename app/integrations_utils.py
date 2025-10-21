@@ -80,7 +80,7 @@ def trigger_jellyfin_library_scan(
 
     try:
         response_text = response.text.strip()
-    except Exception:  # noqa: broad-except
+    except Exception:  # noqa: BLE001
         response_text = ""
 
     failure_message = (

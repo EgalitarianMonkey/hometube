@@ -1732,9 +1732,7 @@ video_subfolder = st.selectbox(
     format_func=lambda x: (
         "📁 Root folder (/)"
         if x == "/"
-        else t("create_new_folder")
-        if x == t("create_new_folder")
-        else f"📁 {x}"
+        else t("create_new_folder") if x == t("create_new_folder") else f"📁 {x}"
     ),
     # Dynamic key for reset
     key=f"folder_selectbox_{st.session_state.folder_selectbox_key}",
