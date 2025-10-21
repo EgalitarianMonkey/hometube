@@ -142,6 +142,14 @@ TRANSLATIONS = {
     "ytdlp_custom_args": "Arguments yt-dlp personnalisés",
     "ytdlp_custom_args_help": "Arguments supplémentaires en ligne de commande à passer à yt-dlp (ex: --proxy socks5://127.0.0.1:1080, --max-filesize 500M)",
     "ytdlp_custom_args_placeholder": "ex: --proxy socks5://127.0.0.1:1080 --max-filesize 500M",
+    # === INTÉGRATION JELLYFIN ===
+    "jellyfin_section_title": "🎬 &nbsp; Intégration Jellyfin",
+    "jellyfin_section_description": "Déclenchez une analyse Jellyfin après chaque téléchargement pour rendre les nouvelles vidéos disponibles rapidement.",
+    "jellyfin_base_url_label": "URL de base Jellyfin",
+    "jellyfin_base_url_help": "Exemple : https://jellyfin.local:8096 (sans /web).",
+    "jellyfin_api_key_label": "Clé API Jellyfin",
+    "jellyfin_api_key_help": "HomeTube utilise cette clé API pour s'authentifier auprès de votre serveur Jellyfin.",
+    "jellyfin_section_footer": "Laissez l'URL de base ou la clé API vide pour désactiver l'intégration. Jellyfin rafraîchira toutes les bibliothèques à chaque analyse.",
     # === STATUS MESSAGES ===
     "status_preparation": "Préparation…",
     "status_downloading": "Téléchargement…",

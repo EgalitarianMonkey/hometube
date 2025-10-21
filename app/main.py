@@ -77,6 +77,7 @@ try:
         get_sponsorblock_config,
         build_sponsorblock_params,
     )
+    from .jellyfin_integration import trigger_jellyfin_library_scan
 except ImportError:
     # Fallback for direct execution from app directory
     from translations import t, configure_language
@@ -143,6 +144,7 @@ except ImportError:
         get_sponsorblock_config,
         build_sponsorblock_params,
     )
+    from jellyfin_integration import trigger_jellyfin_library_scan
 
 # Configuration import (must be after translations for configure_language)
 from app.config import (
@@ -995,6 +997,12 @@ if "download_finished" not in st.session_state:
     )
 if "download_cancelled" not in st.session_state:
     st.session_state.download_cancelled = False
+
+# Initialize Jellyfin configuration defaults in session state
+if "jellyfin_base_url" not in st.session_state:
+    st.session_state.jellyfin_base_url = settings.JELLYFIN_BASE_URL or ""
+if "jellyfin_api_key" not in st.session_state:
+    st.session_state.jellyfin_api_key = settings.JELLYFIN_API_KEY or ""
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -2298,6 +2306,29 @@ with st.expander(t("cookies_title"), expanded=False):
         st.info("✅ Public videos will work normally")
 
 
+# === JELLYFIN INTEGRATION ===
+with st.expander(t("jellyfin_section_title"), expanded=False):
+    st.info(t("jellyfin_section_description"))
+
+    st.text_input(
+        t("jellyfin_base_url_label"),
+        value=settings.JELLYFIN_BASE_URL,
+        placeholder="https://jellyfin.local:8096",
+        help=t("jellyfin_base_url_help"),
+        key="jellyfin_base_url",
+    )
+
+    st.text_input(
+        t("jellyfin_api_key_label"),
+        value=settings.JELLYFIN_API_KEY,
+        help=t("jellyfin_api_key_help"),
+        key="jellyfin_api_key",
+        type="password",
+    )
+
+    st.caption(t("jellyfin_section_footer"))
+
+
 # === ADVANCED OPTIONS ===
 with st.expander(t("advanced_options"), expanded=False):
     st.info(t("advanced_options_presentation"))
@@ -2335,7 +2366,6 @@ with st.expander(t("advanced_options"), expanded=False):
         st.info(
             "🔍 **Debug mode active**: Temporary files will be preserved in the tmp/ folder for inspection."
         )
-
 
 # === DOWNLOAD BUTTON ===
 st.markdown("\n")
@@ -3579,6 +3609,27 @@ if submitted:
 
         # Log the final file size for accuracy
         push_log(f"📊 Final file size: {final_size_str} (accurate measurement)")
+
+        # Trigger Jellyfin library scan if configured
+        jellyfin_base_url = st.session_state.get("jellyfin_base_url")
+        if jellyfin_base_url is None:
+            jellyfin_base_url = settings.JELLYFIN_BASE_URL or ""
+        jellyfin_api_key = st.session_state.get("jellyfin_api_key")
+        if jellyfin_api_key is None:
+            jellyfin_api_key = settings.JELLYFIN_API_KEY or ""
+
+        if jellyfin_base_url.strip() and jellyfin_api_key.strip():
+            safe_push_log("")
+            log_title("📡 Jellyfin Integration")
+            result = trigger_jellyfin_library_scan(
+                base_url=jellyfin_base_url.strip(),
+                api_key=jellyfin_api_key.strip(),
+                log=safe_push_log,
+            )
+            if result.success:
+                safe_push_log(result.message)
+            else:
+                safe_push_log(f"⚠️ {result.message}")
 
         # Format full file path properly for display
         if video_subfolder == "/":

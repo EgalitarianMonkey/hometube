@@ -68,6 +68,9 @@ _DEFAULTS = {
     "BROWSER_SELECT": "chrome",  # Default browser for cookie extraction
     # === System ===
     "DEBUG": "false",
+    # === Jellyfin Integration ===
+    "JELLYFIN_BASE_URL": "",
+    "JELLYFIN_API_KEY": "",
 }
 
 
@@ -124,6 +127,10 @@ class Settings:
     CUTTING_MODE: str
     BROWSER_SELECT: str
     DEBUG: bool
+
+    # Integrations
+    JELLYFIN_BASE_URL: str
+    JELLYFIN_API_KEY: str
 
     # System info
     IN_CONTAINER: bool = IN_CONTAINER
@@ -191,6 +198,8 @@ def get_settings() -> Settings:
         CUTTING_MODE=config["CUTTING_MODE"],
         BROWSER_SELECT=config["BROWSER_SELECT"],
         DEBUG=_to_bool(config["DEBUG"], False),
+        JELLYFIN_BASE_URL=config["JELLYFIN_BASE_URL"].strip(),
+        JELLYFIN_API_KEY=config["JELLYFIN_API_KEY"].strip(),
     )
 
 
