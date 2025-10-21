@@ -36,7 +36,7 @@ The logic is implemented in pure functions without Streamlit dependencies:
 
 **`app/url_utils.py`**:
 ```python
-def should_reuse_url_info(json_path: Path) -> Tuple[bool, Optional[Dict]]:
+def is_url_info_complet(json_path: Path) -> Tuple[bool, Optional[Dict]]:
     """
     Check if existing url_info.json should be reused based on integrity.
     

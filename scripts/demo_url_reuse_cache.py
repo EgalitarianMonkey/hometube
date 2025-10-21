@@ -12,7 +12,7 @@ This script demonstrates the new intelligent caching behavior:
 import tempfile
 from pathlib import Path
 
-from app.url_utils import should_reuse_url_info, save_url_info
+from app.url_utils import is_url_info_complet, save_url_info
 
 
 def test_scenario(description: str, mock_data: dict, expected_reuse: bool):
@@ -38,7 +38,7 @@ def test_scenario(description: str, mock_data: dict, expected_reuse: bool):
                 print(f"     - {format_id}: {vcodec}")
 
         # Test reuse logic
-        should_reuse, data = should_reuse_url_info(json_path)
+        should_reuse, data = is_url_info_complet(json_path)
 
         print("\n🔍 Result:")
         print(f"   Should reuse: {should_reuse}")

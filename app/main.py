@@ -41,7 +41,7 @@ try:
         customize_video_metadata,
     )
     from .url_utils import (
-        should_reuse_url_info,
+        is_url_info_complet,
         save_url_info,
         sanitize_url,
         check_url_info_integrity,
@@ -108,7 +108,7 @@ except ImportError:
         customize_video_metadata,
     )
     from url_utils import (
-        should_reuse_url_info,
+        is_url_info_complet,
         save_url_info,
         sanitize_url,
         check_url_info_integrity,
@@ -1030,9 +1030,9 @@ def url_analysis(url: str) -> Optional[Dict]:
         json_output_path = video_tmp_dir / "url_info.json"
 
         # === CHECK IF URL_INFO.JSON ALREADY EXISTS WITH GOOD INTEGRITY ===
-        should_reuse, existing_info = should_reuse_url_info(json_output_path)
+        url_info_is_complet, existing_info = is_url_info_complet(json_output_path)
 
-        if should_reuse and existing_info:
+        if url_info_is_complet and existing_info:
             # Store in session state and return immediately (no download needed)
             st.session_state["url_info"] = existing_info
             st.session_state["url_info_path"] = str(json_output_path)

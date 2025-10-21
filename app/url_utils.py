@@ -166,7 +166,7 @@ def check_url_info_integrity(url_info: Dict) -> bool:
 # === INTELLIGENT CACHING ===
 
 
-def should_reuse_url_info(json_path: Path) -> Tuple[bool, Optional[Dict]]:
+def is_url_info_complet(json_path: Path) -> Tuple[bool, Optional[Dict]]:
     """
     Check if existing url_info.json should be reused based on integrity.
 
