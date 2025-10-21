@@ -1,7 +1,7 @@
 # Makefile for HomeTube testing and development
 # Supports both UV (fast) and standard Python (universal) workflows
 
-.PHONY: help install test test-unit test-integration test-performance test-coverage clean lint format type-check dev-setup docker-build docker-up docker-down docker-logs docker-test
+.PHONY: help install test test-unit test-integration test-performance test-coverage clean lint format type-check dev-setup docker-build docker-up docker-down docker-logs docker-test version-update
 
 # Default target
 help:
@@ -21,6 +21,7 @@ help:
 	@echo "  sync-deps        - Sync all dependency files from pyproject.toml"
 	@echo "  update-deps      - Update all dependencies and sync files (uses script)"
 	@echo "  update-reqs      - Run update-requirements.sh script directly"
+	@echo "  version-update [VERSION] - Update version (interactive or direct)"
 	@echo ""
 	@echo "🧪 Testing (universal - works with any Python environment):"
 	@echo "  test             - Run all fast tests including external (local dev)"
@@ -95,6 +96,46 @@ update-deps:
 # Run update-requirements.sh script directly
 update-reqs:
 	./scripts/update-requirements.sh
+
+# Update version in all relevant files
+version-update:
+	@VERSION_ARG="$(filter-out $@,$(MAKECMDGOALS))"; \
+	if [ -z "$$VERSION_ARG" ]; then \
+		echo "🔢 Current version: $$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')"; \
+		echo ""; \
+		read -p "Enter new version (e.g., 1.2.3 or v1.2.3): " VERSION_ARG; \
+		if [ -z "$$VERSION_ARG" ]; then \
+			echo "❌ Error: No version provided"; \
+			exit 1; \
+		fi; \
+	fi; \
+	VERSION_CLEAN=$$(echo $$VERSION_ARG | sed 's/^v//'); \
+	echo "🔄 Bumping version to $$VERSION_CLEAN..."; \
+	echo ""; \
+	echo "📝 Updating pyproject.toml..."; \
+	sed -i.bak "s/^version = \".*\"/version = \"$$VERSION_CLEAN\"/" pyproject.toml && rm pyproject.toml.bak; \
+	echo "✅ Updated pyproject.toml"; \
+	echo ""; \
+	echo "📝 Updating app/__init__.py..."; \
+	sed -i.bak "s/^__version__ = \".*\"/__version__ = \"$$VERSION_CLEAN\"/" app/__init__.py && rm app/__init__.py.bak; \
+	echo "✅ Updated app/__init__.py"; \
+	echo ""; \
+	echo "🔒 Running uv lock..."; \
+	uv lock; \
+	echo "✅ Updated uv.lock"; \
+	echo ""; \
+	echo "🎉 Version bumped to $$VERSION_CLEAN successfully!"; \
+	echo ""; \
+	echo "📋 Next steps:"; \
+	echo "  1. Review changes: git diff"; \
+	echo "  2. Commit: git add -A && git commit -m 'Bump version to $$VERSION_CLEAN'"; \
+	echo "  3. Tag: git tag -a v$$VERSION_CLEAN -m 'Release v$$VERSION_CLEAN'"; \
+	echo "  4. Push: git push && git push --tags"
+
+# Catch-all rule to prevent "No rule to make target" errors when passing version as argument
+%:
+	@:
+
 # === UNIVERSAL TESTING COMMANDS (work with any Python environment) ===
 # Run all fast tests including external (for local development with yt-dlp installed)
 test:
