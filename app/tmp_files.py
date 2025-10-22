@@ -10,7 +10,7 @@ File naming convention:
     TMP_DOWNLOAD_FOLDER/
     └── youtube-{VIDEO_ID}/
         ├── url_info.json         # Video metadata from yt-dlp
-        ├── job.json              # Processing job configuration (includes intended filename)
+        ├── status.json           # Download status and progress tracking
         ├── video-{FORMAT_ID}.{ext}   # Downloaded video track
         ├── audio-{FORMAT_ID}.{ext}   # Downloaded audio track(s)
         ├── subtitles.{lang}.srt  # Original subtitles
@@ -26,9 +26,8 @@ Benefits:
 - Supports interrupted downloads/resume
 """
 
-import json
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional
 
 
 def get_video_track_path(tmp_dir: Path, format_id: str, extension: str) -> Path:
@@ -98,19 +97,6 @@ def get_final_path(tmp_dir: Path, extension: str) -> Path:
         Path("/tmp/vid/final.mkv")
     """
     return tmp_dir / f"final.{extension}"
-
-
-def get_job_config_path(tmp_dir: Path) -> Path:
-    """
-    Get path for job configuration JSON file.
-
-    Args:
-        tmp_dir: Temporary directory for the video
-
-    Returns:
-        Path to job config file (job.json)
-    """
-    return tmp_dir / "job.json"
 
 
 def get_session_log_path(tmp_dir: Path) -> Path:
@@ -259,56 +245,3 @@ def extract_language_from_subtitle(filename: str) -> Optional[str]:
         return match.group(1)
 
     return None
-
-
-def save_job_config(tmp_dir: Path, config: Dict) -> bool:
-    """
-    Save job configuration to job.json file.
-    This stores metadata like intended filename, settings, etc.
-
-    Args:
-        tmp_dir: Temporary directory for the video
-        config: Dictionary with job configuration
-
-    Returns:
-        True if saved successfully, False otherwise
-
-    Example:
-        >>> save_job_config(Path("/tmp/vid"), {"filename": "MyVideo", "format": "mkv"})
-        True
-    """
-    try:
-        job_path = get_job_config_path(tmp_dir)
-        job_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(job_path, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
-
-        return True
-    except Exception:
-        return False
-
-
-def load_job_config(tmp_dir: Path) -> Optional[Dict]:
-    """
-    Load job configuration from job.json file.
-
-    Args:
-        tmp_dir: Temporary directory for the video
-
-    Returns:
-        Dictionary with job configuration or None if not found
-
-    Example:
-        >>> load_job_config(Path("/tmp/vid"))
-        {"filename": "MyVideo", "format": "mkv"}
-    """
-    try:
-        job_path = get_job_config_path(tmp_dir)
-        if not job_path.exists():
-            return None
-
-        with open(job_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None

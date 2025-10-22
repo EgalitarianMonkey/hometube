@@ -2687,14 +2687,6 @@ if submitted:
 
     base_output = filename  # without extension
 
-    # Save job configuration with intended filename for later use
-    job_config = {
-        "filename": base_output,
-        "url": clean_url,
-        "timestamp": time.time(),
-    }
-    tmp_files.save_job_config(tmp_video_dir, job_config)
-
     # Log download strategy
     push_log("")
     log_title("� Download Strategy")
@@ -3309,17 +3301,9 @@ if submitted:
         push_log(f"📊 Processed file size: {processed_size_mb:.2f}MiB (before copy)")
 
     try:
-        # Get intended filename from job config
-        job_config = tmp_files.load_job_config(tmp_video_dir)
-        if job_config and "filename" in job_config:
-            intended_filename = job_config["filename"]
-        else:
-            # Fallback to base_output if job config not found
-            intended_filename = base_output
-
         # Build final destination path with intended filename
         final_ext = final_source.suffix
-        final_destination = dest_dir / f"{intended_filename}{final_ext}"
+        final_destination = dest_dir / f"{base_output}{final_ext}"
 
         # Copy file with intended name
         shutil.copy2(str(final_source), str(final_destination))

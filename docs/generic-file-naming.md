@@ -10,7 +10,7 @@ HomeTube uses a **generic file naming system** for temporary files to ensure **r
 TMP_DOWNLOAD_FOLDER/
 └── youtube-{VIDEO_ID}/
     ├── url_info.json              # Video metadata from yt-dlp
-    ├── job.json                   # Processing job configuration
+    ├── status.json                # Download status and progress tracking
     ├── video-{FORMAT_ID}.{ext}    # Downloaded video (e.g., video-399.mkv)
     ├── subtitles.{lang}.srt       # Original subtitles (e.g., subtitles.en.srt)
     ├── subtitles-cut.{lang}.srt   # Cut subtitles (e.g., subtitles-cut.en.srt)
@@ -65,23 +65,37 @@ yt-dlp requires a filename template for downloads. We use a **pragmatic two-step
    
 4. Final Copy:
    💾 "final.mkv" → "/videos/Amazing Video Tutorial.mkv"
-   (Original name restored from job.json)
+   (Original name from user input or video title)
 ```
 
-## Job Configuration
+## Status Tracking
 
-The `job.json` file stores metadata about the intended output:
+The `status.json` file tracks download progress and completion:
 
 ```json
 {
-  "filename": "Amazing Video Tutorial",
   "url": "https://youtube.com/watch?v=...",
-  "timestamp": 1729435200.0
+  "id": "abc123",
+  "title": "Amazing Video Tutorial",
+  "type": "video",
+  "selected_formats": [
+    {
+      "video_format": "399+251",
+      "subtitles": ["subtitles.en.srt", "subtitles.fr.srt"],
+      "filesize_approx": 41943040,
+      "status": "completed",
+      "actual_filesize": 41993040,
+      "downloaded_at": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "last_updated": "2024-01-15T10:30:00Z"
 }
 ```
 
-This allows:
-- Restoring the original filename when copying to final destination
+This is used for:
+- Tracking download progress across sessions
+- Verifying file integrity after download
+- Resume capability for interrupted downloads
 - Tracking what video this temporary folder belongs to
 - Resume support across sessions
 
@@ -136,9 +150,9 @@ This makes it easy to identify which format was actually downloaded.
 
 ### Copy to Destination
 When copying to the final location:
-1. Read intended filename from `job.json`
+1. Use the filename from user input or video title
 2. Combine with file extension
-3. Copy: `final.mkv` → `/videos/{intended_name}.mkv`
+3. Copy: `final.mkv` → `/videos/{filename}.mkv`
 
 ## Resilience Features
 
@@ -150,12 +164,12 @@ When copying to the final location:
 ### Title Changes
 ✅ Files are independent of video title  
 ✅ Re-running with different title still works  
-✅ Original name comes from `job.json`  
+✅ Filename from user input remains consistent  
 
 ### Special Characters
 ✅ No issues with Unicode, emojis, etc.  
 ✅ Generic names are filesystem-safe  
-✅ Original name preserved in `job.json`  
+✅ User-provided filename used for final copy  
 
 ### Cache Preservation
 ✅ **`video-{FORMAT_ID}.{ext}` is always preserved** for future reuse  
