@@ -23,6 +23,16 @@ def in_container() -> bool:
 IN_CONTAINER = in_container()
 
 
+# === YouTube Client Fallback Chain ===
+# YouTube client fallback chain (ordered by reliability)
+# Note: Android client removed as it requires po_token (not implemented)
+YOUTUBE_CLIENT_FALLBACKS = [
+    {"name": "default", "args": []},
+    {"name": "ios", "args": ["--extractor-args", "youtube:player_client=ios"]},
+    {"name": "web", "args": ["--extractor-args", "youtube:player_client=web"]},
+]
+
+
 # === Early .env Loading (only if not in container) ===
 if not IN_CONTAINER:
     env_file = Path(__file__).resolve().parent.parent / ".env"
@@ -59,7 +69,8 @@ _DEFAULTS = {
     "EMBED_CHAPTERS": "true",  # Embed chapters by default
     "EMBED_SUBTITLES": "true",  # Embed subtitles by default
     # === Debug Options ===
-    "REMOVE_TMP_FILES": "false",  # Keep temporary files by default for debugging and resilience (set to true to auto-cleanup)
+    "REMOVE_TMP_FILES_AFTER_DOWNLOAD": "false",  # Keep temporary files by default for debugging and resilience (set to true to auto-cleanup after successful download)
+    "NEW_DOWNLOAD_WITHOUT_TMP_FILES": "false",  # Clean tmp folder before new download (set to true to start fresh, useful after errors)
     # === Safety Options ===
     "ALLOW_OVERWRITE_EXISTING_VIDEO": "false",  # Prevent overwriting existing videos by default (set to true to allow overwrites)
     # === Advanced Options ===
@@ -121,7 +132,8 @@ class Settings:
     EMBED_SUBTITLES: bool
 
     # Debug & Advanced
-    REMOVE_TMP_FILES: bool
+    REMOVE_TMP_FILES_AFTER_DOWNLOAD: bool
+    NEW_DOWNLOAD_WITHOUT_TMP_FILES: bool
     ALLOW_OVERWRITE_EXISTING_VIDEO: bool
     YTDLP_CUSTOM_ARGS: str
     CUTTING_MODE: str
@@ -190,7 +202,12 @@ def get_settings() -> Settings:
         QUALITY_DOWNGRADE=_to_bool(config["QUALITY_DOWNGRADE"], True),
         EMBED_CHAPTERS=_to_bool(config["EMBED_CHAPTERS"], True),
         EMBED_SUBTITLES=_to_bool(config["EMBED_SUBTITLES"], True),
-        REMOVE_TMP_FILES=_to_bool(config["REMOVE_TMP_FILES"], False),
+        REMOVE_TMP_FILES_AFTER_DOWNLOAD=_to_bool(
+            config["REMOVE_TMP_FILES_AFTER_DOWNLOAD"], False
+        ),
+        NEW_DOWNLOAD_WITHOUT_TMP_FILES=_to_bool(
+            config["NEW_DOWNLOAD_WITHOUT_TMP_FILES"], False
+        ),
         ALLOW_OVERWRITE_EXISTING_VIDEO=_to_bool(
             config["ALLOW_OVERWRITE_EXISTING_VIDEO"], False
         ),
@@ -354,7 +371,8 @@ def print_config_summary() -> None:
     print("\n⚙️ Advanced:")
     print(f"   Cutting mode: {s.CUTTING_MODE}")
     print(f"   Browser select: {s.BROWSER_SELECT}")
-    print(f"   Remove temp files: {s.REMOVE_TMP_FILES}")
+    print(f"   Remove temp files after download: {s.REMOVE_TMP_FILES_AFTER_DOWNLOAD}")
+    print(f"   New download without tmp files: {s.NEW_DOWNLOAD_WITHOUT_TMP_FILES}")
     print(f"   Allow overwrite existing: {s.ALLOW_OVERWRITE_EXISTING_VIDEO}")
     if s.YTDLP_CUSTOM_ARGS:
         print(f"   Custom yt-dlp args: {s.YTDLP_CUSTOM_ARGS}")

@@ -163,7 +163,10 @@ make test-failed
 
 ```bash
 # Keep temporary files for debugging (useful for troubleshooting subtitle issues)
-export REMOVE_TMP_FILES=false
+export REMOVE_TMP_FILES_AFTER_DOWNLOAD=false
+
+# Don't clean tmp before downloads (preserve cache)
+export NEW_DOWNLOAD_WITHOUT_TMP_FILES=false
 
 # Enable debug mode for detailed logging
 export DEBUG=1
@@ -182,23 +185,28 @@ export SUBTITLES_CHOICES=en,fr,es
 ```bash
 # Full debug mode with file preservation
 export DEBUG=1
-export REMOVE_TMP_FILES=false
+export REMOVE_TMP_FILES_AFTER_DOWNLOAD=false
 python run.py
 
 # Test subtitle processing (keeps all .srt/.vtt files)
-export REMOVE_TMP_FILES=false
+export REMOVE_TMP_FILES_AFTER_DOWNLOAD=false
 make test
 
 # Development with custom paths
 export VIDEOS_FOLDER=./test-videos
 export TMP_DOWNLOAD_FOLDER=./test-tmp
-export REMOVE_TMP_FILES=false
+export REMOVE_TMP_FILES_AFTER_DOWNLOAD=false
 streamlit run app/main.py
+
+# Force fresh download (useful after errors)
+export NEW_DOWNLOAD_WITHOUT_TMP_FILES=true
+python run.py
 ```
 
 **🔍 Debug Mode Benefits:**
 
-- **REMOVE_TMP_FILES=false**: Keeps all temporary files (.srt, .vtt, .part, intermediate outputs) in `tmp/` folder
+- **REMOVE_TMP_FILES_AFTER_DOWNLOAD=false**: Keeps all temporary files (.srt, .vtt, .part, intermediate outputs) in `tmp/` folder
+- **NEW_DOWNLOAD_WITHOUT_TMP_FILES=false**: Reuses cached files for intelligent caching (set to `true` for fresh start)
 - **DEBUG=1**: Enables detailed logging and configuration summary
 - **Custom paths**: Separate development files from production
 

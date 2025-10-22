@@ -342,7 +342,7 @@ class TestSubtitleUtils:
         # Test processing
         result = process_subtitles_for_cutting(
             base_output=base_name,
-            tmp_subfolder_dir=temp_dir,
+            tmp_video_dir=temp_dir,
             subtitle_languages=["en"],
             start_time=0.0,
             duration=15.0,
@@ -363,7 +363,7 @@ class TestSubtitleUtils:
         """Test processing when no subtitle files are found."""
         result = process_subtitles_for_cutting(
             base_output="NonExistent",
-            tmp_subfolder_dir=temp_dir,
+            tmp_video_dir=temp_dir,
             subtitle_languages=["en", "fr"],
             start_time=0.0,
             duration=10.0,

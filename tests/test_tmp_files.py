@@ -49,13 +49,6 @@ class TestTmpFileNaming:
         path = get_final_path(Path("/tmp/test"), "mp4")
         assert path == Path("/tmp/test/final.mp4")
 
-    def test_get_job_config_path(self, tmp_path):
-        """Should generate correct job config path"""
-        from app.tmp_files import get_job_config_path
-
-        path = get_job_config_path(tmp_path)
-        assert path == tmp_path / "job.json"
-
     def test_get_session_log_path(self, tmp_path):
         """Should generate correct session log path"""
         from app.tmp_files import get_session_log_path
@@ -145,33 +138,6 @@ class TestTmpFileNaming:
         assert extract_language_from_subtitle("subtitles-cut.en.srt") == "en"
         assert extract_language_from_subtitle("subtitles-cut.fr.srt") == "fr"
         assert extract_language_from_subtitle("other.srt") is None
-
-    def test_save_and_load_job_config(self, tmp_path):
-        """Should save and load job configuration"""
-        from app.tmp_files import save_job_config, load_job_config
-
-        config = {
-            "filename": "MyVideo",
-            "url": "https://example.com",
-            "timestamp": 12345,
-        }
-
-        # Save
-        result = save_job_config(tmp_path, config)
-        assert result is True
-
-        # Load
-        loaded = load_job_config(tmp_path)
-        assert loaded is not None
-        assert loaded["filename"] == "MyVideo"
-        assert loaded["url"] == "https://example.com"
-
-    def test_load_job_config_not_exists(self, tmp_path):
-        """Should return None when job config doesn't exist"""
-        from app.tmp_files import load_job_config
-
-        result = load_job_config(tmp_path)
-        assert result is None
 
     def test_nonexistent_directory(self, tmp_path):
         """Should handle nonexistent directories gracefully"""

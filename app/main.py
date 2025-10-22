@@ -1,5 +1,4 @@
 # Standard library imports
-import json
 import os
 import re
 import shutil
@@ -26,6 +25,7 @@ try:
         ensure_dir,
         should_remove_tmp_files,
         get_unique_video_folder_name_from_url,
+        clean_all_tmp_folders,
     )
     from .display_utils import (
         fmt_hhmmss,
@@ -41,10 +41,9 @@ try:
         customize_video_metadata,
     )
     from .url_utils import (
-        should_reuse_url_info,
-        save_url_info,
+        is_url_info_complet,
         sanitize_url,
-        check_url_info_integrity,
+        build_url_info,
     )
     from . import tmp_files
     from .subtitles_utils import (
@@ -78,6 +77,13 @@ try:
         build_sponsorblock_params,
     )
     from .integrations_utils import post_download_actions
+    from .status_utils import (
+        create_initial_status,
+        add_selected_format,
+        update_format_status,
+        mark_format_error,
+        get_first_completed_format,
+    )
 except ImportError:
     # Fallback for direct execution from app directory
     from translations import t, configure_language
@@ -93,6 +99,7 @@ except ImportError:
         ensure_dir,
         should_remove_tmp_files,
         get_unique_video_folder_name_from_url,
+        clean_all_tmp_folders,
     )
     from display_utils import (
         fmt_hhmmss,
@@ -108,10 +115,9 @@ except ImportError:
         customize_video_metadata,
     )
     from url_utils import (
-        should_reuse_url_info,
-        save_url_info,
+        is_url_info_complet,
         sanitize_url,
-        check_url_info_integrity,
+        build_url_info,
     )
     import tmp_files
     from subtitles_utils import (
@@ -145,6 +151,13 @@ except ImportError:
         build_sponsorblock_params,
     )
     from integrations_utils import post_download_actions
+    from status_utils import (
+        create_initial_status,
+        add_selected_format,
+        update_format_status,
+        mark_format_error,
+        get_first_completed_format,
+    )
 
 # Configuration import (must be after translations for configure_language)
 from app.config import (
@@ -152,6 +165,7 @@ from app.config import (
     ensure_folders_exist,
     print_config_summary,
     get_default_subtitle_languages,
+    YOUTUBE_CLIENT_FALLBACKS,
 )
 
 # === CONSTANTS ===
@@ -209,14 +223,6 @@ SUPPORTED_BROWSERS = [
     "whale",
 ]
 
-# YouTube client fallback chain (ordered by reliability)
-YOUTUBE_CLIENT_FALLBACKS = [
-    {"name": "default", "args": []},
-    {"name": "android", "args": ["--extractor-args", "youtube:player_client=android"]},
-    {"name": "ios", "args": ["--extractor-args", "youtube:player_client=ios"]},
-    {"name": "web", "args": ["--extractor-args", "youtube:player_client=web"]},
-]
-
 # Profile resolution constants
 CACHE_EXPIRY_MINUTES = 5
 MAX_OPTIMAL_PROFILES = 10
@@ -253,11 +259,16 @@ def _process_quality_strategy(quality_strategy: str, url: str) -> None:
         return
 
     try:
-        # Get or create unique folder for this video URL
-        video_tmp_dir = get_video_tmp_dir(url)
+        # Get tmp directory from session state (set during url_analysis)
+        tmp_video_dir = st.session_state.get("tmp_video_dir")
+        if not tmp_video_dir:
+            # Reset profiles to empty to avoid showing stale data
+            st.session_state.optimal_format_profiles = []
+            st.session_state.chosen_format_profiles = []
+            return
 
         # Check if we already have a cached download - skip format probing if so
-        existing_video_tracks = tmp_files.find_video_tracks(video_tmp_dir)
+        existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
         if existing_video_tracks:
             safe_push_log(f"✅ Found cached video: {existing_video_tracks[0].name}")
             safe_push_log("⚡ Skipping format probing - will reuse cached file")
@@ -266,18 +277,23 @@ def _process_quality_strategy(quality_strategy: str, url: str) -> None:
             st.session_state.chosen_format_profiles = []
             return
 
-        # Check if url_info.json exists in the unique video folder
-        json_path = video_tmp_dir / "url_info.json"
-        if not json_path.exists():
-            # Need to analyze URL first (will create the folder and file)
-            url_info = url_analysis(url)
-            if not url_info:
-                safe_push_log("⚠️ Failed to analyze URL for quality strategy")
-                return
-        else:
-            # Load existing url_info
-            with open(json_path, "r", encoding="utf-8") as f:
-                url_info = json.load(f)
+        # Get url_info from session state (already loaded by url_analysis)
+        url_info = st.session_state.get("url_info")
+        if not url_info:
+            # Reset profiles to empty to avoid showing stale data
+            st.session_state.optimal_format_profiles = []
+            st.session_state.chosen_format_profiles = []
+            return
+
+        # Get JSON path from session state
+        json_path_str = st.session_state.get("url_info_path")
+        if not json_path_str:
+            # Reset profiles to empty to avoid showing stale data
+            st.session_state.optimal_format_profiles = []
+            st.session_state.chosen_format_profiles = []
+            return
+
+        json_path = Path(json_path_str)
 
         # Get optimal profiles using new strategy
         if quality_strategy in ["auto_best", "best_no_fallback", "choose_profile"]:
@@ -473,18 +489,19 @@ def _get_optimal_profiles_from_json(url: str) -> List[Dict]:
         List of complete profile dicts ready for download, or empty list if error
     """
     try:
-        # Get or create unique folder for this video URL
-        video_tmp_dir = get_video_tmp_dir(url)
+        # Get tmp directory and url_info from session state (set during url_analysis)
+        tmp_video_dir = st.session_state.get("tmp_video_dir")
+        url_info = st.session_state.get("url_info")
+        json_path_str = st.session_state.get("url_info_path")
 
-        # Check if url_info.json exists in the unique video folder
-        json_path = video_tmp_dir / "url_info.json"
+        if not tmp_video_dir or not url_info or not json_path_str:
+            safe_push_log("⚠️ Video info not initialized. Analyze URL first.")
+            return []
+
+        json_path = Path(json_path_str)
         if not json_path.exists():
             safe_push_log("⚠️ url_info.json not found, cannot use profile strategy")
             return []
-
-        # Load url_info to analyze audio tracks
-        with open(json_path, "r", encoding="utf-8") as f:
-            url_info = json.load(f)
 
         # Get language preferences from settings
         language_primary = settings.LANGUAGE_PRIMARY or "en"
@@ -552,7 +569,7 @@ def _get_optimal_profiles_from_json(url: str) -> List[Dict]:
 
 def smart_download_with_profiles(
     base_output: str,
-    tmp_subfolder_dir: Path,
+    tmp_video_dir: Path,
     embed_chapters: bool,
     embed_subs: bool,
     force_mp4: bool,
@@ -644,7 +661,7 @@ def smart_download_with_profiles(
     return _execute_profile_downloads(
         profiles_to_try,
         base_output,
-        tmp_subfolder_dir,
+        tmp_video_dir,
         embed_chapters,
         embed_subs,
         ytdlp_custom_args,
@@ -709,16 +726,64 @@ def _try_profile_with_clients(
     status_placeholder,
     progress_placeholder,
     info_placeholder,
+    preferred_client: str = None,
 ) -> bool:
-    """Try downloading with all YouTube client fallbacks for a profile."""
-    for client_idx, client in enumerate(YOUTUBE_CLIENT_FALLBACKS, 1):
+    """
+    Try downloading with all YouTube client fallbacks for a profile.
+
+    Args:
+        cmd_base: Base yt-dlp command
+        url: Video URL
+        cookies_part: Cookie arguments
+        cookies_available: Whether cookies are configured
+        status_placeholder: Streamlit status placeholder
+        progress_placeholder: Streamlit progress placeholder
+        info_placeholder: Streamlit info placeholder
+        preferred_client: Name of client that worked for url_info.json (tried first)
+
+    Returns:
+        True if download succeeded, False otherwise
+    """
+    # Build ordered list of clients, prioritizing the one that worked for url_info
+    clients_to_try = []
+
+    if preferred_client:
+        # Find the preferred client configuration
+        preferred_config = next(
+            (c for c in YOUTUBE_CLIENT_FALLBACKS if c["name"] == preferred_client), None
+        )
+
+        if preferred_config:
+            safe_push_log(
+                f"🎯 Prioritizing {preferred_client} client (used for URL analysis)"
+            )
+            clients_to_try.append(preferred_config)
+
+            # Add remaining clients (except the preferred one)
+            clients_to_try.extend(
+                [c for c in YOUTUBE_CLIENT_FALLBACKS if c["name"] != preferred_client]
+            )
+        else:
+            # Preferred client not found, use default order
+            clients_to_try = YOUTUBE_CLIENT_FALLBACKS
+    else:
+        # No preference, use default order
+        clients_to_try = YOUTUBE_CLIENT_FALLBACKS
+
+    # Try each client in order
+    for client_idx, client in enumerate(clients_to_try, 1):
         client_name = client["name"]
         client_args = client["args"]
+
+        # Show priority indicator for first attempt
+        priority_indicator = "🎯 " if client_idx == 1 and preferred_client else ""
 
         # Try with cookies first if available
         if cookies_available:
             if status_placeholder:
-                status_placeholder.info(f"🍪 {client_name.title()} + cookies")
+                status_placeholder.info(
+                    f"{priority_indicator}🍪 {client_name.title()} + cookies"
+                )
 
             cmd = cmd_base + client_args + cookies_part + [url]
             ret = run_cmd(
@@ -731,7 +796,9 @@ def _try_profile_with_clients(
 
         # Try without cookies
         if status_placeholder:
-            status_placeholder.info(f"🚀 {client_name.title()} client")
+            status_placeholder.info(
+                f"{priority_indicator}🚀 {client_name.title()} client"
+            )
 
         cmd = cmd_base + client_args + [url]
         ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
@@ -746,7 +813,7 @@ def _try_profile_with_clients(
 def _build_profile_command(
     profile: Dict,
     base_output: str,
-    tmp_subfolder_dir: Path,
+    tmp_video_dir: Path,
     embed_chapters: bool,
     embed_subs: bool,
     ytdlp_custom_args: str,
@@ -772,7 +839,7 @@ def _build_profile_command(
     # Build base command
     cmd_base = build_base_ytdlp_command(
         base_output,
-        tmp_subfolder_dir,
+        tmp_video_dir,
         format_string,
         embed_chapters,
         embed_subs,
@@ -842,7 +909,7 @@ def _get_profile_codec_info(profile: Dict) -> List[str]:
 def _execute_profile_downloads(
     profiles_to_try: List[Dict],
     base_output: str,
-    tmp_subfolder_dir: Path,
+    tmp_video_dir: Path,
     embed_chapters: bool,
     embed_subs: bool,
     ytdlp_custom_args: str,
@@ -862,6 +929,23 @@ def _execute_profile_downloads(
     log_title("🚀 Starting download attempts...")
     safe_push_log(f"profiles_to_try: {profiles_to_try}")
 
+    # Try to read preferred YouTube client from url_info.json
+    preferred_client = None
+    try:
+        url_info_path = tmp_video_dir / "url_info.json"
+        if url_info_path.exists():
+            from app.url_utils import load_url_info_from_file
+
+            url_info = load_url_info_from_file(url_info_path)
+            if url_info:
+                preferred_client = url_info.get("_hometube_successful_client")
+                if preferred_client:
+                    safe_push_log(
+                        f"🎯 Will prioritize {preferred_client} client (used for URL analysis)"
+                    )
+    except Exception as e:
+        safe_push_log(f"⚠️ Could not read preferred client from url_info.json: {e}")
+
     for profile_idx, profile in enumerate(profiles_to_try, 1):
         safe_push_log("")
         safe_push_log(
@@ -879,7 +963,7 @@ def _execute_profile_downloads(
         cmd_base = _build_profile_command(
             profile,
             base_output,
-            tmp_subfolder_dir,
+            tmp_video_dir,
             embed_chapters,
             embed_subs,
             ytdlp_custom_args,
@@ -891,6 +975,16 @@ def _execute_profile_downloads(
         # Store current profile for error diagnostics
         st.session_state["current_attempting_profile"] = profile["label"]
 
+        # Update status.json - mark format as "downloading"
+        format_id = profile.get("format_id", "unknown")
+        filesize_approx = profile.get("filesize_approx", 0)
+        add_selected_format(
+            tmp_video_dir=tmp_video_dir,
+            video_format=format_id,
+            subtitles=[f"subtitles.{lang}.srt" for lang in subs_selected],
+            filesize_approx=filesize_approx,
+        )
+
         # Try all YouTube clients with this profile
         success = _try_profile_with_clients(
             cmd_base,
@@ -900,6 +994,7 @@ def _execute_profile_downloads(
             status_placeholder,
             progress_placeholder,
             info_placeholder,
+            preferred_client,
         )
 
         if success:
@@ -926,6 +1021,14 @@ def _execute_profile_downloads(
             )
 
             return 0, ""
+
+        # Mark format as error in status.json
+        format_id = profile.get("format_id", "unknown")
+        mark_format_error(
+            tmp_video_dir=tmp_video_dir,
+            video_format=format_id,
+            error_message="Download failed - all clients exhausted",
+        )
 
         # Handle profile failure
         should_continue = _handle_profile_failure(
@@ -999,12 +1102,75 @@ if "download_cancelled" not in st.session_state:
     st.session_state.download_cancelled = False
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+def init_url_workspace(
+    clean_url: str,
+    json_output_path: Path,
+    video_tmp_dir: Path,
+) -> Optional[Dict]:
+    """
+    Initialize workspace for a new URL by fetching video info and creating status files.
+
+    This function:
+    1. Builds cookies parameters from config
+    2. Fetches video/playlist info from yt-dlp
+    3. Creates url_info.json with integrity checks
+    4. Creates initial status.json for download tracking
+    5. Updates session state with the new info
+
+    Args:
+        clean_url: Sanitized video URL
+        json_output_path: Path where url_info.json will be saved
+        video_tmp_dir: Temporary directory for this video
+
+    Returns:
+        Dict with video/playlist information or error dict
+    """
+    # Build cookies parameters from config (important to avoid bot detection)
+    # Use config-based cookies since session_state may not be available yet
+    cookies_params = build_cookies_params_from_config()
+
+    # Download and build url_info with integrity checks
+    info = build_url_info(
+        clean_url=clean_url,
+        json_output_path=json_output_path,
+        cookies_params=cookies_params,
+        youtube_cookies_file_path=YOUTUBE_COOKIES_FILE_PATH,
+        cookies_from_browser=COOKIES_FROM_BROWSER,
+        youtube_clients=YOUTUBE_CLIENT_FALLBACKS,
+    )
+
+    # Store in session state for global access
+    st.session_state["url_info"] = info
+    st.session_state["url_info_path"] = str(json_output_path)
+
+    # Create initial status.json file
+    if info and "error" not in info:
+        video_id = info.get("id", "unknown")
+        title = info.get("title", "Unknown")
+        content_type = "playlist" if info.get("_type") == "playlist" else "video"
+
+        create_initial_status(
+            url=clean_url,
+            video_id=video_id,
+            title=title,
+            content_type=content_type,
+            tmp_video_dir=video_tmp_dir,
+        )
+
+    return info
+
+
 def url_analysis(url: str) -> Optional[Dict]:
     """
     Analyze URL and fetch comprehensive video/playlist information using yt-dlp.
-    Cached for 1 hour to avoid repeated API calls.
-    Saves JSON to tmp/url_info.json for use with yt-dlp's --load-info-json.
+    Always initializes session state variables and checks for existing url_info.json.
+
+    This function:
+    1. Sanitizes URL and creates unique tmp folder
+    2. Sets all session state variables (tmp_video_dir, unique_folder_name, etc.)
+    3. Checks if url_info.json exists with good integrity
+    4. If exists: loads it and returns
+    5. If not: fetches from yt-dlp via init_url_workspace()
 
     Args:
         url: Video or playlist URL to analyze
@@ -1020,318 +1186,39 @@ def url_analysis(url: str) -> Optional[Dict]:
         clean_url = sanitize_url(url)
         unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
         video_tmp_dir = TMP_DOWNLOAD_FOLDER / unique_folder_name
+
+        # Check if NEW_DOWNLOAD_WITHOUT_TMP_FILES is enabled (UI override or config default)
+        clean_tmp_before_download = st.session_state.get(
+            "new_download_without_tmp_files", settings.NEW_DOWNLOAD_WITHOUT_TMP_FILES
+        )
+        if clean_tmp_before_download and video_tmp_dir.exists():
+            safe_push_log(f"🗑️ Removing tmp files for fresh download: {video_tmp_dir}")
+            import shutil
+
+            shutil.rmtree(video_tmp_dir)
+
         ensure_dir(video_tmp_dir)
 
-        # Store in session state for reuse across the application
-        st.session_state["video_tmp_dir"] = video_tmp_dir
+        # ALWAYS store in session state for reuse across the application
+        st.session_state["tmp_video_dir"] = video_tmp_dir
         st.session_state["unique_folder_name"] = unique_folder_name
+        st.session_state["current_video_url"] = clean_url
 
         # Prepare output path for JSON file in the unique video folder
         json_output_path = video_tmp_dir / "url_info.json"
 
         # === CHECK IF URL_INFO.JSON ALREADY EXISTS WITH GOOD INTEGRITY ===
-        should_reuse, existing_info = should_reuse_url_info(json_output_path)
+        url_info_is_complet, existing_info = is_url_info_complet(json_output_path)
 
-        if should_reuse and existing_info:
+        if url_info_is_complet and existing_info:
             # Store in session state and return immediately (no download needed)
             st.session_state["url_info"] = existing_info
             st.session_state["url_info_path"] = str(json_output_path)
             return existing_info
-
-        # Build cookies parameters from config (important to avoid bot detection)
-        # Use config-based cookies since session_state may not be available yet
-        cookies_params = build_cookies_params_from_config()
-
-        # Log cookie status for debugging
-        if cookies_params:
-            if "--cookies" in cookies_params:
-                safe_push_log("🍪 URL analysis using cookies file")
-            elif "--cookies-from-browser" in cookies_params:
-                safe_push_log("🍪 URL analysis using browser cookies")
         else:
-            safe_push_log("⚠️ URL analysis without cookies - may trigger bot detection")
+            # Initialize workspace and fetch video info
+            return init_url_workspace(clean_url, json_output_path, video_tmp_dir)
 
-        # Run yt-dlp with JSON output, skip download, flat playlist mode
-        cmd = [
-            "yt-dlp",
-            "-J",  # JSON output
-            "--skip-download",  # Don't download
-            "--flat-playlist",  # For playlists, get basic info without extracting all videos
-            "--playlist-end",
-            "1",  # Only first video for quick playlist detection
-            clean_url,
-        ]
-
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-
-        if result.returncode != 0:
-            # Check if error is authentication-related (age restriction, bot detection, etc.)
-            error_msg = result.stderr if result.stderr else ""
-            needs_auth = any(
-                [
-                    "Sign in to confirm" in error_msg,
-                    "confirm your age" in error_msg,
-                    "age" in error_msg.lower() and "restricted" in error_msg.lower(),
-                    "inappropriate for some users" in error_msg,
-                    "requires authentication" in error_msg,
-                    "login required" in error_msg,
-                ]
-            )
-
-            # If first attempt failed and we have cookies available, try with cookies
-            if needs_auth and cookies_params:
-                safe_push_log("🔐 Authentication required, retrying with cookies...")
-                cmd_with_auth = [
-                    "yt-dlp",
-                    "-J",
-                    "--skip-download",
-                    "--flat-playlist",
-                    "--playlist-end",
-                    "1",
-                    "--user-agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "--extractor-retries",
-                    "3",
-                    "--no-cache-dir",
-                    *cookies_params,
-                    clean_url,
-                ]
-
-                result = subprocess.run(
-                    cmd_with_auth, capture_output=True, text=True, timeout=45
-                )
-
-                if result.returncode == 0:
-                    safe_push_log("✅ Authentication successful with cookies")
-                    # Continue to JSON parsing below
-                else:
-                    error_msg = (
-                        result.stderr[:400] if result.stderr else "Unknown error"
-                    )
-
-            # If still failing or no cookies available, try enhanced retry without auth
-            if result.returncode != 0:
-                safe_push_log("⚠️ Retrying with enhanced options...")
-                cmd_retry = [
-                    "yt-dlp",
-                    "-J",
-                    "--skip-download",
-                    "--flat-playlist",
-                    "--playlist-end",
-                    "1",
-                    "--user-agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "--extractor-retries",
-                    "3",
-                    "--no-cache-dir",
-                ]
-                # Only add cookies if we haven't tried them yet
-                if not needs_auth and cookies_params:
-                    cmd_retry.extend(cookies_params)
-
-                cmd_retry.append(clean_url)
-
-                result = subprocess.run(
-                    cmd_retry, capture_output=True, text=True, timeout=45
-                )
-
-            if result.returncode != 0:
-                error_msg = result.stderr[:400] if result.stderr else "Unknown error"
-
-                # Check for bot detection error
-                if "Sign in to confirm you're not a bot" in error_msg:
-                    # Provide helpful guidance based on current setup
-                    cookie_file_exists = (
-                        YOUTUBE_COOKIES_FILE_PATH
-                        and Path(YOUTUBE_COOKIES_FILE_PATH).exists()
-                    )
-                    browser_configured = COOKIES_FROM_BROWSER and is_valid_browser(
-                        COOKIES_FROM_BROWSER
-                    )
-
-                    help_msg = "⚠️ YouTube bot detection triggered.\n\n"
-
-                    if not cookie_file_exists and not browser_configured:
-                        help_msg += (
-                            "🔐 **No cookies configured!** This is likely why you're blocked.\n\n"
-                            "**Solutions:**\n"
-                            "1. 📁 **Add cookies file** (recommended for servers):\n"
-                            "   - Export cookies from your browser (see docs/usage.md)\n"
-                            "   - Place file at: `cookies/youtube_cookies.txt`\n"
-                            "   - Set YOUTUBE_COOKIES_FILE_PATH in .env\n\n"
-                            "2. 🌐 **Use browser cookies** (local development):\n"
-                            "   - Set COOKIES_FROM_BROWSER=chrome (or firefox, brave, etc.)\n"
-                            "   - Works if browser is on same machine\n\n"
-                            "3. ⏳ **Wait a few minutes** and try again\n\n"
-                            "[Documentation](docs/usage.md#-authentication--private-content)"
-                        )
-                    else:
-                        help_msg += (
-                            "🔐 Cookies are configured but YouTube still blocked the request.\n\n"
-                            "**Try these solutions:**\n"
-                            "1. 🔄 **Refresh your cookies** (they may be expired)\n"
-                            "2. ⏳ **Wait 5-10 minutes** before retrying\n"
-                            "3. 🌐 **Try from a different IP** if using VPN/proxy\n"
-                            "4. 🍪 **Verify cookies file is valid** (not corrupted)\n\n"
-                        )
-
-                        if cookie_file_exists:
-                            help_msg += f"📁 Current cookies file: `{YOUTUBE_COOKIES_FILE_PATH}`\n"
-                        if browser_configured:
-                            help_msg += (
-                                f"🌐 Browser configured: `{COOKIES_FROM_BROWSER}`\n"
-                            )
-
-                    return {"error": help_msg}
-
-                # Check for age restriction error
-                elif "confirm your age" in error_msg or (
-                    "age" in error_msg.lower() and "restricted" in error_msg.lower()
-                ):
-                    cookie_file_exists = (
-                        YOUTUBE_COOKIES_FILE_PATH
-                        and Path(YOUTUBE_COOKIES_FILE_PATH).exists()
-                    )
-                    browser_configured = COOKIES_FROM_BROWSER and is_valid_browser(
-                        COOKIES_FROM_BROWSER
-                    )
-
-                    help_msg = "🔞 Age-restricted content.\n\n"
-
-                    if not cookie_file_exists and not browser_configured:
-                        help_msg += (
-                            "🔐 **Authentication required!** This video requires sign-in to verify age.\n\n"
-                            "**Solutions:**\n"
-                            "1. 📁 **Add cookies file** (recommended):\n"
-                            "   - Export cookies from your browser while signed in to YouTube\n"
-                            "   - Place file at: `cookies/youtube_cookies.txt`\n"
-                            "   - Set YOUTUBE_COOKIES_FILE_PATH in .env\n\n"
-                            "2. 🌐 **Use browser cookies**:\n"
-                            "   - Set COOKIES_FROM_BROWSER=chrome (or firefox, brave, etc.)\n"
-                            "   - Make sure you're signed in to YouTube in that browser\n\n"
-                            "[Documentation](docs/usage.md#-authentication--private-content)"
-                        )
-                    else:
-                        help_msg += (
-                            "🔐 Cookies are configured but age verification failed.\n\n"
-                            "**Possible causes:**\n"
-                            "1. 🔄 **Cookies may be expired** - refresh them from your browser\n"
-                            "2. 👤 **Not signed in** - make sure you're logged into YouTube when exporting cookies\n"
-                            "3. 🔞 **Account age verification** - your YouTube account may need age verification\n\n"
-                        )
-
-                        if cookie_file_exists:
-                            help_msg += f"📁 Current cookies file: `{YOUTUBE_COOKIES_FILE_PATH}`\n"
-                        if browser_configured:
-                            help_msg += (
-                                f"🌐 Browser configured: `{COOKIES_FROM_BROWSER}`\n"
-                            )
-
-                    return {"error": help_msg}
-
-                return {"error": f"yt-dlp failed: {error_msg}"}
-
-        # Parse JSON output
-        try:
-            info = json.loads(result.stdout)
-
-            # === INTEGRITY CHECK WITH SMART RETRY ===
-            # Check if we got premium formats (AV1/VP9) for videos (not playlists)
-            is_video = info.get("_type") == "video" or "duration" in info
-
-            if is_video:
-                has_premium_formats = check_url_info_integrity(info)
-
-                if not has_premium_formats:
-                    safe_push_log(
-                        "⚠️ Limited formats detected (h264 only), retrying for premium formats..."
-                    )
-
-                    # Try up to 2 additional attempts with different strategies
-                    best_info = info  # Keep first result as fallback
-                    max_retries = 2
-
-                    for retry_num in range(1, max_retries + 1):
-                        safe_push_log(
-                            f"🔄 Retry {retry_num}/{max_retries} for premium formats..."
-                        )
-
-                        # Build retry command with enhanced parameters
-                        retry_cmd = [
-                            "yt-dlp",
-                            "-J",
-                            "--skip-download",
-                            "--user-agent",
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                            "--extractor-retries",
-                            "3",
-                            "--no-cache-dir",  # Force fresh fetch
-                        ]
-
-                        # Add cookies if available
-                        if cookies_params:
-                            retry_cmd.extend(cookies_params)
-
-                        retry_cmd.append(clean_url)
-
-                        try:
-                            retry_result = subprocess.run(
-                                retry_cmd, capture_output=True, text=True, timeout=45
-                            )
-
-                            if retry_result.returncode == 0:
-                                retry_info = json.loads(retry_result.stdout)
-
-                                # Check if this attempt got premium formats
-                                if check_url_info_integrity(retry_info):
-                                    safe_push_log(
-                                        f"✅ Premium formats found on retry {retry_num}"
-                                    )
-                                    info = retry_info
-                                    break
-                                else:
-                                    # Keep the result with most formats
-                                    retry_formats_count = len(
-                                        retry_info.get("formats", [])
-                                    )
-                                    best_formats_count = len(
-                                        best_info.get("formats", [])
-                                    )
-
-                                    if retry_formats_count > best_formats_count:
-                                        best_info = retry_info
-                                        safe_push_log(
-                                            f"📊 Retry {retry_num} has more formats ({retry_formats_count} vs {best_formats_count})"
-                                        )
-
-                        except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
-                            safe_push_log(f"⚠️ Retry {retry_num} failed: {str(e)[:100]}")
-                            continue
-
-                    # If no retry succeeded with premium formats, use best result
-                    if not check_url_info_integrity(info):
-                        info = best_info
-                        safe_push_log(
-                            "⚠️ No premium formats found after retries, using best available"
-                        )
-                else:
-                    safe_push_log("✅ Premium formats (AV1/VP9) detected")
-
-            # Save JSON to file for later use with yt-dlp --load-info-json
-            save_url_info(json_output_path, info)
-
-            # Store in session state for global access
-            st.session_state["url_info"] = info
-            st.session_state["url_info_path"] = str(json_output_path)
-
-            return info
-        except json.JSONDecodeError as e:
-            return {"error": f"Failed to parse JSON: {str(e)}"}
-
-    except subprocess.TimeoutExpired:
-        return {
-            "error": "Request timed out (max 45 seconds). Try again or check your connection."
-        }
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
 
@@ -1444,7 +1331,7 @@ def get_url_info() -> Optional[Dict]:
 
 def get_url_info_path() -> Optional[Path]:
     """
-    Get the path to the saved URL info JSON file.
+    Get the path to the saved URL info JSON file from session state.
 
     Returns:
         Path to url_info.json or None if not available
@@ -1455,55 +1342,15 @@ def get_url_info_path() -> Optional[Path]:
     return None
 
 
-def get_video_tmp_dir(url: str) -> Path:
+def get_tmp_video_dir() -> Optional[Path]:
     """
-    Get or create the unique temporary directory for a video URL.
-
-    Uses session state cache to avoid recalculating the folder name.
-    If not in cache, calculates it and stores it for reuse.
-
-    Args:
-        url: Video URL (will be sanitized internally)
+    Get the unique temporary directory from session state.
+    This directory is created during url_analysis() and stored in session.
 
     Returns:
-        Path to the unique temporary directory for this video
+        Path to the unique temporary directory or None if not initialized
     """
-    # Check if we already have it in session state
-    cached_dir = st.session_state.get("video_tmp_dir")
-    if cached_dir and isinstance(cached_dir, Path):
-        return cached_dir
-
-    # Calculate and cache it
-    clean_url = sanitize_url(url)
-    unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
-    video_tmp_dir = TMP_DOWNLOAD_FOLDER / unique_folder_name
-    ensure_dir(video_tmp_dir)
-
-    # Store in session state for reuse
-    st.session_state["video_tmp_dir"] = video_tmp_dir
-    st.session_state["unique_folder_name"] = unique_folder_name
-
-    return video_tmp_dir
-
-
-def analyze_video_on_url_change(url: str) -> None:
-    """
-    SIMPLIFIED: Only store URL for later analysis.
-    No automatic analysis - wait for user to click Download or Detect Quality.
-
-    Args:
-        url: Video URL to store
-    """
-    clean_url = sanitize_url(url) if url else ""
-
-    # Just store the URL - don't analyze automatically
-    if clean_url:
-        st.session_state["current_video_url"] = clean_url
-        # Clear any previous results for this URL
-        if st.session_state.get("codecs_detected_for_url", "") != clean_url:
-            st.session_state.pop("available_codecs", None)
-            st.session_state.pop("available_formats", None)
-            st.session_state.pop("codecs_detected_for_url", None)
+    return st.session_state.get("tmp_video_dir")
 
 
 def build_cookies_params() -> List[str]:
@@ -1694,13 +1541,10 @@ url = st.text_input(
     key="main_url",
 )
 
-# Store URL for manual analysis if needed
+# Analyze URL and display information
 if url and url.strip():
-    analyze_video_on_url_change(url)
-
-    # Analyze URL and display information with spinner
     with st.spinner(t("url_analysis_spinner")):
-        url_info = url_analysis(url.strip())
+        url_info = url_analysis(url)
         if url_info:
             display_url_info(url_info)
 
@@ -2315,28 +2159,95 @@ with st.expander(t("advanced_options"), expanded=False):
 
     st.markdown("---")
 
-    # Debug options
-    st.markdown("**🔍 Debug Options**")
+    # Temporary Files Management
+    st.markdown(f"**📀 {t('tmp_files_section_title')}**")
+    st.caption(t("tmp_files_section_description"))
 
-    # Store current REMOVE_TMP_FILES setting in session state
-    if "remove_tmp_files" not in st.session_state:
-        st.session_state.remove_tmp_files = should_remove_tmp_files()
+    # Initialize session state for temporary file options
+    if "remove_tmp_files_after_download" not in st.session_state:
+        st.session_state.remove_tmp_files_after_download = (
+            settings.REMOVE_TMP_FILES_AFTER_DOWNLOAD
+        )
+    if "new_download_without_tmp_files" not in st.session_state:
+        st.session_state.new_download_without_tmp_files = (
+            settings.NEW_DOWNLOAD_WITHOUT_TMP_FILES
+        )
 
-    remove_tmp_files = st.checkbox(
-        "Remove temporary files after processing",
-        value=st.session_state.remove_tmp_files,
-        help="When disabled, all temporary files (.srt, .vtt, .part, intermediate outputs) will be kept for debugging. Check the tmp/ folder after download.",
-        key="remove_tmp_files_checkbox",
+    # Option 1: Remove files after successful download
+    remove_tmp_files_after_download = st.checkbox(
+        t("tmp_files_remove_after_download_label"),
+        value=st.session_state.remove_tmp_files_after_download,
+        help=t("tmp_files_remove_after_download_help"),
+        key="remove_tmp_files_after_download_checkbox",
     )
 
-    # Store in session state for UI state tracking
-    # Note: settings object is immutable, so we only track UI state here
-    st.session_state.remove_tmp_files = remove_tmp_files
+    # Option 2: Clean tmp folder before download
+    new_download_without_tmp_files = st.checkbox(
+        t("tmp_files_clean_before_download_label"),
+        value=st.session_state.new_download_without_tmp_files,
+        help=t("tmp_files_clean_before_download_help"),
+        key="new_download_without_tmp_files_checkbox",
+    )
 
-    if not remove_tmp_files:
-        st.info(
-            "🔍 **Debug mode active**: Temporary files will be preserved in the tmp/ folder for inspection."
-        )
+    # Update session state
+    st.session_state.remove_tmp_files_after_download = remove_tmp_files_after_download
+    st.session_state.new_download_without_tmp_files = new_download_without_tmp_files
+
+    # Also update old key for backward compatibility
+    st.session_state.remove_tmp_files = remove_tmp_files_after_download
+
+    # Show info based on configuration
+    if not remove_tmp_files_after_download and not new_download_without_tmp_files:
+        st.success(t("tmp_files_mode_intelligent_caching"))
+    elif new_download_without_tmp_files:
+        st.warning(t("tmp_files_mode_fresh_start"))
+    elif remove_tmp_files_after_download:
+        st.info(t("tmp_files_mode_space_saving"))
+
+    st.markdown("---")
+
+    # Manual cleanup section
+    st.markdown(f"**🗑️ {t('tmp_files_manual_cleanup_title')}**")
+    st.caption(t("tmp_files_manual_cleanup_description"))
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        if st.button(
+            t("tmp_files_clean_all_button"),
+            type="secondary",
+            use_container_width=True,
+            key="clean_all_tmp_button",
+        ):
+            with st.spinner(t("tmp_files_cleaning_spinner")):
+                folders_count, size_mb = clean_all_tmp_folders()
+
+                if folders_count > 0:
+                    st.success(
+                        t(
+                            "tmp_files_cleanup_success",
+                            count=folders_count,
+                            size=size_mb,
+                        )
+                    )
+                else:
+                    st.info(t("tmp_files_cleanup_nothing"))
+
+    with col2:
+        # Show tmp folder size if available
+        try:
+            if TMP_DOWNLOAD_FOLDER.exists():
+                total_size = sum(
+                    f.stat().st_size
+                    for f in TMP_DOWNLOAD_FOLDER.rglob("*")
+                    if f.is_file()
+                )
+                size_mb = total_size / (1024 * 1024)
+                st.metric(
+                    label=t("tmp_files_current_size"),
+                    value=f"{size_mb:.0f} MB",
+                )
+        except Exception:
+            pass
 
 # === DOWNLOAD BUTTON ===
 st.markdown("\n")
@@ -2894,21 +2805,19 @@ if submitted:
     # build bases
     clean_url = sanitize_url(url)
 
-    # Get or create unique temporary folder for this specific video URL
+    # Get unique temporary folder from session state (set during url_analysis)
     # This ensures each video has its own isolated workspace
-    # Uses cached value from session state if url_analysis was already called
-    tmp_video_dir = get_video_tmp_dir(url)
+    tmp_video_dir = st.session_state.get("tmp_video_dir")
     unique_folder_name = st.session_state.get("unique_folder_name", "unknown")
 
-    # Create temporary subfolder structure within the unique video folder
-    if video_subfolder == "/":
-        tmp_subfolder_dir = tmp_video_dir
-    else:
-        tmp_subfolder_dir = tmp_video_dir / video_subfolder
-        ensure_dir(tmp_subfolder_dir)
+    if not tmp_video_dir:
+        st.error("❌ Video workspace not initialized. Please re-enter the URL.")
+        st.stop()
 
+    # All temporary files are written to the root of the unique video folder
+    # The video_subfolder is only used when copying the final file to destination
     push_log(f"🔧 Unique video workspace: {unique_folder_name}")
-    push_log(t("log_temp_download_folder", folder=tmp_subfolder_dir))
+    push_log(t("log_temp_download_folder", folder=tmp_video_dir))
 
     # Setup cookies for yt-dlp operations
     cookies_part = build_cookies_params()
@@ -2919,33 +2828,54 @@ if submitted:
 
     base_output = filename  # without extension
 
-    # Save job configuration with intended filename for later use
-    job_config = {
-        "filename": base_output,
-        "url": clean_url,
-        "timestamp": time.time(),
-    }
-    tmp_files.save_job_config(tmp_subfolder_dir, job_config)
-
     # Log download strategy
     push_log("")
-    log_title("� Download Strategy")
+    log_title("📥 Download Strategy")
     push_log("  1️⃣  Download with readable name (yt-dlp compatibility)")
     push_log("  2️⃣  Rename to generic names (resilience & independence)")
     push_log("  3️⃣  Skip if generic files exist (resume support)")
     push_log("")
     push_log(f"📝 Target filename: {base_output}")
 
-    # Check if a generic video file already exists from a previous download
-    # This allows resilience in case of interruption during post-processing
-    existing_video_tracks = tmp_files.find_video_tracks(tmp_subfolder_dir)
-    existing_generic_file = existing_video_tracks[0] if existing_video_tracks else None
+    # Check if a completed download already exists (status.json verification)
+    # Priority: 1) Check status.json for completed format 2) Fallback to generic file search
+    existing_generic_file = None
+    completed_format_id = get_first_completed_format(tmp_video_dir)
 
-    if existing_generic_file:
-        log_title("✅ Found cached download")
-        push_log(f"  📦 Existing file: {existing_generic_file.name}")
-        push_log("  🔄 Skipping download, reusing cached file")
-        push_log("")
+    if completed_format_id:
+        # We have a completed format in status.json - find the corresponding file
+        log_title("✅ Found completed download in status")
+        push_log(f"  🎯 Format ID: {completed_format_id}")
+
+        # Try to find the video file with this format ID
+        existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
+        for track in existing_video_tracks:
+            track_format_id = tmp_files.extract_format_id_from_filename(track.name)
+            if track_format_id and track_format_id in completed_format_id:
+                existing_generic_file = track
+                push_log(f"  📦 Found file: {existing_generic_file.name}")
+                push_log(
+                    f"  📊 Size: {existing_generic_file.stat().st_size / (1024*1024):.2f}MiB"
+                )
+                push_log("  🔄 Skipping download, reusing completed file")
+                push_log("")
+                break
+
+        if not existing_generic_file:
+            push_log("  ⚠️ Status shows completed but file not found, will re-download")
+    else:
+        # Fallback: check for any generic video file (backward compatibility)
+        existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
+        existing_generic_file = (
+            existing_video_tracks[0] if existing_video_tracks else None
+        )
+
+        if existing_generic_file:
+            log_title("✅ Found cached download (legacy detection)")
+            push_log(f"  📦 Existing file: {existing_generic_file.name}")
+            push_log("  🔄 Skipping download, reusing cached file")
+            push_log("  ℹ️  Note: No status.json entry for this file, consider updating")
+            push_log("")
 
     # Always check for SponsorBlock segments for this video (informational)
     push_log("🔍 Analyzing video for sponsor segments...")
@@ -2983,7 +2913,7 @@ if submitted:
         # Legacy system - build base command normally
         common_base = build_base_ytdlp_command(
             base_output,
-            tmp_subfolder_dir,
+            tmp_video_dir,
             format_spec,
             embed_chapters,
             embed_subs,
@@ -3101,7 +3031,7 @@ if submitted:
             push_log("🤖 Auto mode: Will try all profiles in quality order")
             ret_dl, error_msg = smart_download_with_profiles(
                 base_output,
-                tmp_subfolder_dir,
+                tmp_video_dir,
                 embed_chapters,
                 embed_subs,
                 force_mp4,
@@ -3145,7 +3075,7 @@ if submitted:
         downloaded_file = None
 
         for ext in search_extensions:
-            p = tmp_subfolder_dir / f"{base_output}{ext}"
+            p = tmp_video_dir / f"{base_output}{ext}"
             if p.exists():
                 downloaded_file = p
                 safe_push_log(f"  📄 Found: {p.name}")
@@ -3161,7 +3091,7 @@ if submitted:
 
         # Rename to generic filename with format ID: video-{FORMAT_ID}.{ext}
         generic_name = tmp_files.get_video_track_path(
-            tmp_subfolder_dir, format_id, downloaded_file.suffix.lstrip(".")
+            tmp_video_dir, format_id, downloaded_file.suffix.lstrip(".")
         )
         safe_push_log(f"  🔍 Target generic name: {generic_name.name}")
 
@@ -3203,10 +3133,10 @@ if submitted:
             safe_push_log("")
             safe_push_log("  📝 Organizing subtitle files...")
             for lang in subs_selected:
-                original_sub = tmp_subfolder_dir / f"{base_output}.{lang}.srt"
+                original_sub = tmp_video_dir / f"{base_output}.{lang}.srt"
                 if original_sub.exists():
                     generic_sub = tmp_files.get_subtitle_path(
-                        tmp_subfolder_dir, lang, is_cut=False
+                        tmp_video_dir, lang, is_cut=False
                     )
                     try:
                         original_sub.rename(generic_sub)
@@ -3274,7 +3204,7 @@ if submitted:
             push_log(f"🎬 Cutting format: {source_ext} → {cut_ext} (converted)")
 
         # Use generic name for cut output: final.{ext}
-        cut_output = tmp_files.get_final_path(tmp_subfolder_dir, cut_ext.lstrip("."))
+        cut_output = tmp_files.get_final_path(tmp_video_dir, cut_ext.lstrip("."))
 
         if cut_output.exists():
             try:
@@ -3324,7 +3254,7 @@ if submitted:
         if subs_selected:
             processed_subtitle_files = process_subtitles_for_cutting(
                 base_output=base_output,
-                tmp_subfolder_dir=tmp_subfolder_dir,
+                tmp_video_dir=tmp_video_dir,
                 subtitle_languages=subs_selected,
                 start_time=actual_start,
                 duration=duration,
@@ -3417,7 +3347,7 @@ if submitted:
         push_log("📦 No cutting requested, preparing final file...")
 
         final_path = tmp_files.get_final_path(
-            tmp_subfolder_dir, final_tmp.suffix.lstrip(".")
+            tmp_video_dir, final_tmp.suffix.lstrip(".")
         )
 
         if final_tmp != final_path:
@@ -3492,7 +3422,7 @@ if submitted:
             # Find available subtitle files using optimized search
             subtitle_files_to_embed = find_subtitle_files_optimized(
                 base_output=base_output,
-                tmp_subfolder_dir=tmp_subfolder_dir,
+                tmp_video_dir=tmp_video_dir,
                 subtitle_languages=subs_selected,
                 is_cut=do_cut,
             )
@@ -3541,17 +3471,9 @@ if submitted:
         push_log(f"📊 Processed file size: {processed_size_mb:.2f}MiB (before copy)")
 
     try:
-        # Get intended filename from job config
-        job_config = tmp_files.load_job_config(tmp_subfolder_dir)
-        if job_config and "filename" in job_config:
-            intended_filename = job_config["filename"]
-        else:
-            # Fallback to base_output if job config not found
-            intended_filename = base_output
-
         # Build final destination path with intended filename
         final_ext = final_source.suffix
-        final_destination = dest_dir / f"{intended_filename}{final_ext}"
+        final_destination = dest_dir / f"{base_output}{final_ext}"
 
         # Copy file with intended name
         shutil.copy2(str(final_source), str(final_destination))
@@ -3565,6 +3487,14 @@ if submitted:
         final_file_size = final_copied.stat().st_size
         final_size_mb = final_file_size / (1024 * 1024)
         final_size_str = f"{final_size_mb:.2f}MiB"
+
+        # Update status.json - verify file and mark as completed or incomplete
+        format_id = st.session_state.get("downloaded_format_id", "unknown")
+        update_format_status(
+            tmp_video_dir=tmp_video_dir,
+            video_format=format_id,
+            final_file=final_source,  # Verify the file in tmp (before copy)
+        )
 
         # Update metrics with final accurate file size (no duration for now)
         if info_placeholder:

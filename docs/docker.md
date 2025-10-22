@@ -125,7 +125,8 @@ services:
 |----------|---------------|-------------|
 | `YTDLP_CUSTOM_ARGS` | *(empty)* | Custom yt-dlp arguments |
 | `BROWSER_SELECT` | `chrome` | Default browser for cookie extraction |
-| `REMOVE_TMP_FILES` | `true` | Remove temporary files after processing |
+| `REMOVE_TMP_FILES_AFTER_DOWNLOAD` | `false` | Remove temporary files after successful download |
+| `NEW_DOWNLOAD_WITHOUT_TMP_FILES` | `false` | Clean tmp folder before each new download |
 
 ### Media Server Integration
 

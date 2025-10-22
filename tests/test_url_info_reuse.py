@@ -4,22 +4,22 @@ import json
 
 
 class TestShouldReuseUrlInfo:
-    """Test should_reuse_url_info logic (pure function, no Streamlit)"""
+    """Test is_url_info_complet logic (pure function, no Streamlit)"""
 
     def test_file_not_exists_returns_false(self, tmp_path):
         """Should return (False, None) if file doesn't exist"""
-        from app.url_utils import should_reuse_url_info
+        from app.url_utils import is_url_info_complet
 
         json_path = tmp_path / "nonexistent" / "url_info.json"
 
-        should_reuse, data = should_reuse_url_info(json_path)
+        should_reuse, data = is_url_info_complet(json_path)
 
         assert should_reuse is False
         assert data is None
 
     def test_reuses_video_with_premium_formats(self, tmp_path):
         """Should return (True, data) for video with AV1 formats"""
-        from app.url_utils import should_reuse_url_info
+        from app.url_utils import is_url_info_complet
 
         json_path = tmp_path / "url_info.json"
 
@@ -37,7 +37,7 @@ class TestShouldReuseUrlInfo:
         with open(json_path, "w") as f:
             json.dump(mock_info, f)
 
-        should_reuse, data = should_reuse_url_info(json_path)
+        should_reuse, data = is_url_info_complet(json_path)
 
         assert should_reuse is True
         assert data is not None
@@ -46,7 +46,7 @@ class TestShouldReuseUrlInfo:
 
     def test_does_not_reuse_video_with_only_h264(self, tmp_path):
         """Should return (False, None) for video with only h264 formats"""
-        from app.url_utils import should_reuse_url_info
+        from app.url_utils import is_url_info_complet
 
         json_path = tmp_path / "url_info.json"
 
@@ -64,14 +64,14 @@ class TestShouldReuseUrlInfo:
         with open(json_path, "w") as f:
             json.dump(mock_info, f)
 
-        should_reuse, data = should_reuse_url_info(json_path)
+        should_reuse, data = is_url_info_complet(json_path)
 
         assert should_reuse is False
         assert data is None
 
     def test_reuses_video_with_vp9_formats(self, tmp_path):
         """Should return (True, data) for video with VP9 formats"""
-        from app.url_utils import should_reuse_url_info
+        from app.url_utils import is_url_info_complet
 
         json_path = tmp_path / "url_info.json"
 
@@ -89,7 +89,7 @@ class TestShouldReuseUrlInfo:
         with open(json_path, "w") as f:
             json.dump(mock_info, f)
 
-        should_reuse, data = should_reuse_url_info(json_path)
+        should_reuse, data = is_url_info_complet(json_path)
 
         assert should_reuse is True
         assert data is not None
@@ -97,7 +97,7 @@ class TestShouldReuseUrlInfo:
 
     def test_always_reuses_playlist(self, tmp_path):
         """Should return (True, data) for playlists regardless of formats"""
-        from app.url_utils import should_reuse_url_info
+        from app.url_utils import is_url_info_complet
 
         json_path = tmp_path / "url_info.json"
 
@@ -111,7 +111,7 @@ class TestShouldReuseUrlInfo:
         with open(json_path, "w") as f:
             json.dump(mock_playlist, f)
 
-        should_reuse, data = should_reuse_url_info(json_path)
+        should_reuse, data = is_url_info_complet(json_path)
 
         assert should_reuse is True
         assert data is not None
@@ -120,7 +120,7 @@ class TestShouldReuseUrlInfo:
 
     def test_handles_corrupted_json(self, tmp_path):
         """Should return (False, None) for corrupted JSON"""
-        from app.url_utils import should_reuse_url_info
+        from app.url_utils import is_url_info_complet
 
         json_path = tmp_path / "url_info.json"
 
@@ -128,14 +128,14 @@ class TestShouldReuseUrlInfo:
         with open(json_path, "w") as f:
             f.write("{invalid json content")
 
-        should_reuse, data = should_reuse_url_info(json_path)
+        should_reuse, data = is_url_info_complet(json_path)
 
         assert should_reuse is False
         assert data is None
 
     def test_handles_missing_type_field(self, tmp_path):
         """Should return (False, None) for JSON without _type or duration"""
-        from app.url_utils import should_reuse_url_info
+        from app.url_utils import is_url_info_complet
 
         json_path = tmp_path / "url_info.json"
 
@@ -148,7 +148,7 @@ class TestShouldReuseUrlInfo:
         with open(json_path, "w") as f:
             json.dump(mock_info, f)
 
-        should_reuse, data = should_reuse_url_info(json_path)
+        should_reuse, data = is_url_info_complet(json_path)
 
         # Should be safe and not reuse
         assert should_reuse is False
@@ -156,7 +156,7 @@ class TestShouldReuseUrlInfo:
 
     def test_video_detected_by_duration_field(self, tmp_path):
         """Should detect video type by presence of duration field"""
-        from app.url_utils import should_reuse_url_info
+        from app.url_utils import is_url_info_complet
 
         json_path = tmp_path / "url_info.json"
 
@@ -172,7 +172,7 @@ class TestShouldReuseUrlInfo:
         with open(json_path, "w") as f:
             json.dump(mock_info, f)
 
-        should_reuse, data = should_reuse_url_info(json_path)
+        should_reuse, data = is_url_info_complet(json_path)
 
         assert should_reuse is True
         assert data is not None
