@@ -175,7 +175,7 @@ When copying to the final location:
 ✅ **`video-{FORMAT_ID}.{ext}` is always preserved** for future reuse  
 ✅ **`final.{ext}` is created by COPY, not MOVE** (keeps source intact)  
 ✅ No automatic cleanup in normal workflow  
-✅ Manual cleanup available via `REMOVE_TMP_FILES` configuration  
+✅ Manual cleanup available via configuration options  
 
 This ensures that:
 - Re-downloading the same video skips download instantly
@@ -190,13 +190,17 @@ This ensures that:
 
 ## Configuration
 
-### Temporary File Retention
+### Temporary File Management
 
-By default, HomeTube **preserves all temporary files** for resilience and caching:
+HomeTube provides two options for managing temporary files:
+
+#### 1. Automatic Cleanup After Download
+
+By default, **temporary files are preserved** for resilience and caching:
 
 ```bash
-# Default behavior (recommended for resilience)
-REMOVE_TMP_FILES=false
+# Default behavior (recommended for development/debugging)
+REMOVE_TMP_FILES_AFTER_DOWNLOAD=false
 ```
 
 This ensures:
@@ -205,16 +209,32 @@ This ensures:
 - ✅ Debugging with all intermediate files
 - ✅ No wasted bandwidth re-downloading
 
-### Manual Cleanup
-
-To enable automatic cleanup after processing:
+To enable automatic cleanup after successful download:
 
 ```bash
-# Enable cleanup (not recommended for most users)
-REMOVE_TMP_FILES=true
+# Enable cleanup (recommended for production/limited disk space)
+REMOVE_TMP_FILES_AFTER_DOWNLOAD=true
 ```
 
-**Note**: Even with cleanup enabled, files are only removed after successful completion. Interrupted operations always preserve files for resume.
+**Note**: Even with cleanup enabled, files are only removed after successful completion. Failed downloads always preserve files for resume.
+
+#### 2. Fresh Start for Each Download
+
+By default, **existing tmp files are reused** for intelligent caching:
+
+```bash
+# Default behavior (recommended for resilience)
+NEW_DOWNLOAD_WITHOUT_TMP_FILES=false
+```
+
+To force a clean slate before each download:
+
+```bash
+# Enable fresh download (useful after errors or corruption)
+NEW_DOWNLOAD_WITHOUT_TMP_FILES=true
+```
+
+**Use case**: When you encounter errors or want to ensure a completely fresh download without any cached artifacts.
 
 ### Disk Space Management
 

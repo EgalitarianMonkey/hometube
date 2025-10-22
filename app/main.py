@@ -1039,12 +1039,74 @@ if "download_cancelled" not in st.session_state:
     st.session_state.download_cancelled = False
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+def init_url_workspace(
+    clean_url: str,
+    json_output_path: Path,
+    video_tmp_dir: Path,
+) -> Optional[Dict]:
+    """
+    Initialize workspace for a new URL by fetching video info and creating status files.
+
+    This function:
+    1. Builds cookies parameters from config
+    2. Fetches video/playlist info from yt-dlp
+    3. Creates url_info.json with integrity checks
+    4. Creates initial status.json for download tracking
+    5. Updates session state with the new info
+
+    Args:
+        clean_url: Sanitized video URL
+        json_output_path: Path where url_info.json will be saved
+        video_tmp_dir: Temporary directory for this video
+
+    Returns:
+        Dict with video/playlist information or error dict
+    """
+    # Build cookies parameters from config (important to avoid bot detection)
+    # Use config-based cookies since session_state may not be available yet
+    cookies_params = build_cookies_params_from_config()
+
+    # Download and build url_info with integrity checks
+    info = build_url_info(
+        clean_url=clean_url,
+        json_output_path=json_output_path,
+        cookies_params=cookies_params,
+        youtube_cookies_file_path=YOUTUBE_COOKIES_FILE_PATH,
+        cookies_from_browser=COOKIES_FROM_BROWSER,
+    )
+
+    # Store in session state for global access
+    st.session_state["url_info"] = info
+    st.session_state["url_info_path"] = str(json_output_path)
+
+    # Create initial status.json file
+    if info and "error" not in info:
+        video_id = info.get("id", "unknown")
+        title = info.get("title", "Unknown")
+        content_type = "playlist" if info.get("_type") == "playlist" else "video"
+
+        create_initial_status(
+            url=clean_url,
+            video_id=video_id,
+            title=title,
+            content_type=content_type,
+            tmp_video_dir=video_tmp_dir,
+        )
+
+    return info
+
+
 def url_analysis(url: str) -> Optional[Dict]:
     """
     Analyze URL and fetch comprehensive video/playlist information using yt-dlp.
-    Cached for 1 hour to avoid repeated API calls.
-    Saves JSON to tmp/url_info.json for use with yt-dlp's --load-info-json.
+    Always initializes session state variables and checks for existing url_info.json.
+
+    This function:
+    1. Sanitizes URL and creates unique tmp folder
+    2. Sets all session state variables (tmp_video_dir, unique_folder_name, etc.)
+    3. Checks if url_info.json exists with good integrity
+    4. If exists: loads it and returns
+    5. If not: fetches from yt-dlp via init_url_workspace()
 
     Args:
         url: Video or playlist URL to analyze
@@ -1060,11 +1122,20 @@ def url_analysis(url: str) -> Optional[Dict]:
         clean_url = sanitize_url(url)
         unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
         video_tmp_dir = TMP_DOWNLOAD_FOLDER / unique_folder_name
+
+        # Check if NEW_DOWNLOAD_WITHOUT_TMP_FILES is enabled
+        if settings.NEW_DOWNLOAD_WITHOUT_TMP_FILES and video_tmp_dir.exists():
+            safe_push_log(f"🗑️ Removing tmp files for fresh download: {video_tmp_dir}")
+            import shutil
+
+            shutil.rmtree(video_tmp_dir)
+
         ensure_dir(video_tmp_dir)
 
-        # Store in session state for reuse across the application
+        # ALWAYS store in session state for reuse across the application
         st.session_state["tmp_video_dir"] = video_tmp_dir
         st.session_state["unique_folder_name"] = unique_folder_name
+        st.session_state["current_video_url"] = clean_url
 
         # Prepare output path for JSON file in the unique video folder
         json_output_path = video_tmp_dir / "url_info.json"
@@ -1077,39 +1148,9 @@ def url_analysis(url: str) -> Optional[Dict]:
             st.session_state["url_info"] = existing_info
             st.session_state["url_info_path"] = str(json_output_path)
             return existing_info
-
-        # Build cookies parameters from config (important to avoid bot detection)
-        # Use config-based cookies since session_state may not be available yet
-        cookies_params = build_cookies_params_from_config()
-
-        # Download and build url_info with integrity checks
-        info = build_url_info(
-            clean_url=clean_url,
-            json_output_path=json_output_path,
-            cookies_params=cookies_params,
-            youtube_cookies_file_path=YOUTUBE_COOKIES_FILE_PATH,
-            cookies_from_browser=COOKIES_FROM_BROWSER,
-        )
-
-        # Store in session state for global access
-        st.session_state["url_info"] = info
-        st.session_state["url_info_path"] = str(json_output_path)
-
-        # Create initial status.json file
-        if info and "error" not in info:
-            video_id = info.get("id", "unknown")
-            title = info.get("title", "Unknown")
-            content_type = "playlist" if info.get("_type") == "playlist" else "video"
-
-            create_initial_status(
-                url=clean_url,
-                video_id=video_id,
-                title=title,
-                content_type=content_type,
-                tmp_video_dir=video_tmp_dir,
-            )
-
-        return info
+        else:
+            # Initialize workspace and fetch video info
+            return init_url_workspace(clean_url, json_output_path, video_tmp_dir)
 
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
@@ -1243,59 +1284,6 @@ def get_tmp_video_dir() -> Optional[Path]:
         Path to the unique temporary directory or None if not initialized
     """
     return st.session_state.get("tmp_video_dir")
-
-
-def analyze_video_on_url_validation(url: str) -> Optional[Dict]:
-    """
-    Analyze URL and initialize all session state variables for the video.
-    This should be the ONLY place where url_analysis() is called.
-
-    Sets up:
-    - url_info and url_info_path
-    - unique_folder_name and tmp_video_dir
-    - Clean URL in session state
-
-    Args:
-        url: Video URL to analyze
-
-    Returns:
-        Dict with video information or None if error
-    """
-    if not url or not url.strip():
-        return None
-
-    clean_url = sanitize_url(url)
-
-    # Check if we already analyzed this URL in this session
-    if st.session_state.get("current_video_url") == clean_url:
-        # URL hasn't changed, but verify all required variables are set
-        if (
-            st.session_state.get("url_info")
-            and st.session_state.get("tmp_video_dir")
-            and st.session_state.get("unique_folder_name")
-        ):
-            # All required variables present, return cached info
-            return st.session_state.get("url_info")
-        # If any variable is missing, fall through to re-analyze
-
-    # New URL (or incomplete cache) - analyze it and initialize everything
-    st.session_state["current_video_url"] = clean_url
-
-    # Clear previous analysis results (but don't clear profiles yet)
-    st.session_state.pop("available_codecs", None)
-    st.session_state.pop("available_formats", None)
-    st.session_state.pop("codecs_detected_for_url", None)
-
-    # Analyze URL - this creates the unique folder and url_info.json
-    url_info = url_analysis(clean_url)
-
-    # url_analysis already sets these in session state:
-    # - url_info
-    # - url_info_path
-    # - tmp_video_dir
-    # - unique_folder_name
-
-    return url_info
 
 
 def build_cookies_params() -> List[str]:
@@ -1486,10 +1474,10 @@ url = st.text_input(
     key="main_url",
 )
 
-# Analyze URL and display information (only once per URL change)
+# Analyze URL and display information
 if url and url.strip():
     with st.spinner(t("url_analysis_spinner")):
-        url_info = analyze_video_on_url_validation(url)
+        url_info = url_analysis(url)
         if url_info:
             display_url_info(url_info)
 
@@ -2107,7 +2095,7 @@ with st.expander(t("advanced_options"), expanded=False):
     # Debug options
     st.markdown("**🔍 Debug Options**")
 
-    # Store current REMOVE_TMP_FILES setting in session state
+    # Store current REMOVE_TMP_FILES_AFTER_DOWNLOAD setting in session state
     if "remove_tmp_files" not in st.session_state:
         st.session_state.remove_tmp_files = should_remove_tmp_files()
 

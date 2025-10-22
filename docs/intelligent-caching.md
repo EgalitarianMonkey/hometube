@@ -170,4 +170,5 @@ This feature works in conjunction with:
 
 - **URL Analysis Retry Logic**: Still retries with `--no-cache-dir` if initial analysis yields limited formats
 - **Unique Video Folders**: Each video has isolated cache in `tmp/youtube-{VIDEO_ID}/`
-- **Temporary File Preservation**: Files kept by default (`REMOVE_TMP_FILES=false`)
+- **Temporary File Preservation**: Files kept by default (`REMOVE_TMP_FILES_AFTER_DOWNLOAD=false`)
+- **Fresh Start Option**: Can clean tmp before download (`NEW_DOWNLOAD_WITHOUT_TMP_FILES=true`)

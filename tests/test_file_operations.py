@@ -108,17 +108,17 @@ class TestFileOperations:
 
 
 class TestRemoveTmpFilesConfig:
-    """Test REMOVE_TMP_FILES configuration behavior"""
+    """Test REMOVE_TMP_FILES_AFTER_DOWNLOAD configuration behavior"""
 
     def test_default_is_false(self):
-        """Test that REMOVE_TMP_FILES defaults to false (keep files)"""
+        """Test that REMOVE_TMP_FILES_AFTER_DOWNLOAD defaults to false (keep files)"""
         from app.config import get_settings
 
         settings = get_settings()
         # Should default to False to keep files for resilience
         assert (
-            settings.REMOVE_TMP_FILES is False
-        ), "REMOVE_TMP_FILES should default to False"
+            settings.REMOVE_TMP_FILES_AFTER_DOWNLOAD is False
+        ), "REMOVE_TMP_FILES_AFTER_DOWNLOAD should default to False"
 
     def test_should_remove_tmp_files_respects_config(self):
         """Test that should_remove_tmp_files() reads from config"""
@@ -129,4 +129,4 @@ class TestRemoveTmpFilesConfig:
         result = should_remove_tmp_files()
 
         # Should match the config default
-        assert result == settings.REMOVE_TMP_FILES
+        assert result == settings.REMOVE_TMP_FILES_AFTER_DOWNLOAD

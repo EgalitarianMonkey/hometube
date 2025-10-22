@@ -484,7 +484,8 @@ HomeTube configuration is managed through the `.env` file:
 | `ALLOW_OVERWRITE_EXISTING_VIDEO` | Allow overwriting existing videos in destination folder | `false` | `true,false` (false = protect existing files) |
 | **Advanced Options** | | | |
 | `YTDLP_CUSTOM_ARGS` | Custom yt-dlp arguments |  | `--max-filesize 5M --write-info-json` |
-| `REMOVE_TMP_FILES` | Keep temporary files after processing for debugging and resilience | `false` | `true,false` (false = keep files for reuse) |
+| `REMOVE_TMP_FILES_AFTER_DOWNLOAD` | Remove temporary files after successful download | `false` | `true,false` (false = keep for debugging/reuse) |
+| `NEW_DOWNLOAD_WITHOUT_TMP_FILES` | Clean tmp folder before each new download | `false` | `true,false` (true = fresh start, useful after errors) |
 | **Media Server Integration** | | | |
 | `JELLYFIN_BASE_URL` | Base URL of your Jellyfin server |  | `https://jellyfin.local:8096` |
 | `JELLYFIN_API_KEY` | Jellyfin API key used to trigger library scans |  | `0123456789abcdef0123456789abcdef` |

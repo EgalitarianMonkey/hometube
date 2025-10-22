@@ -280,7 +280,7 @@ def copy_file(src: Path, dest_dir: Path) -> Path:
 
 def should_remove_tmp_files() -> bool:
     """
-    Check if temporary files should be removed.
+    Check if temporary files should be removed after successful download.
 
     Checks both the settings default and the UI session state override.
     The UI checkbox can override the default setting.
@@ -297,10 +297,10 @@ def should_remove_tmp_files() -> bool:
         from app.config import get_settings
 
         settings = get_settings()
-        return settings.REMOVE_TMP_FILES
+        return settings.REMOVE_TMP_FILES_AFTER_DOWNLOAD
     except ImportError:
         # Fallback if config not available
-        return True
+        return False
 
 
 def _should_remove_file(file_path: Path, cleanup_type: str) -> bool:
