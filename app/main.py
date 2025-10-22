@@ -165,6 +165,7 @@ from app.config import (
     ensure_folders_exist,
     print_config_summary,
     get_default_subtitle_languages,
+    YOUTUBE_CLIENT_FALLBACKS,
 )
 
 # === CONSTANTS ===
@@ -220,14 +221,6 @@ SUPPORTED_BROWSERS = [
     "safari",
     "vivaldi",
     "whale",
-]
-
-# YouTube client fallback chain (ordered by reliability)
-# Note: Android client removed as it requires po_token (not implemented)
-YOUTUBE_CLIENT_FALLBACKS = [
-    {"name": "default", "args": []},
-    {"name": "ios", "args": ["--extractor-args", "youtube:player_client=ios"]},
-    {"name": "web", "args": ["--extractor-args", "youtube:player_client=web"]},
 ]
 
 # Profile resolution constants
@@ -733,16 +726,64 @@ def _try_profile_with_clients(
     status_placeholder,
     progress_placeholder,
     info_placeholder,
+    preferred_client: str = None,
 ) -> bool:
-    """Try downloading with all YouTube client fallbacks for a profile."""
-    for client_idx, client in enumerate(YOUTUBE_CLIENT_FALLBACKS, 1):
+    """
+    Try downloading with all YouTube client fallbacks for a profile.
+
+    Args:
+        cmd_base: Base yt-dlp command
+        url: Video URL
+        cookies_part: Cookie arguments
+        cookies_available: Whether cookies are configured
+        status_placeholder: Streamlit status placeholder
+        progress_placeholder: Streamlit progress placeholder
+        info_placeholder: Streamlit info placeholder
+        preferred_client: Name of client that worked for url_info.json (tried first)
+
+    Returns:
+        True if download succeeded, False otherwise
+    """
+    # Build ordered list of clients, prioritizing the one that worked for url_info
+    clients_to_try = []
+
+    if preferred_client:
+        # Find the preferred client configuration
+        preferred_config = next(
+            (c for c in YOUTUBE_CLIENT_FALLBACKS if c["name"] == preferred_client), None
+        )
+
+        if preferred_config:
+            safe_push_log(
+                f"🎯 Prioritizing {preferred_client} client (used for URL analysis)"
+            )
+            clients_to_try.append(preferred_config)
+
+            # Add remaining clients (except the preferred one)
+            clients_to_try.extend(
+                [c for c in YOUTUBE_CLIENT_FALLBACKS if c["name"] != preferred_client]
+            )
+        else:
+            # Preferred client not found, use default order
+            clients_to_try = YOUTUBE_CLIENT_FALLBACKS
+    else:
+        # No preference, use default order
+        clients_to_try = YOUTUBE_CLIENT_FALLBACKS
+
+    # Try each client in order
+    for client_idx, client in enumerate(clients_to_try, 1):
         client_name = client["name"]
         client_args = client["args"]
+
+        # Show priority indicator for first attempt
+        priority_indicator = "🎯 " if client_idx == 1 and preferred_client else ""
 
         # Try with cookies first if available
         if cookies_available:
             if status_placeholder:
-                status_placeholder.info(f"🍪 {client_name.title()} + cookies")
+                status_placeholder.info(
+                    f"{priority_indicator}🍪 {client_name.title()} + cookies"
+                )
 
             cmd = cmd_base + client_args + cookies_part + [url]
             ret = run_cmd(
@@ -755,7 +796,9 @@ def _try_profile_with_clients(
 
         # Try without cookies
         if status_placeholder:
-            status_placeholder.info(f"🚀 {client_name.title()} client")
+            status_placeholder.info(
+                f"{priority_indicator}🚀 {client_name.title()} client"
+            )
 
         cmd = cmd_base + client_args + [url]
         ret = run_cmd(cmd, progress_placeholder, status_placeholder, info_placeholder)
@@ -886,6 +929,23 @@ def _execute_profile_downloads(
     log_title("🚀 Starting download attempts...")
     safe_push_log(f"profiles_to_try: {profiles_to_try}")
 
+    # Try to read preferred YouTube client from url_info.json
+    preferred_client = None
+    try:
+        url_info_path = tmp_video_dir / "url_info.json"
+        if url_info_path.exists():
+            from app.url_utils import load_url_info_from_file
+
+            url_info = load_url_info_from_file(url_info_path)
+            if url_info:
+                preferred_client = url_info.get("_hometube_successful_client")
+                if preferred_client:
+                    safe_push_log(
+                        f"🎯 Will prioritize {preferred_client} client (used for URL analysis)"
+                    )
+    except Exception as e:
+        safe_push_log(f"⚠️ Could not read preferred client from url_info.json: {e}")
+
     for profile_idx, profile in enumerate(profiles_to_try, 1):
         safe_push_log("")
         safe_push_log(
@@ -934,6 +994,7 @@ def _execute_profile_downloads(
             status_placeholder,
             progress_placeholder,
             info_placeholder,
+            preferred_client,
         )
 
         if success:
@@ -1075,6 +1136,7 @@ def init_url_workspace(
         cookies_params=cookies_params,
         youtube_cookies_file_path=YOUTUBE_COOKIES_FILE_PATH,
         cookies_from_browser=COOKIES_FROM_BROWSER,
+        youtube_clients=YOUTUBE_CLIENT_FALLBACKS,
     )
 
     # Store in session state for global access
@@ -2768,7 +2830,7 @@ if submitted:
 
     # Log download strategy
     push_log("")
-    log_title("� Download Strategy")
+    log_title("📥 Download Strategy")
     push_log("  1️⃣  Download with readable name (yt-dlp compatibility)")
     push_log("  2️⃣  Rename to generic names (resilience & independence)")
     push_log("  3️⃣  Skip if generic files exist (resume support)")

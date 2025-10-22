@@ -247,6 +247,7 @@ def build_url_info(
     cookies_params: list,
     youtube_cookies_file_path: str = "",
     cookies_from_browser: str = "",
+    youtube_clients: list = None,
 ) -> Dict:
     """
     Download and build url_info.json with integrity checks and smart retries.
@@ -257,6 +258,7 @@ def build_url_info(
     3. Performs integrity checks for premium formats (AV1/VP9)
     4. Retries with enhanced options if limited formats detected
     5. Saves the result to json_output_path
+    6. Records the YouTube client that succeeded (for consistent downloads)
 
     Args:
         clean_url: Sanitized video/playlist URL
@@ -264,11 +266,13 @@ def build_url_info(
         cookies_params: List of yt-dlp cookie parameters (from build_cookies_params)
         youtube_cookies_file_path: Path to cookies file (for error messages)
         cookies_from_browser: Browser name (for error messages)
+        youtube_clients: List of YouTube client configs to try (from config.YOUTUBE_CLIENT_FALLBACKS)
 
     Returns:
         Dict with video/playlist information or {"error": "..."} if failed
     """
     import subprocess
+    from app.config import YOUTUBE_CLIENT_FALLBACKS
 
     # Log cookie status for debugging
     if cookies_params:
@@ -279,16 +283,69 @@ def build_url_info(
     else:
         safe_push_log("⚠️ URL analysis without cookies - may trigger bot detection")
 
-    # Run yt-dlp with JSON output, skip download, flat playlist mode
-    cmd = [
-        "yt-dlp",
-        "-J",  # JSON output
-        "--skip-download",  # Don't download
-        "--flat-playlist",  # For playlists, get basic info without extracting all videos
-        "--playlist-end",
-        "1",  # Only first video for quick playlist detection
-        clean_url,
-    ]
+    # Use provided clients or default from config
+    clients_to_try = (
+        youtube_clients if youtube_clients is not None else YOUTUBE_CLIENT_FALLBACKS
+    )
+
+    # Try with different YouTube clients to find one that works
+    successful_client = "default"  # Track which client worked
+    result = None
+    info = None
+
+    for client_config in clients_to_try:
+        client_name = client_config["name"]
+        client_args = client_config["args"]
+
+        safe_push_log(f"🔍 Trying URL analysis with {client_name} client...")
+
+        # Run yt-dlp with JSON output, skip download, flat playlist mode
+        cmd = [
+            "yt-dlp",
+            "-J",  # JSON output
+            "--skip-download",  # Don't download
+            "--flat-playlist",  # For playlists, get basic info without extracting all videos
+            "--playlist-end",
+            "1",  # Only first video for quick playlist detection
+        ]
+
+        # Add client-specific args
+        cmd.extend(client_args)
+
+        # Add URL
+        cmd.append(clean_url)
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        except subprocess.TimeoutExpired:
+            safe_push_log(f"⏱️ {client_name} client timed out, trying next...")
+            continue
+
+        if result.returncode == 0:
+            # Success! Parse and check quality
+            try:
+                info = json.loads(result.stdout)
+                successful_client = client_name
+                safe_push_log(f"✅ URL analysis succeeded with {client_name} client")
+                break  # Found a working client
+            except json.JSONDecodeError:
+                safe_push_log(f"⚠️ {client_name} returned invalid JSON, trying next...")
+                continue
+
+    # If all clients failed, fall back to old behavior with enhanced retry
+    if result is None or result.returncode != 0 or info is None:
+        safe_push_log(
+            "⚠️ All YouTube clients failed, trying with cookies + enhancements..."
+        )
+        cmd = [
+            "yt-dlp",
+            "-J",  # JSON output
+            "--skip-download",  # Don't download
+            "--flat-playlist",  # For playlists, get basic info without extracting all videos
+            "--playlist-end",
+            "1",  # Only first video for quick playlist detection
+            clean_url,
+        ]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -480,6 +537,10 @@ def build_url_info(
                 )
         else:
             safe_push_log("✅ Premium formats (AV1/VP9) detected")
+
+    # Add metadata about which client was used (for consistent download behavior)
+    info["_hometube_successful_client"] = successful_client
+    safe_push_log(f"📝 Recording successful client: {successful_client}")
 
     # Save JSON to file for later use with yt-dlp --load-info-json
     save_url_info(json_output_path, info)

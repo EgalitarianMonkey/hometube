@@ -23,6 +23,16 @@ def in_container() -> bool:
 IN_CONTAINER = in_container()
 
 
+# === YouTube Client Fallback Chain ===
+# YouTube client fallback chain (ordered by reliability)
+# Note: Android client removed as it requires po_token (not implemented)
+YOUTUBE_CLIENT_FALLBACKS = [
+    {"name": "default", "args": []},
+    {"name": "ios", "args": ["--extractor-args", "youtube:player_client=ios"]},
+    {"name": "web", "args": ["--extractor-args", "youtube:player_client=web"]},
+]
+
+
 # === Early .env Loading (only if not in container) ===
 if not IN_CONTAINER:
     env_file = Path(__file__).resolve().parent.parent / ".env"

@@ -4,6 +4,8 @@
 
 HomeTube now includes intelligent caching for URL analysis results (`url_info.json`). This feature prevents unnecessary re-downloads of video metadata and protects high-quality cached data from being overwritten with lower-quality responses.
 
+Additionally, HomeTube tracks which YouTube client successfully retrieved the metadata and prioritizes the same client for video downloads, reducing the risk of YouTube bans and improving download reliability.
+
 ## Problem Statement
 
 YouTube's API sometimes returns incomplete format information, providing only basic H.264 formats even when premium formats (AV1, VP9) are available. This can happen due to:
@@ -164,6 +166,60 @@ Possible improvements for future versions:
 - **Cache statistics**: Show cache hit/miss rates
 - **Format preference**: Allow users to define minimum acceptable quality
 
+## YouTube Client Consistency
+
+### Problem
+
+YouTube may ban or rate-limit requests when different clients (default, ios, web) are used inconsistently. Additionally, some clients may provide better format availability than others for specific videos.
+
+### Solution
+
+HomeTube now tracks which YouTube client successfully retrieved the `url_info.json` and prioritizes the same client for video downloads:
+
+1. **During URL Analysis** (`build_url_info`):
+   - Tries each client in order: `default` → `ios` → `web`
+   - Records the successful client name in `url_info.json` under `_hometube_successful_client`
+   - Logs: `✅ URL analysis succeeded with ios client`
+
+2. **During Video Download** (`_execute_profile_downloads`):
+   - Reads the preferred client from `url_info.json`
+   - Reorders the client fallback chain to try the preferred client first
+   - Logs: `🎯 Prioritizing ios client (used for URL analysis)`
+
+### Benefits
+
+- **🛡️ Reduced Ban Risk**: Consistent client usage appears more natural to YouTube
+- **⚡ Faster Success**: Client that worked for metadata likely works for download
+- **🔄 Smart Fallback**: If preferred client fails, still tries others
+
+### Example Flow
+
+```text
+1. URL Analysis:
+   ├─ Try default client → fails (403)
+   ├─ Try ios client → SUCCESS ✓
+   └─ Save "_hometube_successful_client": "ios"
+
+2. Video Download:
+   ├─ Read preferred client: "ios"
+   ├─ Try ios client first → SUCCESS ✓
+   └─ Skip unnecessary fallback attempts
+```
+
+### Configuration
+
+The YouTube client fallback chain is defined in `app/config.py`:
+
+```python
+YOUTUBE_CLIENT_FALLBACKS = [
+    {"name": "default", "args": []},
+    {"name": "ios", "args": ["--extractor-args", "youtube:player_client=ios"]},
+    {"name": "web", "args": ["--extractor-args", "youtube:player_client=web"]},
+]
+```
+
+**Note**: Android client was removed as it requires `po_token` which is not implemented.
+
 ## Related Features
 
 This feature works in conjunction with:
@@ -171,4 +227,5 @@ This feature works in conjunction with:
 - **URL Analysis Retry Logic**: Still retries with `--no-cache-dir` if initial analysis yields limited formats
 - **Unique Video Folders**: Each video has isolated cache in `tmp/youtube-{VIDEO_ID}/`
 - **Temporary File Preservation**: Files kept by default (`REMOVE_TMP_FILES_AFTER_DOWNLOAD=false`)
+- **YouTube Client Tracking**: Preferred client is cached with metadata for consistent downloads
 - **Fresh Start Option**: Can clean tmp before download (`NEW_DOWNLOAD_WITHOUT_TMP_FILES=true`)
