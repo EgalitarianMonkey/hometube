@@ -223,9 +223,9 @@ SUPPORTED_BROWSERS = [
 ]
 
 # YouTube client fallback chain (ordered by reliability)
+# Note: Android client removed as it requires po_token (not implemented)
 YOUTUBE_CLIENT_FALLBACKS = [
     {"name": "default", "args": []},
-    {"name": "android", "args": ["--extractor-args", "youtube:player_client=android"]},
     {"name": "ios", "args": ["--extractor-args", "youtube:player_client=ios"]},
     {"name": "web", "args": ["--extractor-args", "youtube:player_client=web"]},
 ]

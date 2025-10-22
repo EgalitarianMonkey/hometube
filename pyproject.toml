@@ -1,6 +1,6 @@
 [project]
 name = "hometube"
-version = "1.1.0"
+version = "1.2.0"
 description = "HomeTube development workspace"
 requires-python = ">=3.10"
 
