@@ -76,6 +76,11 @@ try:
         build_sponsorblock_params,
     )
     from .integrations_utils import post_download_actions
+    from .status_utils import (
+        create_initial_status,
+        add_selected_format,
+        update_format_status,
+    )
 except ImportError:
     # Fallback for direct execution from app directory
     from translations import t, configure_language
@@ -142,6 +147,11 @@ except ImportError:
         build_sponsorblock_params,
     )
     from integrations_utils import post_download_actions
+    from status_utils import (
+        create_initial_status,
+        add_selected_format,
+        update_format_status,
+    )
 
 # Configuration import (must be after translations for configure_language)
 from app.config import (
@@ -253,7 +263,9 @@ def _process_quality_strategy(quality_strategy: str, url: str) -> None:
         # Get tmp directory from session state (set during url_analysis)
         tmp_video_dir = st.session_state.get("tmp_video_dir")
         if not tmp_video_dir:
-            safe_push_log("⚠️ Temporary directory not initialized. Analyze URL first.")
+            # Reset profiles to empty to avoid showing stale data
+            st.session_state.optimal_format_profiles = []
+            st.session_state.chosen_format_profiles = []
             return
 
         # Check if we already have a cached download - skip format probing if so
@@ -269,13 +281,17 @@ def _process_quality_strategy(quality_strategy: str, url: str) -> None:
         # Get url_info from session state (already loaded by url_analysis)
         url_info = st.session_state.get("url_info")
         if not url_info:
-            safe_push_log("⚠️ URL info not available. Analyze URL first.")
+            # Reset profiles to empty to avoid showing stale data
+            st.session_state.optimal_format_profiles = []
+            st.session_state.chosen_format_profiles = []
             return
 
         # Get JSON path from session state
         json_path_str = st.session_state.get("url_info_path")
         if not json_path_str:
-            safe_push_log("⚠️ URL info path not available.")
+            # Reset profiles to empty to avoid showing stale data
+            st.session_state.optimal_format_profiles = []
+            st.session_state.chosen_format_profiles = []
             return
 
         json_path = Path(json_path_str)
@@ -893,6 +909,16 @@ def _execute_profile_downloads(
         # Store current profile for error diagnostics
         st.session_state["current_attempting_profile"] = profile["label"]
 
+        # Update status.json - mark format as "downloading"
+        format_id = profile.get("format_id", "unknown")
+        filesize_approx = profile.get("filesize_approx", 0)
+        add_selected_format(
+            tmp_video_dir=tmp_video_dir,
+            video_format=format_id,
+            subtitles=[f"subtitles.{lang}.srt" for lang in subs_selected],
+            filesize_approx=filesize_approx,
+        )
+
         # Try all YouTube clients with this profile
         success = _try_profile_with_clients(
             cmd_base,
@@ -1025,7 +1051,7 @@ def url_analysis(url: str) -> Optional[Dict]:
         ensure_dir(video_tmp_dir)
 
         # Store in session state for reuse across the application
-        st.session_state["video_tmp_dir"] = video_tmp_dir
+        st.session_state["tmp_video_dir"] = video_tmp_dir
         st.session_state["unique_folder_name"] = unique_folder_name
 
         # Prepare output path for JSON file in the unique video folder
@@ -1056,6 +1082,20 @@ def url_analysis(url: str) -> Optional[Dict]:
         # Store in session state for global access
         st.session_state["url_info"] = info
         st.session_state["url_info_path"] = str(json_output_path)
+
+        # Create initial status.json file
+        if info and "error" not in info:
+            video_id = info.get("id", "unknown")
+            title = info.get("title", "Unknown")
+            content_type = "playlist" if info.get("_type") == "playlist" else "video"
+
+            create_initial_status(
+                url=clean_url,
+                video_id=video_id,
+                title=title,
+                content_type=content_type,
+                tmp_video_dir=video_tmp_dir,
+            )
 
         return info
 
@@ -1222,12 +1262,10 @@ def analyze_video_on_url_change(url: str) -> Optional[Dict]:
     # New URL - analyze it and initialize everything
     st.session_state["current_video_url"] = clean_url
 
-    # Clear previous analysis results
+    # Clear previous analysis results (but don't clear profiles yet)
     st.session_state.pop("available_codecs", None)
     st.session_state.pop("available_formats", None)
     st.session_state.pop("codecs_detected_for_url", None)
-    st.session_state.pop("optimal_format_profiles", None)
-    st.session_state.pop("chosen_format_profiles", None)
 
     # Analyze URL - this creates the unique folder and url_info.json
     url_info = url_analysis(clean_url)
@@ -3295,6 +3333,14 @@ if submitted:
         final_file_size = final_copied.stat().st_size
         final_size_mb = final_file_size / (1024 * 1024)
         final_size_str = f"{final_size_mb:.2f}MiB"
+
+        # Update status.json - verify file and mark as completed or incomplete
+        format_id = st.session_state.get("downloaded_format_id", "unknown")
+        update_format_status(
+            tmp_video_dir=tmp_video_dir,
+            video_format=format_id,
+            final_file=final_source,  # Verify the file in tmp (before copy)
+        )
 
         # Update metrics with final accurate file size (no duration for now)
         if info_placeholder:
