@@ -428,3 +428,74 @@ def cleanup_extras(tmp_dir: Path, base_filename: str):
 def delete_intermediate_outputs(tmp_dir: Path, base_filename: str):
     """Legacy wrapper for cleanup_tmp_files - maintained for compatibility"""
     cleanup_tmp_files(base_filename, tmp_dir, "outputs")
+
+
+def clean_all_tmp_folders(tmp_base_dir: Path = None) -> tuple[int, int]:
+    """
+    Clean ALL temporary folders in the tmp directory.
+
+    This function removes all video-specific temporary folders to free up disk space.
+    Use with caution - this will delete all cached files and interrupt any ongoing downloads.
+
+    Args:
+        tmp_base_dir: Base tmp directory (defaults to TMP_DOWNLOAD_FOLDER from settings)
+
+    Returns:
+        tuple[int, int]: (folders_removed, total_size_mb) - count and total size freed
+    """
+    # Import dependencies
+    try:
+        from .logs_utils import safe_push_log
+    except ImportError:
+        from logs_utils import safe_push_log
+
+    import shutil
+
+    # Get TMP_DOWNLOAD_FOLDER if not provided
+    if tmp_base_dir is None:
+        try:
+            from app.config import ensure_folders_exist
+
+            _, tmp_base_dir = ensure_folders_exist()
+        except ImportError:
+            # Fallback - use current directory tmp folder
+            tmp_base_dir = Path("tmp")
+
+    if not tmp_base_dir.exists():
+        safe_push_log("✅ No tmp folder to clean")
+        return 0, 0
+
+    folders_removed = 0
+    total_size = 0
+
+    try:
+        # Iterate through all items in tmp folder
+        for item in tmp_base_dir.iterdir():
+            if item.is_dir():
+                # Calculate folder size before deletion
+                folder_size = sum(
+                    f.stat().st_size for f in item.rglob("*") if f.is_file()
+                )
+                total_size += folder_size
+
+                # Remove the folder
+                shutil.rmtree(item)
+                folders_removed += 1
+                safe_push_log(
+                    f"🗑️ Removed: {item.name} ({folder_size / (1024*1024):.1f} MB)"
+                )
+
+        total_size_mb = total_size / (1024 * 1024)
+
+        if folders_removed > 0:
+            safe_push_log(
+                f"✅ Cleaned {folders_removed} folder(s), freed {total_size_mb:.1f} MB"
+            )
+        else:
+            safe_push_log("✅ No folders to clean")
+
+        return folders_removed, int(total_size_mb)
+
+    except Exception as e:
+        safe_push_log(f"⚠️ Error during cleanup: {e}")
+        return folders_removed, int(total_size / (1024 * 1024)) if total_size > 0 else 0

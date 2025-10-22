@@ -25,6 +25,7 @@ try:
         ensure_dir,
         should_remove_tmp_files,
         get_unique_video_folder_name_from_url,
+        clean_all_tmp_folders,
     )
     from .display_utils import (
         fmt_hhmmss,
@@ -98,6 +99,7 @@ except ImportError:
         ensure_dir,
         should_remove_tmp_files,
         get_unique_video_folder_name_from_url,
+        clean_all_tmp_folders,
     )
     from display_utils import (
         fmt_hhmmss,
@@ -1123,8 +1125,11 @@ def url_analysis(url: str) -> Optional[Dict]:
         unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
         video_tmp_dir = TMP_DOWNLOAD_FOLDER / unique_folder_name
 
-        # Check if NEW_DOWNLOAD_WITHOUT_TMP_FILES is enabled
-        if settings.NEW_DOWNLOAD_WITHOUT_TMP_FILES and video_tmp_dir.exists():
+        # Check if NEW_DOWNLOAD_WITHOUT_TMP_FILES is enabled (UI override or config default)
+        clean_tmp_before_download = st.session_state.get(
+            "new_download_without_tmp_files", settings.NEW_DOWNLOAD_WITHOUT_TMP_FILES
+        )
+        if clean_tmp_before_download and video_tmp_dir.exists():
             safe_push_log(f"🗑️ Removing tmp files for fresh download: {video_tmp_dir}")
             import shutil
 
@@ -2092,28 +2097,95 @@ with st.expander(t("advanced_options"), expanded=False):
 
     st.markdown("---")
 
-    # Debug options
-    st.markdown("**🔍 Debug Options**")
+    # Temporary Files Management
+    st.markdown(f"**📀 {t('tmp_files_section_title')}**")
+    st.caption(t("tmp_files_section_description"))
 
-    # Store current REMOVE_TMP_FILES_AFTER_DOWNLOAD setting in session state
-    if "remove_tmp_files" not in st.session_state:
-        st.session_state.remove_tmp_files = should_remove_tmp_files()
+    # Initialize session state for temporary file options
+    if "remove_tmp_files_after_download" not in st.session_state:
+        st.session_state.remove_tmp_files_after_download = (
+            settings.REMOVE_TMP_FILES_AFTER_DOWNLOAD
+        )
+    if "new_download_without_tmp_files" not in st.session_state:
+        st.session_state.new_download_without_tmp_files = (
+            settings.NEW_DOWNLOAD_WITHOUT_TMP_FILES
+        )
 
-    remove_tmp_files = st.checkbox(
-        "Remove temporary files after processing",
-        value=st.session_state.remove_tmp_files,
-        help="When disabled, all temporary files (.srt, .vtt, .part, intermediate outputs) will be kept for debugging. Check the tmp/ folder after download.",
-        key="remove_tmp_files_checkbox",
+    # Option 1: Remove files after successful download
+    remove_tmp_files_after_download = st.checkbox(
+        t("tmp_files_remove_after_download_label"),
+        value=st.session_state.remove_tmp_files_after_download,
+        help=t("tmp_files_remove_after_download_help"),
+        key="remove_tmp_files_after_download_checkbox",
     )
 
-    # Store in session state for UI state tracking
-    # Note: settings object is immutable, so we only track UI state here
-    st.session_state.remove_tmp_files = remove_tmp_files
+    # Option 2: Clean tmp folder before download
+    new_download_without_tmp_files = st.checkbox(
+        t("tmp_files_clean_before_download_label"),
+        value=st.session_state.new_download_without_tmp_files,
+        help=t("tmp_files_clean_before_download_help"),
+        key="new_download_without_tmp_files_checkbox",
+    )
 
-    if not remove_tmp_files:
-        st.info(
-            "🔍 **Debug mode active**: Temporary files will be preserved in the tmp/ folder for inspection."
-        )
+    # Update session state
+    st.session_state.remove_tmp_files_after_download = remove_tmp_files_after_download
+    st.session_state.new_download_without_tmp_files = new_download_without_tmp_files
+
+    # Also update old key for backward compatibility
+    st.session_state.remove_tmp_files = remove_tmp_files_after_download
+
+    # Show info based on configuration
+    if not remove_tmp_files_after_download and not new_download_without_tmp_files:
+        st.success(t("tmp_files_mode_intelligent_caching"))
+    elif new_download_without_tmp_files:
+        st.warning(t("tmp_files_mode_fresh_start"))
+    elif remove_tmp_files_after_download:
+        st.info(t("tmp_files_mode_space_saving"))
+
+    st.markdown("---")
+
+    # Manual cleanup section
+    st.markdown(f"**🗑️ {t('tmp_files_manual_cleanup_title')}**")
+    st.caption(t("tmp_files_manual_cleanup_description"))
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        if st.button(
+            t("tmp_files_clean_all_button"),
+            type="secondary",
+            use_container_width=True,
+            key="clean_all_tmp_button",
+        ):
+            with st.spinner(t("tmp_files_cleaning_spinner")):
+                folders_count, size_mb = clean_all_tmp_folders()
+
+                if folders_count > 0:
+                    st.success(
+                        t(
+                            "tmp_files_cleanup_success",
+                            count=folders_count,
+                            size=size_mb,
+                        )
+                    )
+                else:
+                    st.info(t("tmp_files_cleanup_nothing"))
+
+    with col2:
+        # Show tmp folder size if available
+        try:
+            if TMP_DOWNLOAD_FOLDER.exists():
+                total_size = sum(
+                    f.stat().st_size
+                    for f in TMP_DOWNLOAD_FOLDER.rglob("*")
+                    if f.is_file()
+                )
+                size_mb = total_size / (1024 * 1024)
+                st.metric(
+                    label=t("tmp_files_current_size"),
+                    value=f"{size_mb:.0f} MB",
+                )
+        except Exception:
+            pass
 
 # === DOWNLOAD BUTTON ===
 st.markdown("\n")
