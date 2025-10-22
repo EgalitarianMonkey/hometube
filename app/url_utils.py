@@ -236,3 +236,342 @@ def is_url_info_complet(json_path: Path) -> Tuple[bool, Optional[Dict]]:
     except Exception as e:
         safe_push_log(f"⚠️ Could not read url_info.json: {e} - will re-download")
         return False, None
+
+
+# === URL INFO DOWNLOAD & BUILD ===
+
+
+def build_url_info(
+    clean_url: str,
+    json_output_path: Path,
+    cookies_params: list,
+    youtube_cookies_file_path: str = "",
+    cookies_from_browser: str = "",
+) -> Dict:
+    """
+    Download and build url_info.json with integrity checks and smart retries.
+
+    This function:
+    1. Runs yt-dlp to fetch video/playlist information
+    2. Handles authentication errors with helpful messages
+    3. Performs integrity checks for premium formats (AV1/VP9)
+    4. Retries with enhanced options if limited formats detected
+    5. Saves the result to json_output_path
+
+    Args:
+        clean_url: Sanitized video/playlist URL
+        json_output_path: Path where to save url_info.json
+        cookies_params: List of yt-dlp cookie parameters (from build_cookies_params)
+        youtube_cookies_file_path: Path to cookies file (for error messages)
+        cookies_from_browser: Browser name (for error messages)
+
+    Returns:
+        Dict with video/playlist information or {"error": "..."} if failed
+    """
+    import subprocess
+
+    # Log cookie status for debugging
+    if cookies_params:
+        if "--cookies" in cookies_params:
+            safe_push_log("🍪 URL analysis using cookies file")
+        elif "--cookies-from-browser" in cookies_params:
+            safe_push_log("🍪 URL analysis using browser cookies")
+    else:
+        safe_push_log("⚠️ URL analysis without cookies - may trigger bot detection")
+
+    # Run yt-dlp with JSON output, skip download, flat playlist mode
+    cmd = [
+        "yt-dlp",
+        "-J",  # JSON output
+        "--skip-download",  # Don't download
+        "--flat-playlist",  # For playlists, get basic info without extracting all videos
+        "--playlist-end",
+        "1",  # Only first video for quick playlist detection
+        clean_url,
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return {
+            "error": "Request timed out (max 30 seconds). Try again or check your connection."
+        }
+
+    if result.returncode != 0:
+        # Check if error is authentication-related (age restriction, bot detection, etc.)
+        error_msg = result.stderr if result.stderr else ""
+        needs_auth = any(
+            [
+                "Sign in to confirm" in error_msg,
+                "confirm your age" in error_msg,
+                "age" in error_msg.lower() and "restricted" in error_msg.lower(),
+                "inappropriate for some users" in error_msg,
+                "requires authentication" in error_msg,
+                "login required" in error_msg,
+            ]
+        )
+
+        # If first attempt failed and we have cookies available, try with cookies
+        if needs_auth and cookies_params:
+            safe_push_log("🔐 Authentication required, retrying with cookies...")
+            cmd_with_auth = [
+                "yt-dlp",
+                "-J",
+                "--skip-download",
+                "--flat-playlist",
+                "--playlist-end",
+                "1",
+                "--user-agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "--extractor-retries",
+                "3",
+                "--no-cache-dir",
+                *cookies_params,
+                clean_url,
+            ]
+
+            try:
+                result = subprocess.run(
+                    cmd_with_auth, capture_output=True, text=True, timeout=45
+                )
+
+                if result.returncode == 0:
+                    safe_push_log("✅ Authentication successful with cookies")
+                    # Continue to JSON parsing below
+                else:
+                    error_msg = (
+                        result.stderr[:400] if result.stderr else "Unknown error"
+                    )
+            except subprocess.TimeoutExpired:
+                return {
+                    "error": "Request timed out (max 45 seconds). Try again or check your connection."
+                }
+
+        # If still failing or no cookies available, try enhanced retry without auth
+        if result.returncode != 0:
+            safe_push_log("⚠️ Retrying with enhanced options...")
+            cmd_retry = [
+                "yt-dlp",
+                "-J",
+                "--skip-download",
+                "--flat-playlist",
+                "--playlist-end",
+                "1",
+                "--user-agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "--extractor-retries",
+                "3",
+                "--no-cache-dir",
+            ]
+            # Only add cookies if we haven't tried them yet
+            if not needs_auth and cookies_params:
+                cmd_retry.extend(cookies_params)
+
+            cmd_retry.append(clean_url)
+
+            try:
+                result = subprocess.run(
+                    cmd_retry, capture_output=True, text=True, timeout=45
+                )
+            except subprocess.TimeoutExpired:
+                return {
+                    "error": "Request timed out (max 45 seconds). Try again or check your connection."
+                }
+
+        if result.returncode != 0:
+            error_msg = result.stderr[:400] if result.stderr else "Unknown error"
+
+            # Check for bot detection error
+            if "Sign in to confirm you're not a bot" in error_msg:
+                return _build_bot_detection_error(
+                    youtube_cookies_file_path, cookies_from_browser
+                )
+
+            # Check for age restriction error
+            elif "confirm your age" in error_msg or (
+                "age" in error_msg.lower() and "restricted" in error_msg.lower()
+            ):
+                return _build_age_restriction_error(
+                    youtube_cookies_file_path, cookies_from_browser
+                )
+
+            return {"error": f"yt-dlp failed: {error_msg}"}
+
+    # Parse JSON output
+    try:
+        info = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        return {"error": f"Failed to parse JSON: {str(e)}"}
+
+    # === INTEGRITY CHECK WITH SMART RETRY ===
+    # Check if we got premium formats (AV1/VP9) for videos (not playlists)
+    is_video = info.get("_type") == "video" or "duration" in info
+
+    if is_video:
+        has_premium_formats = check_url_info_integrity(info)
+
+        if not has_premium_formats:
+            safe_push_log(
+                "⚠️ Limited formats detected (h264 only), retrying for premium formats..."
+            )
+
+            # Try up to 2 additional attempts with different strategies
+            best_info = info  # Keep first result as fallback
+            max_retries = 2
+
+            for retry_num in range(1, max_retries + 1):
+                safe_push_log(
+                    f"🔄 Retry {retry_num}/{max_retries} for premium formats..."
+                )
+
+                # Build retry command with enhanced parameters
+                retry_cmd = [
+                    "yt-dlp",
+                    "-J",
+                    "--skip-download",
+                    "--user-agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "--extractor-retries",
+                    "3",
+                    "--no-cache-dir",  # Force fresh fetch
+                ]
+
+                # Add cookies if available
+                if cookies_params:
+                    retry_cmd.extend(cookies_params)
+
+                retry_cmd.append(clean_url)
+
+                try:
+                    retry_result = subprocess.run(
+                        retry_cmd, capture_output=True, text=True, timeout=45
+                    )
+
+                    if retry_result.returncode == 0:
+                        retry_info = json.loads(retry_result.stdout)
+
+                        # Check if this attempt got premium formats
+                        if check_url_info_integrity(retry_info):
+                            safe_push_log(
+                                f"✅ Premium formats found on retry {retry_num}"
+                            )
+                            info = retry_info
+                            break
+                        else:
+                            # Keep the result with most formats
+                            retry_formats_count = len(retry_info.get("formats", []))
+                            best_formats_count = len(best_info.get("formats", []))
+
+                            if retry_formats_count > best_formats_count:
+                                best_info = retry_info
+                                safe_push_log(
+                                    f"📊 Retry {retry_num} has more formats ({retry_formats_count} vs {best_formats_count})"
+                                )
+
+                except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+                    safe_push_log(f"⚠️ Retry {retry_num} failed: {str(e)[:100]}")
+                    continue
+
+            # If no retry succeeded with premium formats, use best result
+            if not check_url_info_integrity(info):
+                info = best_info
+                safe_push_log(
+                    "⚠️ No premium formats found after retries, using best available"
+                )
+        else:
+            safe_push_log("✅ Premium formats (AV1/VP9) detected")
+
+    # Save JSON to file for later use with yt-dlp --load-info-json
+    save_url_info(json_output_path, info)
+
+    return info
+
+
+def _build_bot_detection_error(
+    youtube_cookies_file_path: str, cookies_from_browser: str
+) -> Dict:
+    """Build helpful error message for bot detection."""
+    from pathlib import Path
+    from app.file_system_utils import is_valid_browser
+
+    cookie_file_exists = (
+        youtube_cookies_file_path and Path(youtube_cookies_file_path).exists()
+    )
+    browser_configured = cookies_from_browser and is_valid_browser(cookies_from_browser)
+
+    help_msg = "⚠️ YouTube bot detection triggered.\n\n"
+
+    if not cookie_file_exists and not browser_configured:
+        help_msg += (
+            "🔐 **No cookies configured!** This is likely why you're blocked.\n\n"
+            "**Solutions:**\n"
+            "1. 📁 **Add cookies file** (recommended for servers):\n"
+            "   - Export cookies from your browser (see docs/usage.md)\n"
+            "   - Place file at: `cookies/youtube_cookies.txt`\n"
+            "   - Set YOUTUBE_COOKIES_FILE_PATH in .env\n\n"
+            "2. 🌐 **Use browser cookies** (local development):\n"
+            "   - Set COOKIES_FROM_BROWSER=chrome (or firefox, brave, etc.)\n"
+            "   - Works if browser is on same machine\n\n"
+            "3. ⏳ **Wait a few minutes** and try again\n\n"
+            "[Documentation](docs/usage.md#-authentication--private-content)"
+        )
+    else:
+        help_msg += (
+            "🔐 Cookies are configured but YouTube still blocked the request.\n\n"
+            "**Try these solutions:**\n"
+            "1. 🔄 **Refresh your cookies** (they may be expired)\n"
+            "2. ⏳ **Wait 5-10 minutes** before retrying\n"
+            "3. 🌐 **Try from a different IP** if using VPN/proxy\n"
+            "4. 🍪 **Verify cookies file is valid** (not corrupted)\n\n"
+        )
+
+        if cookie_file_exists:
+            help_msg += f"📁 Current cookies file: `{youtube_cookies_file_path}`\n"
+        if browser_configured:
+            help_msg += f"🌐 Browser configured: `{cookies_from_browser}`\n"
+
+    return {"error": help_msg}
+
+
+def _build_age_restriction_error(
+    youtube_cookies_file_path: str, cookies_from_browser: str
+) -> Dict:
+    """Build helpful error message for age-restricted content."""
+    from pathlib import Path
+    from app.file_system_utils import is_valid_browser
+
+    cookie_file_exists = (
+        youtube_cookies_file_path and Path(youtube_cookies_file_path).exists()
+    )
+    browser_configured = cookies_from_browser and is_valid_browser(cookies_from_browser)
+
+    help_msg = "🔞 Age-restricted content.\n\n"
+
+    if not cookie_file_exists and not browser_configured:
+        help_msg += (
+            "🔐 **Authentication required!** This video requires sign-in to verify age.\n\n"
+            "**Solutions:**\n"
+            "1. 📁 **Add cookies file** (recommended):\n"
+            "   - Export cookies from your browser while signed in to YouTube\n"
+            "   - Place file at: `cookies/youtube_cookies.txt`\n"
+            "   - Set YOUTUBE_COOKIES_FILE_PATH in .env\n\n"
+            "2. 🌐 **Use browser cookies**:\n"
+            "   - Set COOKIES_FROM_BROWSER=chrome (or firefox, brave, etc.)\n"
+            "   - Make sure you're signed in to YouTube in that browser\n\n"
+            "[Documentation](docs/usage.md#-authentication--private-content)"
+        )
+    else:
+        help_msg += (
+            "🔐 Cookies are configured but age verification failed.\n\n"
+            "**Possible causes:**\n"
+            "1. 🔄 **Cookies may be expired** - refresh them from your browser\n"
+            "2. 👤 **Not signed in** - make sure you're logged into YouTube when exporting cookies\n"
+            "3. 🔞 **Account age verification** - your YouTube account may need age verification\n\n"
+        )
+
+        if cookie_file_exists:
+            help_msg += f"📁 Current cookies file: `{youtube_cookies_file_path}`\n"
+        if browser_configured:
+            help_msg += f"🌐 Browser configured: `{cookies_from_browser}`\n"
+
+    return {"error": help_msg}
