@@ -80,6 +80,8 @@ try:
         create_initial_status,
         add_selected_format,
         update_format_status,
+        mark_format_error,
+        get_first_completed_format,
     )
 except ImportError:
     # Fallback for direct execution from app directory
@@ -151,6 +153,8 @@ except ImportError:
         create_initial_status,
         add_selected_format,
         update_format_status,
+        mark_format_error,
+        get_first_completed_format,
     )
 
 # Configuration import (must be after translations for configure_language)
@@ -955,6 +959,14 @@ def _execute_profile_downloads(
 
             return 0, ""
 
+        # Mark format as error in status.json
+        format_id = profile.get("format_id", "unknown")
+        mark_format_error(
+            tmp_video_dir=tmp_video_dir,
+            video_format=format_id,
+            error_message="Download failed - all clients exhausted",
+        )
+
         # Handle profile failure
         should_continue = _handle_profile_failure(
             profile,
@@ -1233,7 +1245,7 @@ def get_tmp_video_dir() -> Optional[Path]:
     return st.session_state.get("tmp_video_dir")
 
 
-def analyze_video_on_url_change(url: str) -> Optional[Dict]:
+def analyze_video_on_url_validation(url: str) -> Optional[Dict]:
     """
     Analyze URL and initialize all session state variables for the video.
     This should be the ONLY place where url_analysis() is called.
@@ -1256,10 +1268,17 @@ def analyze_video_on_url_change(url: str) -> Optional[Dict]:
 
     # Check if we already analyzed this URL in this session
     if st.session_state.get("current_video_url") == clean_url:
-        # URL hasn't changed, return cached info
-        return st.session_state.get("url_info")
+        # URL hasn't changed, but verify all required variables are set
+        if (
+            st.session_state.get("url_info")
+            and st.session_state.get("tmp_video_dir")
+            and st.session_state.get("unique_folder_name")
+        ):
+            # All required variables present, return cached info
+            return st.session_state.get("url_info")
+        # If any variable is missing, fall through to re-analyze
 
-    # New URL - analyze it and initialize everything
+    # New URL (or incomplete cache) - analyze it and initialize everything
     st.session_state["current_video_url"] = clean_url
 
     # Clear previous analysis results (but don't clear profiles yet)
@@ -1470,7 +1489,7 @@ url = st.text_input(
 # Analyze URL and display information (only once per URL change)
 if url and url.strip():
     with st.spinner(t("url_analysis_spinner")):
-        url_info = analyze_video_on_url_change(url)
+        url_info = analyze_video_on_url_validation(url)
         if url_info:
             display_url_info(url_info)
 
@@ -2696,16 +2715,45 @@ if submitted:
     push_log("")
     push_log(f"📝 Target filename: {base_output}")
 
-    # Check if a generic video file already exists from a previous download
-    # This allows resilience in case of interruption during post-processing
-    existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
-    existing_generic_file = existing_video_tracks[0] if existing_video_tracks else None
+    # Check if a completed download already exists (status.json verification)
+    # Priority: 1) Check status.json for completed format 2) Fallback to generic file search
+    existing_generic_file = None
+    completed_format_id = get_first_completed_format(tmp_video_dir)
 
-    if existing_generic_file:
-        log_title("✅ Found cached download")
-        push_log(f"  📦 Existing file: {existing_generic_file.name}")
-        push_log("  🔄 Skipping download, reusing cached file")
-        push_log("")
+    if completed_format_id:
+        # We have a completed format in status.json - find the corresponding file
+        log_title("✅ Found completed download in status")
+        push_log(f"  🎯 Format ID: {completed_format_id}")
+
+        # Try to find the video file with this format ID
+        existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
+        for track in existing_video_tracks:
+            track_format_id = tmp_files.extract_format_id_from_filename(track.name)
+            if track_format_id and track_format_id in completed_format_id:
+                existing_generic_file = track
+                push_log(f"  📦 Found file: {existing_generic_file.name}")
+                push_log(
+                    f"  📊 Size: {existing_generic_file.stat().st_size / (1024*1024):.2f}MiB"
+                )
+                push_log("  🔄 Skipping download, reusing completed file")
+                push_log("")
+                break
+
+        if not existing_generic_file:
+            push_log("  ⚠️ Status shows completed but file not found, will re-download")
+    else:
+        # Fallback: check for any generic video file (backward compatibility)
+        existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
+        existing_generic_file = (
+            existing_video_tracks[0] if existing_video_tracks else None
+        )
+
+        if existing_generic_file:
+            log_title("✅ Found cached download (legacy detection)")
+            push_log(f"  📦 Existing file: {existing_generic_file.name}")
+            push_log("  🔄 Skipping download, reusing cached file")
+            push_log("  ℹ️  Note: No status.json entry for this file, consider updating")
+            push_log("")
 
     # Always check for SponsorBlock segments for this video (informational)
     push_log("🔍 Analyzing video for sponsor segments...")

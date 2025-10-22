@@ -262,3 +262,67 @@ def is_format_completed(tmp_video_dir: Path, video_format: str) -> bool:
     """
     status = get_format_status(tmp_video_dir, video_format)
     return status == "completed"
+
+
+def mark_format_error(
+    tmp_video_dir: Path,
+    video_format: str,
+    error_message: str = "Download failed",
+) -> bool:
+    """
+    Mark a format as failed/error in status.json.
+
+    Args:
+        tmp_video_dir: Path to the unique video temporary directory
+        video_format: Format ID to mark as error
+        error_message: Error description
+
+    Returns:
+        bool: True if updated successfully, False otherwise
+    """
+    status_data = load_status(tmp_video_dir)
+    if not status_data:
+        return False
+
+    # Find the format entry
+    format_entry = None
+    for fmt in status_data.get("selected_formats", []):
+        if fmt.get("video_format") == video_format:
+            format_entry = fmt
+            break
+
+    if not format_entry:
+        return False
+
+    # Update to error status
+    format_entry["status"] = "error"
+    format_entry["error"] = error_message
+    safe_push_log(f"❌ Format {video_format} marked as 'error': {error_message}")
+
+    return save_status(tmp_video_dir, status_data)
+
+
+def get_first_completed_format(tmp_video_dir: Path) -> Optional[str]:
+    """
+    Get the format ID of the first completed download.
+
+    Args:
+        tmp_video_dir: Path to the unique video temporary directory
+
+    Returns:
+        str: Format ID of first completed download, or None if no completed downloads
+    """
+    status_data = load_status(tmp_video_dir)
+    if not status_data:
+        return None
+
+    for fmt in status_data.get("selected_formats", []):
+        if fmt.get("status") == "completed":
+            format_id = fmt.get("video_format")
+            safe_push_log(
+                f"✅ Found completed format in status: {format_id} "
+                f"(size: {fmt.get('actual_filesize', 0) / (1024*1024):.2f}MiB)"
+            )
+            return format_id
+
+    return None

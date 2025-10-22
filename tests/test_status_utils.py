@@ -14,6 +14,8 @@ from app.status_utils import (
     update_format_status,
     get_format_status,
     is_format_completed,
+    mark_format_error,
+    get_first_completed_format,
 )
 
 
@@ -361,3 +363,131 @@ def test_is_format_completed():
 
         # Now should be completed
         assert is_format_completed(tmp_video_dir, "399+251") is True
+
+
+def test_mark_format_error():
+    """Test marking format as error."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        tmp_video_dir = Path(temp_dir) / "youtube-abc123"
+        tmp_video_dir.mkdir()
+
+        create_initial_status(
+            url="https://www.youtube.com/watch?v=abc123",
+            video_id="abc123",
+            title="Test Video",
+            content_type="video",
+            tmp_video_dir=tmp_video_dir,
+        )
+
+        add_selected_format(
+            tmp_video_dir=tmp_video_dir,
+            video_format="399+251",
+            subtitles=["subtitles.en.srt"],
+            filesize_approx=41943040,
+        )
+
+        # Mark as error
+        success = mark_format_error(
+            tmp_video_dir=tmp_video_dir,
+            video_format="399+251",
+            error_message="Authentication required",
+        )
+        assert success is True
+
+        # Verify error status
+        status_data = load_status(tmp_video_dir)
+        format_entry = status_data["selected_formats"][0]
+        assert format_entry["status"] == "error"
+        assert format_entry["error"] == "Authentication required"
+
+
+def test_mark_format_error_nonexistent():
+    """Test marking nonexistent format as error."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        tmp_video_dir = Path(temp_dir) / "youtube-abc123"
+        tmp_video_dir.mkdir()
+
+        create_initial_status(
+            url="https://www.youtube.com/watch?v=abc123",
+            video_id="abc123",
+            title="Test Video",
+            content_type="video",
+            tmp_video_dir=tmp_video_dir,
+        )
+
+        # Try to mark nonexistent format
+        success = mark_format_error(
+            tmp_video_dir=tmp_video_dir,
+            video_format="999+999",
+            error_message="Some error",
+        )
+        assert success is False
+
+
+def test_get_first_completed_format():
+    """Test getting first completed format."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        tmp_video_dir = Path(temp_dir) / "youtube-abc123"
+        tmp_video_dir.mkdir()
+
+        create_initial_status(
+            url="https://www.youtube.com/watch?v=abc123",
+            video_id="abc123",
+            title="Test Video",
+            content_type="video",
+            tmp_video_dir=tmp_video_dir,
+        )
+
+        # No completed formats yet
+        result = get_first_completed_format(tmp_video_dir)
+        assert result is None
+
+        # Add multiple formats with different statuses
+        add_selected_format(
+            tmp_video_dir=tmp_video_dir,
+            video_format="399+251",
+            subtitles=["subtitles.en.srt"],
+            filesize_approx=42000000,
+        )
+
+        add_selected_format(
+            tmp_video_dir=tmp_video_dir,
+            video_format="248+251",
+            subtitles=["subtitles.en.srt"],
+            filesize_approx=39500000,
+        )
+
+        # Still no completed formats
+        result = get_first_completed_format(tmp_video_dir)
+        assert result is None
+
+        # Mark second format as completed
+        status_data = load_status(tmp_video_dir)
+        status_data["selected_formats"][1]["status"] = "completed"
+        status_data["selected_formats"][1]["actual_filesize"] = 39673330
+        save_status(tmp_video_dir, status_data)
+
+        # Should return the first completed format (248+251)
+        result = get_first_completed_format(tmp_video_dir)
+        assert result == "248+251"
+
+        # Mark first format as completed too
+        status_data = load_status(tmp_video_dir)
+        status_data["selected_formats"][0]["status"] = "completed"
+        status_data["selected_formats"][0]["actual_filesize"] = 42100000
+        save_status(tmp_video_dir, status_data)
+
+        # Should still return the first one in the list (399+251)
+        result = get_first_completed_format(tmp_video_dir)
+        assert result == "399+251"
+
+
+def test_get_first_completed_format_no_status_file():
+    """Test getting completed format when status.json doesn't exist."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        tmp_video_dir = Path(temp_dir) / "youtube-abc123"
+        tmp_video_dir.mkdir()
+
+        # No status.json file
+        result = get_first_completed_format(tmp_video_dir)
+        assert result is None

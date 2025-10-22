@@ -302,7 +302,7 @@ def get_profiles_with_formats_id_to_download(
             cmd.extend(
                 [
                     "--print",
-                    '{"format_id":"%(format_id)s","ext":"%(ext)s","height":%(height)s,"vcodec":"%(vcodec)s","protocol":"%(protocol)s"}',
+                    '{"format_id":"%(format_id)s","ext":"%(ext)s","height":%(height)s,"vcodec":"%(vcodec)s","protocol":"%(protocol)s","filesize_approx":%(filesize_approx)s}',
                 ]
             )
 
