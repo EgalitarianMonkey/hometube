@@ -78,7 +78,7 @@ The `status.json` file tracks download progress and completion:
   "id": "abc123",
   "title": "Amazing Video Tutorial",
   "type": "video",
-  "selected_formats": [
+  "downloaded_formats": [
     {
       "video_format": "399+251",
       "subtitles": ["subtitles.en.srt", "subtitles.fr.srt"],

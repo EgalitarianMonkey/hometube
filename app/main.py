@@ -83,6 +83,8 @@ try:
         update_format_status,
         mark_format_error,
         get_first_completed_format,
+        add_download_attempt,
+        get_last_download_attempt,
     )
 except ImportError:
     # Fallback for direct execution from app directory
@@ -157,6 +159,8 @@ except ImportError:
         update_format_status,
         mark_format_error,
         get_first_completed_format,
+        add_download_attempt,
+        get_last_download_attempt,
     )
 
 # Configuration import (must be after translations for configure_language)
@@ -1204,6 +1208,9 @@ def url_analysis(url: str) -> Optional[Dict]:
         st.session_state["unique_folder_name"] = unique_folder_name
         st.session_state["current_video_url"] = clean_url
 
+        # Reset folder initialization flag for new URL
+        st.session_state["default_folder_initialized"] = False
+
         # Prepare output path for JSON file in the unique video folder
         json_output_path = video_tmp_dir / "url_info.json"
 
@@ -1548,7 +1555,19 @@ if url and url.strip():
         if url_info:
             display_url_info(url_info)
 
-filename = st.text_input(t("video_name"), help=t("video_name_help"))
+# Try to get last download attempt to pre-fill fields
+default_filename = ""
+last_attempt = None  # Initialize to avoid NameError
+
+tmp_video_dir = st.session_state.get("tmp_video_dir")
+if tmp_video_dir:
+    last_attempt = get_last_download_attempt(tmp_video_dir)
+    if last_attempt:
+        default_filename = last_attempt.get("custom_title", "")
+
+filename = st.text_input(
+    t("video_name"), value=default_filename, help=t("video_name_help")
+)
 
 # === FOLDER SELECTION ===
 # Handle cancel action - reset to root folder
@@ -1563,16 +1582,37 @@ if "folder_selection_reset" in st.session_state:
 if "folder_selectbox_key" not in st.session_state:
     st.session_state.folder_selectbox_key = 0
 
+# Initialize default folder from last attempt (only once per URL)
+if "default_folder_initialized" not in st.session_state:
+    st.session_state.default_folder_initialized = False
+
+if tmp_video_dir and last_attempt and not st.session_state.default_folder_initialized:
+    last_location = last_attempt.get("video_location", "/")
+    st.session_state.prefilled_folder = last_location
+    st.session_state.default_folder_initialized = True
+
 # Reload folder list if a new folder was just created to include it in the options
 existing_subdirs = list_subdirs_recursive(
     VIDEOS_FOLDER, max_depth=2
 )  # Allow 2 levels deep
 folder_options = ["/"] + existing_subdirs + [t("create_new_folder")]
 
+# Determine default folder index
+folder_index = 0  # Default to root
+if "prefilled_folder" in st.session_state:
+    prefilled = st.session_state.prefilled_folder
+    try:
+        if prefilled in folder_options:
+            folder_index = folder_options.index(prefilled)
+            # Clear the prefilled value after using it once
+            del st.session_state.prefilled_folder
+    except ValueError:
+        pass
+
 video_subfolder = st.selectbox(
     t("destination_folder"),
     options=folder_options,
-    index=0,  # Always default to root folder when reset
+    index=folder_index,
     format_func=lambda x: (
         "📁 Root folder (/)"
         if x == "/"
@@ -1676,7 +1716,48 @@ if video_subfolder == t("create_new_folder"):
 if "new_folder_created" in st.session_state:
     video_subfolder = st.session_state.new_folder_created
     del st.session_state.new_folder_created
-    st.rerun()
+
+# === FILE EXISTENCE WARNING ===
+# Check if file already exists with the current filename and location
+if (
+    filename
+    and filename.strip()
+    and video_subfolder
+    and video_subfolder != t("create_new_folder")
+):
+    # Determine destination directory
+    if video_subfolder == "/":
+        check_dest_dir = VIDEOS_FOLDER
+    else:
+        check_dest_dir = VIDEOS_FOLDER / video_subfolder
+
+    # Check for existing files with all common video extensions
+    existing_files = []
+    for ext in [".mkv", ".mp4", ".webm", ".avi", ".mov"]:
+        potential_file = check_dest_dir / f"{filename}{ext}"
+        if potential_file.exists():
+            existing_files.append(potential_file)
+
+    if existing_files:
+        # File already exists - show warning
+        existing_file = existing_files[0]
+        file_size_mb = existing_file.stat().st_size / (1024 * 1024)
+
+        if settings.ALLOW_OVERWRITE_EXISTING_VIDEO:
+            st.warning(
+                f"⚠️ **File already exists:** `{existing_file.name}`\n\n"
+                f"📊 Size: {file_size_mb:.2f} MiB\n\n"
+                f"🔄 **Overwrite mode enabled** (ALLOW_OVERWRITE_EXISTING_VIDEO=true)\n\n"
+                f"The existing file will be replaced if you proceed with the download."
+            )
+        else:
+            st.error(
+                f"❌ **File already exists:** `{existing_file.name}`\n\n"
+                f"📊 Size: {file_size_mb:.2f} MiB\n\n"
+                f"🛡️ **Protection active:** ALLOW_OVERWRITE_EXISTING_VIDEO=false\n\n"
+                f"Download will be skipped to protect the existing file.\n\n"
+                f"💡 To allow overwrites, set `ALLOW_OVERWRITE_EXISTING_VIDEO=true` in your `.env` file."
+            )
 
 # subtitles multiselect from env
 # Default subtitles are determined by audio language preferences (LANGUAGE_PRIMARY, LANGUAGES_SECONDARIES)
@@ -2827,6 +2908,13 @@ if submitted:
         filename = get_video_title(clean_url, cookies_part)
 
     base_output = filename  # without extension
+
+    # Record this download attempt in status.json
+    add_download_attempt(
+        tmp_video_dir=tmp_video_dir,
+        custom_title=filename,
+        video_location=video_subfolder,
+    )
 
     # Log download strategy
     push_log("")

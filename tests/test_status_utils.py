@@ -38,7 +38,7 @@ def test_create_initial_status():
         assert status_data["id"] == "abc123"
         assert status_data["title"] == "Test Video"
         assert status_data["type"] == "video"
-        assert status_data["selected_formats"] == []
+        assert status_data["downloaded_formats"] == []
         assert "last_updated" in status_data
 
         # Verify file was created
@@ -134,9 +134,9 @@ def test_add_selected_format():
 
         # Verify format was added
         status_data = load_status(tmp_video_dir)
-        assert len(status_data["selected_formats"]) == 1
+        assert len(status_data["downloaded_formats"]) == 1
 
-        format_entry = status_data["selected_formats"][0]
+        format_entry = status_data["downloaded_formats"][0]
         assert format_entry["video_format"] == "399+251"
         assert format_entry["subtitles"] == ["subtitles.en.srt", "subtitles.fr.srt"]
         assert format_entry["filesize_approx"] == 41943040
@@ -174,8 +174,8 @@ def test_add_selected_format_duplicate():
 
         # Should have only one entry (updated)
         status_data = load_status(tmp_video_dir)
-        assert len(status_data["selected_formats"]) == 1
-        assert status_data["selected_formats"][0]["filesize_approx"] == 42000000
+        assert len(status_data["downloaded_formats"]) == 1
+        assert status_data["downloaded_formats"][0]["filesize_approx"] == 42000000
 
 
 def test_update_format_status_completed():
@@ -215,7 +215,7 @@ def test_update_format_status_completed():
 
         # Verify status is completed
         status_data = load_status(tmp_video_dir)
-        format_entry = status_data["selected_formats"][0]
+        format_entry = status_data["downloaded_formats"][0]
         assert format_entry["status"] == "completed"
         assert "actual_filesize" in format_entry
 
@@ -258,7 +258,7 @@ def test_update_format_status_incomplete():
 
         # Verify status is incomplete
         status_data = load_status(tmp_video_dir)
-        format_entry = status_data["selected_formats"][0]
+        format_entry = status_data["downloaded_formats"][0]
         assert format_entry["status"] == "incomplete"
         assert "actual_filesize" in format_entry
         assert "size_difference" in format_entry
@@ -297,7 +297,7 @@ def test_update_format_status_file_not_found():
 
         # Verify status is incomplete with error
         status_data = load_status(tmp_video_dir)
-        format_entry = status_data["selected_formats"][0]
+        format_entry = status_data["downloaded_formats"][0]
         assert format_entry["status"] == "incomplete"
         assert format_entry["error"] == "File not found"
 
@@ -358,7 +358,7 @@ def test_is_format_completed():
 
         # Mark as completed
         status_data = load_status(tmp_video_dir)
-        status_data["selected_formats"][0]["status"] = "completed"
+        status_data["downloaded_formats"][0]["status"] = "completed"
         save_status(tmp_video_dir, status_data)
 
         # Now should be completed
@@ -396,7 +396,7 @@ def test_mark_format_error():
 
         # Verify error status
         status_data = load_status(tmp_video_dir)
-        format_entry = status_data["selected_formats"][0]
+        format_entry = status_data["downloaded_formats"][0]
         assert format_entry["status"] == "error"
         assert format_entry["error"] == "Authentication required"
 
@@ -463,8 +463,8 @@ def test_get_first_completed_format():
 
         # Mark second format as completed
         status_data = load_status(tmp_video_dir)
-        status_data["selected_formats"][1]["status"] = "completed"
-        status_data["selected_formats"][1]["actual_filesize"] = 39673330
+        status_data["downloaded_formats"][1]["status"] = "completed"
+        status_data["downloaded_formats"][1]["actual_filesize"] = 39673330
         save_status(tmp_video_dir, status_data)
 
         # Should return the first completed format (248+251)
@@ -473,8 +473,8 @@ def test_get_first_completed_format():
 
         # Mark first format as completed too
         status_data = load_status(tmp_video_dir)
-        status_data["selected_formats"][0]["status"] = "completed"
-        status_data["selected_formats"][0]["actual_filesize"] = 42100000
+        status_data["downloaded_formats"][0]["status"] = "completed"
+        status_data["downloaded_formats"][0]["actual_filesize"] = 42100000
         save_status(tmp_video_dir, status_data)
 
         # Should still return the first one in the list (399+251)

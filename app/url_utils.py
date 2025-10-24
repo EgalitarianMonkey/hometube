@@ -305,8 +305,6 @@ def build_url_info(
             "-J",  # JSON output
             "--skip-download",  # Don't download
             "--flat-playlist",  # For playlists, get basic info without extracting all videos
-            "--playlist-end",
-            "1",  # Only first video for quick playlist detection
         ]
 
         # Add client-specific args
@@ -342,8 +340,6 @@ def build_url_info(
             "-J",  # JSON output
             "--skip-download",  # Don't download
             "--flat-playlist",  # For playlists, get basic info without extracting all videos
-            "--playlist-end",
-            "1",  # Only first video for quick playlist detection
             clean_url,
         ]
 
@@ -376,8 +372,6 @@ def build_url_info(
                 "-J",
                 "--skip-download",
                 "--flat-playlist",
-                "--playlist-end",
-                "1",
                 "--user-agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "--extractor-retries",
@@ -412,8 +406,6 @@ def build_url_info(
                 "-J",
                 "--skip-download",
                 "--flat-playlist",
-                "--playlist-end",
-                "1",
                 "--user-agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "--extractor-retries",

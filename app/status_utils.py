@@ -38,7 +38,7 @@ def create_initial_status(
         "id": video_id,
         "title": title,
         "type": content_type,
-        "selected_formats": [],  # Will be populated during download
+        "downloaded_formats": [],  # Will be populated during download
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -134,18 +134,18 @@ def add_selected_format(
 
     # Check if format already exists (update instead of duplicate)
     existing_index = None
-    for i, fmt in enumerate(status_data.get("selected_formats", [])):
+    for i, fmt in enumerate(status_data.get("downloaded_formats", [])):
         if fmt.get("video_format") == video_format:
             existing_index = i
             break
 
     if existing_index is not None:
         # Update existing entry
-        status_data["selected_formats"][existing_index] = format_entry
+        status_data["downloaded_formats"][existing_index] = format_entry
         safe_push_log(f"📊 Updated format {video_format} status to 'downloading'")
     else:
         # Add new entry
-        status_data["selected_formats"].append(format_entry)
+        status_data["downloaded_formats"].append(format_entry)
         safe_push_log(f"📊 Added format {video_format} with status 'downloading'")
 
     return save_status(tmp_video_dir, status_data)
@@ -177,7 +177,7 @@ def update_format_status(
 
     # Find the format entry
     format_entry = None
-    for fmt in status_data.get("selected_formats", []):
+    for fmt in status_data.get("downloaded_formats", []):
         if fmt.get("video_format") == video_format:
             format_entry = fmt
             break
@@ -242,7 +242,7 @@ def get_format_status(tmp_video_dir: Path, video_format: str) -> Optional[str]:
     if not status_data:
         return None
 
-    for fmt in status_data.get("selected_formats", []):
+    for fmt in status_data.get("downloaded_formats", []):
         if fmt.get("video_format") == video_format:
             return fmt.get("status")
 
@@ -286,7 +286,7 @@ def mark_format_error(
 
     # Find the format entry
     format_entry = None
-    for fmt in status_data.get("selected_formats", []):
+    for fmt in status_data.get("downloaded_formats", []):
         if fmt.get("video_format") == video_format:
             format_entry = fmt
             break
@@ -316,7 +316,7 @@ def get_first_completed_format(tmp_video_dir: Path) -> Optional[str]:
     if not status_data:
         return None
 
-    for fmt in status_data.get("selected_formats", []):
+    for fmt in status_data.get("downloaded_formats", []):
         if fmt.get("status") == "completed":
             format_id = fmt.get("video_format")
             safe_push_log(
@@ -326,3 +326,77 @@ def get_first_completed_format(tmp_video_dir: Path) -> Optional[str]:
             return format_id
 
     return None
+
+
+def add_download_attempt(
+    tmp_video_dir: Path,
+    custom_title: str,
+    video_location: str,
+) -> bool:
+    """
+    Record a download attempt in status.json.
+
+    Each time the user clicks the Download button, this function records:
+    - custom_title: The filename/title entered by the user
+    - video_location: The subfolder/category selected
+    - date: ISO timestamp of the download attempt
+
+    New attempts are added at the beginning of the list (index 0) for easy access.
+
+    Args:
+        tmp_video_dir: Path to the unique video temporary directory
+        custom_title: User-provided filename/title
+        video_location: Destination subfolder path
+
+    Returns:
+        bool: True if recorded successfully, False otherwise
+    """
+    status_data = load_status(tmp_video_dir)
+    if not status_data:
+        safe_push_log("⚠️ Status file not found, cannot record download attempt")
+        return False
+
+    # Create attempt entry
+    attempt_entry = {
+        "custom_title": custom_title,
+        "video_location": video_location,
+        "date": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Initialize download_attempts list if it doesn't exist
+    if "download_attempts" not in status_data:
+        status_data["download_attempts"] = []
+
+    # Insert at the beginning (position 0) so most recent is first
+    status_data["download_attempts"].insert(0, attempt_entry)
+
+    safe_push_log(
+        f"📊 Recorded download attempt: title='{custom_title}', "
+        f"location='{video_location}'"
+    )
+
+    return save_status(tmp_video_dir, status_data)
+
+
+def get_last_download_attempt(tmp_video_dir: Path) -> Optional[Dict]:
+    """
+    Get the most recent download attempt from status.json.
+
+    Returns the first entry in download_attempts list (newest first).
+
+    Args:
+        tmp_video_dir: Path to the unique video temporary directory
+
+    Returns:
+        Dict with keys 'custom_title', 'video_location', 'date' or None if no attempts
+    """
+    status_data = load_status(tmp_video_dir)
+    if not status_data:
+        return None
+
+    attempts = status_data.get("download_attempts", [])
+    if not attempts:
+        return None
+
+    # Return the first entry (most recent)
+    return attempts[0]
