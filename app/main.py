@@ -264,15 +264,15 @@ def _process_quality_strategy(quality_strategy: str, url: str) -> None:
 
     try:
         # Get tmp directory from session state (set during url_analysis)
-        tmp_video_dir = st.session_state.get("tmp_video_dir")
-        if not tmp_video_dir:
+        tmp_url_workspace = st.session_state.get("tmp_url_workspace")
+        if not tmp_url_workspace:
             # Reset profiles to empty to avoid showing stale data
             st.session_state.optimal_format_profiles = []
             st.session_state.chosen_format_profiles = []
             return
 
         # Check if we already have a cached download - skip format probing if so
-        existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
+        existing_video_tracks = tmp_files.find_video_tracks(tmp_url_workspace)
         if existing_video_tracks:
             safe_push_log(f"✅ Found cached video: {existing_video_tracks[0].name}")
             safe_push_log("⚡ Skipping format probing - will reuse cached file")
@@ -494,11 +494,11 @@ def _get_optimal_profiles_from_json(url: str) -> List[Dict]:
     """
     try:
         # Get tmp directory and url_info from session state (set during url_analysis)
-        tmp_video_dir = st.session_state.get("tmp_video_dir")
+        tmp_url_workspace = st.session_state.get("tmp_url_workspace")
         url_info = st.session_state.get("url_info")
         json_path_str = st.session_state.get("url_info_path")
 
-        if not tmp_video_dir or not url_info or not json_path_str:
+        if not tmp_url_workspace or not url_info or not json_path_str:
             safe_push_log("⚠️ Video info not initialized. Analyze URL first.")
             return []
 
@@ -983,7 +983,7 @@ def _execute_profile_downloads(
         format_id = profile.get("format_id", "unknown")
         filesize_approx = profile.get("filesize_approx", 0)
         add_selected_format(
-            tmp_video_dir=tmp_video_dir,
+            tmp_url_workspace=tmp_video_dir,
             video_format=format_id,
             subtitles=[f"subtitles.{lang}.srt" for lang in subs_selected],
             filesize_approx=filesize_approx,
@@ -1029,7 +1029,7 @@ def _execute_profile_downloads(
         # Mark format as error in status.json
         format_id = profile.get("format_id", "unknown")
         mark_format_error(
-            tmp_video_dir=tmp_video_dir,
+            tmp_url_workspace=tmp_video_dir,
             video_format=format_id,
             error_message="Download failed - all clients exhausted",
         )
@@ -1109,7 +1109,7 @@ if "download_cancelled" not in st.session_state:
 def init_url_workspace(
     clean_url: str,
     json_output_path: Path,
-    video_tmp_dir: Path,
+    tmp_url_workspace: Path,
 ) -> Optional[Dict]:
     """
     Initialize workspace for a new URL by fetching video info and creating status files.
@@ -1124,7 +1124,7 @@ def init_url_workspace(
     Args:
         clean_url: Sanitized video URL
         json_output_path: Path where url_info.json will be saved
-        video_tmp_dir: Temporary directory for this video
+        tmp_url_workspace: Temporary workspace directory for this URL (video or playlist)
 
     Returns:
         Dict with video/playlist information or error dict
@@ -1158,7 +1158,7 @@ def init_url_workspace(
             video_id=video_id,
             title=title,
             content_type=content_type,
-            tmp_video_dir=video_tmp_dir,
+            tmp_url_workspace=tmp_url_workspace,
         )
 
     return info
@@ -1171,7 +1171,7 @@ def url_analysis(url: str) -> Optional[Dict]:
 
     This function:
     1. Sanitizes URL and creates unique tmp folder
-    2. Sets all session state variables (tmp_video_dir, unique_folder_name, etc.)
+    2. Sets all session state variables (tmp_url_workspace, unique_folder_name, etc.)
     3. Checks if url_info.json exists with good integrity
     4. If exists: loads it and returns
     5. If not: fetches from yt-dlp via init_url_workspace()
@@ -1186,33 +1186,35 @@ def url_analysis(url: str) -> Optional[Dict]:
         return None
 
     try:
-        # Sanitize URL and create unique folder for this video
+        # Sanitize URL and create unique folder for this URL (video or playlist)
         clean_url = sanitize_url(url)
         unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
-        video_tmp_dir = TMP_DOWNLOAD_FOLDER / unique_folder_name
+        tmp_url_workspace = TMP_DOWNLOAD_FOLDER / unique_folder_name
 
         # Check if NEW_DOWNLOAD_WITHOUT_TMP_FILES is enabled (UI override or config default)
         clean_tmp_before_download = st.session_state.get(
             "new_download_without_tmp_files", settings.NEW_DOWNLOAD_WITHOUT_TMP_FILES
         )
-        if clean_tmp_before_download and video_tmp_dir.exists():
-            safe_push_log(f"🗑️ Removing tmp files for fresh download: {video_tmp_dir}")
+        if clean_tmp_before_download and tmp_url_workspace.exists():
+            safe_push_log(
+                f"🗑️ Removing tmp files for fresh download: {tmp_url_workspace}"
+            )
             import shutil
 
-            shutil.rmtree(video_tmp_dir)
+            shutil.rmtree(tmp_url_workspace)
 
-        ensure_dir(video_tmp_dir)
+        ensure_dir(tmp_url_workspace)
 
         # ALWAYS store in session state for reuse across the application
-        st.session_state["tmp_video_dir"] = video_tmp_dir
+        st.session_state["tmp_url_workspace"] = tmp_url_workspace
         st.session_state["unique_folder_name"] = unique_folder_name
         st.session_state["current_video_url"] = clean_url
 
         # Reset folder initialization flag for new URL
         st.session_state["default_folder_initialized"] = False
 
-        # Prepare output path for JSON file in the unique video folder
-        json_output_path = video_tmp_dir / "url_info.json"
+        # Prepare output path for JSON file in the unique URL workspace folder
+        json_output_path = tmp_url_workspace / "url_info.json"
 
         # === CHECK IF URL_INFO.JSON ALREADY EXISTS WITH GOOD INTEGRITY ===
         url_info_is_complet, existing_info = is_url_info_complet(json_output_path)
@@ -1224,7 +1226,7 @@ def url_analysis(url: str) -> Optional[Dict]:
             return existing_info
         else:
             # Initialize workspace and fetch video info
-            return init_url_workspace(clean_url, json_output_path, video_tmp_dir)
+            return init_url_workspace(clean_url, json_output_path, tmp_url_workspace)
 
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
@@ -1349,15 +1351,31 @@ def get_url_info_path() -> Optional[Path]:
     return None
 
 
-def get_tmp_video_dir() -> Optional[Path]:
+def get_tmp_url_workspace() -> Optional[Path]:
     """
-    Get the unique temporary directory from session state.
+    Get the unique URL workspace directory from session state.
     This directory is created during url_analysis() and stored in session.
+    It contains all temporary files for the analyzed URL (video or playlist).
 
     Returns:
-        Path to the unique temporary directory or None if not initialized
+        Path to the URL workspace directory or None if not initialized
     """
-    return st.session_state.get("tmp_video_dir")
+    return st.session_state.get("tmp_url_workspace")
+
+
+def get_tmp_video_dir() -> Optional[Path]:
+    """
+    Get the temporary video directory from session state.
+
+    For single videos: returns the URL workspace directory (same as get_tmp_url_workspace())
+    For playlists: will return the specific video's subdirectory (future implementation)
+
+    Returns:
+        Path to the video temporary directory or None if not initialized
+    """
+    # For now, tmp_video_dir is the same as tmp_url_workspace (single video case)
+    # In the future, for playlists, this will return a subdirectory
+    return st.session_state.get("tmp_url_workspace")
 
 
 def build_cookies_params() -> List[str]:
@@ -1559,9 +1577,9 @@ if url and url.strip():
 default_filename = ""
 last_attempt = None  # Initialize to avoid NameError
 
-tmp_video_dir = st.session_state.get("tmp_video_dir")
-if tmp_video_dir:
-    last_attempt = get_last_download_attempt(tmp_video_dir)
+tmp_url_workspace = st.session_state.get("tmp_url_workspace")
+if tmp_url_workspace:
+    last_attempt = get_last_download_attempt(tmp_url_workspace)
     if last_attempt:
         default_filename = last_attempt.get("custom_title", "")
 
@@ -1586,7 +1604,11 @@ if "folder_selectbox_key" not in st.session_state:
 if "default_folder_initialized" not in st.session_state:
     st.session_state.default_folder_initialized = False
 
-if tmp_video_dir and last_attempt and not st.session_state.default_folder_initialized:
+if (
+    tmp_url_workspace
+    and last_attempt
+    and not st.session_state.default_folder_initialized
+):
     last_location = last_attempt.get("video_location", "/")
     st.session_state.prefilled_folder = last_location
     st.session_state.default_folder_initialized = True
@@ -2887,18 +2909,22 @@ if submitted:
     clean_url = sanitize_url(url)
 
     # Get unique temporary folder from session state (set during url_analysis)
-    # This ensures each video has its own isolated workspace
-    tmp_video_dir = st.session_state.get("tmp_video_dir")
+    # This ensures each URL (video/playlist) has its own isolated workspace
+    tmp_url_workspace = st.session_state.get("tmp_url_workspace")
     unique_folder_name = st.session_state.get("unique_folder_name", "unknown")
 
-    if not tmp_video_dir:
+    if not tmp_url_workspace:
         st.error("❌ Video workspace not initialized. Please re-enter the URL.")
         st.stop()
 
-    # All temporary files are written to the root of the unique video folder
+    # For now, tmp_video_dir points to the same location as tmp_url_workspace
+    # In the future, for playlists, each video will have its own subdirectory within tmp_url_workspace
+    tmp_video_dir = tmp_url_workspace
+
+    # All temporary files are written to the root of the unique URL workspace folder
     # The video_subfolder is only used when copying the final file to destination
-    push_log(f"🔧 Unique video workspace: {unique_folder_name}")
-    push_log(t("log_temp_download_folder", folder=tmp_video_dir))
+    push_log(f"🔧 Unique URL workspace: {unique_folder_name}")
+    push_log(t("log_temp_download_folder", folder=tmp_url_workspace))
 
     # Setup cookies for yt-dlp operations
     cookies_part = build_cookies_params()
@@ -2911,7 +2937,7 @@ if submitted:
 
     # Record this download attempt in status.json
     add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title=filename,
         video_location=video_subfolder,
     )
@@ -3579,7 +3605,7 @@ if submitted:
         # Update status.json - verify file and mark as completed or incomplete
         format_id = st.session_state.get("downloaded_format_id", "unknown")
         update_format_status(
-            tmp_video_dir=tmp_video_dir,
+            tmp_url_workspace=tmp_video_dir,
             video_format=format_id,
             final_file=final_source,  # Verify the file in tmp (before copy)
         )

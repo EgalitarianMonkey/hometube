@@ -20,20 +20,20 @@ def test_add_download_attempt_creates_entry(tmp_path):
     )
 
     # Create initial status
-    tmp_video_dir = tmp_path / "youtube-test123"
-    tmp_video_dir.mkdir()
+    tmp_url_workspace = tmp_path / "youtube-test123"
+    tmp_url_workspace.mkdir()
 
     create_initial_status(
         url="https://youtube.com/watch?v=test123",
         video_id="test123",
         title="Test Video",
         content_type="video",
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
     )
 
     # Add a download attempt
     success = add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title="My Custom Title",
         video_location="Tech/HomeLab",
     )
@@ -41,7 +41,7 @@ def test_add_download_attempt_creates_entry(tmp_path):
     assert success is True
 
     # Load and verify
-    status_data = load_status(tmp_video_dir)
+    status_data = load_status(tmp_url_workspace)
     assert status_data is not None
     assert "download_attempts" in status_data
     assert len(status_data["download_attempts"]) == 1
@@ -65,20 +65,20 @@ def test_multiple_attempts_ordered_newest_first(tmp_path):
     )
     import time
 
-    tmp_video_dir = tmp_path / "youtube-test456"
-    tmp_video_dir.mkdir()
+    tmp_url_workspace = tmp_path / "youtube-test456"
+    tmp_url_workspace.mkdir()
 
     create_initial_status(
         url="https://youtube.com/watch?v=test456",
         video_id="test456",
         title="Test Video",
         content_type="video",
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
     )
 
     # Add first attempt
     add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title="First Attempt",
         video_location="Videos",
     )
@@ -88,7 +88,7 @@ def test_multiple_attempts_ordered_newest_first(tmp_path):
 
     # Add second attempt
     add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title="Second Attempt",
         video_location="Music",
     )
@@ -98,13 +98,13 @@ def test_multiple_attempts_ordered_newest_first(tmp_path):
 
     # Add third attempt
     add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title="Third Attempt",
         video_location="Clips",
     )
 
     # Load and verify order
-    status_data = load_status(tmp_video_dir)
+    status_data = load_status(tmp_url_workspace)
     assert len(status_data["download_attempts"]) == 3
 
     # Newest should be first (position 0)
@@ -123,10 +123,10 @@ def test_download_attempt_without_status_file(tmp_path):
     """Test that add_download_attempt fails gracefully without status file."""
     from app.status_utils import add_download_attempt
 
-    tmp_video_dir = tmp_path / "nonexistent"
+    tmp_url_workspace = tmp_path / "nonexistent"
 
     success = add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title="Test",
         video_location="Videos",
     )
@@ -142,15 +142,15 @@ def test_download_attempt_with_special_characters(tmp_path):
         load_status,
     )
 
-    tmp_video_dir = tmp_path / "youtube-test789"
-    tmp_video_dir.mkdir()
+    tmp_url_workspace = tmp_path / "youtube-test789"
+    tmp_url_workspace.mkdir()
 
     create_initial_status(
         url="https://youtube.com/watch?v=test789",
         video_id="test789",
         title="Test Video",
         content_type="video",
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
     )
 
     # Add attempt with special characters
@@ -158,13 +158,13 @@ def test_download_attempt_with_special_characters(tmp_path):
     special_location = "Tech/HomeLab/Tutoriels"
 
     add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title=special_title,
         video_location=special_location,
     )
 
     # Load and verify special characters are preserved
-    status_data = load_status(tmp_video_dir)
+    status_data = load_status(tmp_url_workspace)
     attempt = status_data["download_attempts"][0]
 
     assert attempt["custom_title"] == special_title
@@ -180,8 +180,8 @@ def test_download_attempt_preserves_other_status_fields(tmp_path):
         load_status,
     )
 
-    tmp_video_dir = tmp_path / "youtube-testABC"
-    tmp_video_dir.mkdir()
+    tmp_url_workspace = tmp_path / "youtube-testABC"
+    tmp_url_workspace.mkdir()
 
     # Create initial status
     create_initial_status(
@@ -189,12 +189,12 @@ def test_download_attempt_preserves_other_status_fields(tmp_path):
         video_id="testABC",
         title="Test Video",
         content_type="video",
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
     )
 
     # Add a format
     add_selected_format(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         video_format="399+251",
         subtitles=["subtitles.en.srt"],
         filesize_approx=100000000,
@@ -202,13 +202,13 @@ def test_download_attempt_preserves_other_status_fields(tmp_path):
 
     # Add a download attempt
     add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title="Test Title",
         video_location="Videos",
     )
 
     # Verify all fields are intact
-    status_data = load_status(tmp_video_dir)
+    status_data = load_status(tmp_url_workspace)
 
     assert status_data["url"] == "https://youtube.com/watch?v=testABC"
     assert status_data["id"] == "testABC"
@@ -222,25 +222,25 @@ def test_download_attempt_json_structure(tmp_path):
     """Test that the JSON structure matches the specification."""
     from app.status_utils import create_initial_status, add_download_attempt
 
-    tmp_video_dir = tmp_path / "youtube-testDEF"
-    tmp_video_dir.mkdir()
+    tmp_url_workspace = tmp_path / "youtube-testDEF"
+    tmp_url_workspace.mkdir()
 
     create_initial_status(
         url="https://youtube.com/watch?v=testDEF",
         video_id="testDEF",
         title="Test Video",
         content_type="video",
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
     )
 
     add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title="Stress",
         video_location="Clip",
     )
 
     # Read raw JSON to verify structure
-    status_path = tmp_video_dir / "status.json"
+    status_path = tmp_url_workspace / "status.json"
     with open(status_path, "r") as f:
         raw_json = json.load(f)
 
@@ -269,20 +269,20 @@ def test_get_last_download_attempt(tmp_path):
     )
     import time
 
-    tmp_video_dir = tmp_path / "youtube-testGHI"
-    tmp_video_dir.mkdir()
+    tmp_url_workspace = tmp_path / "youtube-testGHI"
+    tmp_url_workspace.mkdir()
 
     create_initial_status(
         url="https://youtube.com/watch?v=testGHI",
         video_id="testGHI",
         title="Test Video",
         content_type="video",
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
     )
 
     # Add first attempt
     add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title="First Title",
         video_location="Tech",
     )
@@ -291,13 +291,13 @@ def test_get_last_download_attempt(tmp_path):
 
     # Add second attempt
     add_download_attempt(
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
         custom_title="Second Title",
         video_location="Music",
     )
 
     # Get last attempt
-    last_attempt = get_last_download_attempt(tmp_video_dir)
+    last_attempt = get_last_download_attempt(tmp_url_workspace)
 
     assert last_attempt is not None
     assert last_attempt["custom_title"] == "Second Title"
@@ -309,19 +309,19 @@ def test_get_last_download_attempt_no_attempts(tmp_path):
     """Test that get_last_download_attempt returns None when no attempts exist."""
     from app.status_utils import create_initial_status, get_last_download_attempt
 
-    tmp_video_dir = tmp_path / "youtube-testJKL"
-    tmp_video_dir.mkdir()
+    tmp_url_workspace = tmp_path / "youtube-testJKL"
+    tmp_url_workspace.mkdir()
 
     create_initial_status(
         url="https://youtube.com/watch?v=testJKL",
         video_id="testJKL",
         title="Test Video",
         content_type="video",
-        tmp_video_dir=tmp_video_dir,
+        tmp_url_workspace=tmp_url_workspace,
     )
 
     # No attempts added
-    last_attempt = get_last_download_attempt(tmp_video_dir)
+    last_attempt = get_last_download_attempt(tmp_url_workspace)
 
     assert last_attempt is None
 
@@ -330,8 +330,8 @@ def test_get_last_download_attempt_no_status_file(tmp_path):
     """Test that get_last_download_attempt returns None when no status file exists."""
     from app.status_utils import get_last_download_attempt
 
-    tmp_video_dir = tmp_path / "nonexistent"
+    tmp_url_workspace = tmp_path / "nonexistent"
 
-    last_attempt = get_last_download_attempt(tmp_video_dir)
+    last_attempt = get_last_download_attempt(tmp_url_workspace)
 
     assert last_attempt is None
