@@ -66,6 +66,13 @@ def build_base_ytdlp_command(
         "3" if quality_strategy else "2",  # Longer retry sleep for premium
     ]
 
+    # Detect if we have multiple audio streams (e.g., "313+251-0+251-1+251-2")
+    # Count audio format IDs by looking for multiple "+" after the first video format
+    parts = format_spec.split("+")
+    # If we have more than 2 parts (video + first audio + additional audios), enable multi-audio
+    if len(parts) > 2:
+        base_cmd.append("--audio-multistreams")
+
     # Add premium strategy extra arguments
     if quality_strategy and quality_strategy.get("extra_args"):
         base_cmd.extend(quality_strategy["extra_args"])

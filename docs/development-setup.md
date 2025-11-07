@@ -177,7 +177,9 @@ export TMP_DOWNLOAD_FOLDER=./dev-tmp
 
 # Test with different languages
 export UI_LANGUAGE=fr
-export SUBTITLES_CHOICES=en,fr,es
+export LANGUAGE_PRIMARY=fr
+export LANGUAGE_PRIMARY_INCLUDE_SUBTITLES=true
+export LANGUAGES_SECONDARIES=en,es
 ```
 
 ### Useful Debug Combinations

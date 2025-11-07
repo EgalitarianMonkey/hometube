@@ -117,7 +117,8 @@ services:
 | Variable | Default Value | Description |
 |----------|---------------|-------------|
 | `UI_LANGUAGE` | `en` | Interface language (`en`, `fr`) |
-| `SUBTITLES_CHOICES` | `en` | Subtitle languages proposals (comma-separated) |
+
+**Note**: Subtitle languages are automatically determined by `LANGUAGE_PRIMARY_INCLUDE_SUBTITLES` and `LANGUAGES_SECONDARIES` settings (see Audio Language Preferences above).
 
 ### Advanced Options
 

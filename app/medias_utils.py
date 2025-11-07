@@ -100,6 +100,18 @@ def analyze_audio_formats(
     # Use Opus if available, otherwise use all audio formats
     candidate_formats = opus_formats if opus_formats else audio_only_formats
 
+    # STEP 2.5: EXCLUDE DRC (Dynamic Range Compression) formats before finding best
+    # DRC formats have lower quality and should not be used
+    candidate_formats = [
+        fmt
+        for fmt in candidate_formats
+        if "drc" not in fmt.get("format_id", "").lower()
+        and "drc" not in fmt.get("format_note", "").lower()
+    ]
+
+    if not candidate_formats:
+        return None, [], False
+
     # STEP 3: Find the format with the highest bitrate
     best_format = max(candidate_formats, key=lambda x: x.get("abr", 0))
 
@@ -144,6 +156,9 @@ def analyze_audio_formats(
             for lang in languages_secondaries.split(",")
             if lang.strip()
         ]
+
+    # Check if user specified any language preferences
+    has_language_preferences = bool(language_primary or secondary_langs)
 
     # Build ordered list based on preferences
     ordered_audios = []
@@ -195,15 +210,17 @@ def analyze_audio_formats(
                     seen_languages.add(normalize_lang(fmt_lang))
                     break
 
-    # 4. Add remaining languages not yet included
-    for fmt in best_group:
-        fmt_lang = fmt.get("language", "")
-        fmt_normalized = normalize_lang(fmt_lang)
-        if fmt_normalized and fmt_normalized not in seen_languages:
-            ordered_audios.append(fmt)
-            seen_languages.add(fmt_normalized)
+    # 4. Add remaining languages ONLY if no language preferences were specified
+    if not has_language_preferences:
+        for fmt in best_group:
+            fmt_lang = fmt.get("language", "")
+            fmt_normalized = normalize_lang(fmt_lang)
+            if fmt_normalized and fmt_normalized not in seen_languages:
+                ordered_audios.append(fmt)
+                seen_languages.add(fmt_normalized)
 
-    # If no preferences matched, return all in original order
+    # If no preferences matched and no audio tracks selected, return all in original order
+    # This handles edge cases where user preferences don't match any available languages
     if not ordered_audios:
         ordered_audios = sorted(best_group, key=lambda x: x.get("format_id", ""))
 
@@ -342,7 +359,7 @@ def get_profiles_with_formats_id_to_download(
 
                 # Enrich with additional fields for application use
                 vcodec = format_info.get("vcodec", "unknown")
-                height = format_info.get("height", 0)
+                height = format_info.get("height") or 0  # Handle None from yt-dlp
                 format_id = format_info.get("format_id", "")
 
                 # Determine codec label
@@ -544,15 +561,15 @@ def get_available_formats(url_info: Dict) -> List[Dict]:
         format_info = {
             "format_id": fmt.get("format_id", ""),
             "ext": fmt.get("ext", "unknown"),
-            "resolution": f"{fmt.get('width', '?')}x{fmt.get('height', '?')}",
-            "height": fmt.get("height", 0),
+            "resolution": f"{fmt.get('width') or '?'}x{fmt.get('height') or '?'}",
+            "height": fmt.get("height") or 0,  # Handle None from yt-dlp
             "fps": fmt.get("fps"),
             "vcodec": fmt.get("vcodec", "unknown"),
             "acodec": fmt.get("acodec", "none"),
             "filesize": fmt.get("filesize"),
-            "tbr": fmt.get("tbr", 0),  # Total bitrate
-            "vbr": fmt.get("vbr", 0),  # Video bitrate
-            "abr": fmt.get("abr", 0),  # Audio bitrate
+            "tbr": fmt.get("tbr") or 0,  # Total bitrate
+            "vbr": fmt.get("vbr") or 0,  # Video bitrate
+            "abr": fmt.get("abr") or 0,  # Audio bitrate
         }
 
         # Create a human-readable description
@@ -566,13 +583,15 @@ def get_available_formats(url_info: Dict) -> List[Dict]:
         if format_info["acodec"] != "none":
             description_parts.append(f"+ {format_info['acodec']}")
 
-        if format_info["filesize"] and format_info["filesize"] > 0:
-            size_mb = format_info["filesize"] / (1024 * 1024)
+        # Handle filesize (can be None)
+        filesize = format_info.get("filesize")
+        if filesize and filesize > 0:
+            size_mb = filesize / (1024 * 1024)
             if size_mb > 1024:
                 description_parts.append(f"~{size_mb/1024:.1f}GB")
             else:
                 description_parts.append(f"~{size_mb:.0f}MB")
-        elif format_info["tbr"] > 0:
+        elif format_info["tbr"] and format_info["tbr"] > 0:
             description_parts.append(f"{format_info['tbr']:.0f}kbps")
 
         format_info["description"] = " ".join(description_parts)
@@ -580,7 +599,7 @@ def get_available_formats(url_info: Dict) -> List[Dict]:
 
     # Sort by quality (height descending, then fps descending, then bitrate descending)
     video_formats.sort(
-        key=lambda x: (x["height"], x.get("fps", 0), x["tbr"]), reverse=True
+        key=lambda x: (x["height"], x.get("fps") or 0, x["tbr"]), reverse=True
     )
 
     return video_formats

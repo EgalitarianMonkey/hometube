@@ -161,6 +161,8 @@ except ImportError:
         get_first_completed_format,
         add_download_attempt,
         get_last_download_attempt,
+        is_format_completed,
+        get_profiles_cached,
     )
 
 # Configuration import (must be after translations for configure_language)
@@ -187,9 +189,6 @@ VIDEOS_FOLDER, TMP_DOWNLOAD_FOLDER = ensure_folders_exist()
 YOUTUBE_COOKIES_FILE_PATH = settings.YOUTUBE_COOKIES_FILE_PATH
 COOKIES_FROM_BROWSER = settings.COOKIES_FROM_BROWSER
 IN_CONTAINER = settings.IN_CONTAINER
-
-# Get default subtitle languages based on audio preferences
-SUBTITLES_CHOICES = get_default_subtitle_languages()
 
 # Print configuration summary in development mode
 if __name__ == "__main__" or settings.DEBUG:
@@ -251,127 +250,84 @@ AUTH_ERROR_PATTERNS = [
 # === VIDEO FORMAT EXTRACTION AND ANALYSIS ===
 
 
-def _process_quality_strategy(quality_strategy: str, url: str) -> None:
+def _display_strategy_content(quality_strategy: str) -> None:
     """
-    Process the selected quality strategy and update session state with optimal profiles.
-
-    Args:
-        quality_strategy: Selected strategy ("auto_best", "best_no_fallback", etc.)
-        url: Video URL to analyze
-    """
-    if not url or not url.strip():
-        return
-
-    try:
-        # Get tmp directory from session state (set during url_analysis)
-        tmp_url_workspace = st.session_state.get("tmp_url_workspace")
-        if not tmp_url_workspace:
-            # Reset profiles to empty to avoid showing stale data
-            st.session_state.optimal_format_profiles = []
-            st.session_state.chosen_format_profiles = []
-            return
-
-        # Check if we already have a cached download - skip format probing if so
-        existing_video_tracks = tmp_files.find_video_tracks(tmp_url_workspace)
-        if existing_video_tracks:
-            safe_push_log(f"✅ Found cached video: {existing_video_tracks[0].name}")
-            safe_push_log("⚡ Skipping format probing - will reuse cached file")
-            # Set minimal session state to allow download flow to continue
-            st.session_state.optimal_format_profiles = []
-            st.session_state.chosen_format_profiles = []
-            return
-
-        # Get url_info from session state (already loaded by url_analysis)
-        url_info = st.session_state.get("url_info")
-        if not url_info:
-            # Reset profiles to empty to avoid showing stale data
-            st.session_state.optimal_format_profiles = []
-            st.session_state.chosen_format_profiles = []
-            return
-
-        # Get JSON path from session state
-        json_path_str = st.session_state.get("url_info_path")
-        if not json_path_str:
-            # Reset profiles to empty to avoid showing stale data
-            st.session_state.optimal_format_profiles = []
-            st.session_state.chosen_format_profiles = []
-            return
-
-        json_path = Path(json_path_str)
-
-        # Get optimal profiles using new strategy
-        if quality_strategy in ["auto_best", "best_no_fallback", "choose_profile"]:
-            # Load url_info to analyze audio tracks
-            language_primary = settings.LANGUAGE_PRIMARY or "en"
-            # Convert list to comma-separated string
-            languages_secondaries = (
-                ",".join(settings.LANGUAGES_SECONDARIES)
-                if settings.LANGUAGES_SECONDARIES
-                else ""
-            )
-            vo_first = settings.VO_FIRST
-
-            # Analyze audio formats
-            vo_lang, audio_formats, multiple_langs = analyze_audio_formats(
-                url_info,
-                language_primary=language_primary,
-                languages_secondaries=languages_secondaries,
-                vo_first=vo_first,
-            )
-
-            # Get optimal profiles
-            optimal_format_profiles = get_profiles_with_formats_id_to_download(
-                json_path, multiple_langs, audio_formats
-            )
-
-            st.session_state.optimal_format_profiles = optimal_format_profiles
-
-            # profiles_to_try = [{'format_id': '399+251', 'ext': 'webm', 'height': 1080, 'vcodec': 'av01.0.08M.08', 'protocol': 'https+https'}, {'format_id': '248+251', 'ext': 'webm', 'height': 1080, 'vcodec': 'vp9', 'protocol': 'https+https'}]
-
-            # Set chosen profiles based on strategy
-            if quality_strategy == "auto_best":
-                st.session_state.chosen_format_profiles = optimal_format_profiles
-            elif quality_strategy == "best_no_fallback":
-                # Only the first (best) profile
-                st.session_state.chosen_format_profiles = (
-                    optimal_format_profiles[:1] if optimal_format_profiles else []
-                )
-            # For choose_profile, chosen_format_profiles will be set by user selection
-
-        elif quality_strategy == "choose_available":
-            # Load all available formats for selection
-            available_formats = get_available_formats(url_info)
-            st.session_state.available_formats_list = available_formats
-
-    except Exception as e:
-        safe_push_log(f"❌ Error processing quality strategy: {str(e)[:100]}...")
-
-
-def _display_strategy_content(quality_strategy: str, url: str) -> None:
-    """
-    Display content specific to the selected quality strategy.
+    Display content specific to the selected quality strategy and update chosen profiles.
+    Uses pre-computed profiles from session state (set during url_analysis).
 
     Args:
         quality_strategy: Selected strategy
-        url: Video URL
     """
     st.markdown("---")
+
+    # Get pre-computed profiles from session state (computed in url_analysis)
+    optimal_format_profiles = st.session_state.get("optimal_format_profiles", [])
+    available_formats = st.session_state.get("available_formats_list", [])
+
+    # Get tmp workspace for checking individual format status
+    tmp_url_workspace = st.session_state.get("tmp_url_workspace")
+
+    # Get cached profiles once for efficient lookups (O(1) instead of O(n) per check)
+    cached_profiles = []
+    cached_format_ids = set()
+    if tmp_url_workspace:
+        cached_profiles = get_profiles_cached(
+            tmp_url_workspace, optimal_format_profiles
+        )
+        cached_format_ids = {p.get("format_id", "") for p in cached_profiles}
+
+    # Helper function to check if a specific profile is cached and completed
+    def is_profile_cached(profile: Dict) -> bool:
+        """Check if a specific profile/format is downloaded and completed."""
+        format_id = profile.get("format_id", "")
+        return format_id in cached_format_ids
+
+    # Check if ANY video is cached (for general message)
+    has_any_cached_video = len(cached_profiles) > 0
+    if has_any_cached_video:
+        safe_push_log("📦 Found cached video file(s)")
+        st.success(
+            f"✅ {len(cached_profiles)} profile(s) already downloaded and available"
+        )
+
+    safe_push_log(f"🎨 Displaying UI for strategy: {quality_strategy}")
 
     if quality_strategy == "auto_best":
         st.info(t("quality_auto_best_desc"))
 
-        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
-        if optimal_profiles:
-            st.success(t("quality_profiles_generated", count=len(optimal_profiles)))
+        # Filter profiles: only include non-cached profiles for download
+        profiles_to_download = [
+            p for p in optimal_format_profiles if not is_profile_cached(p)
+        ]
+
+        if profiles_to_download:
+            st.session_state.chosen_format_profiles = profiles_to_download
+        else:
+            # All profiles are cached
+            st.session_state.chosen_format_profiles = []
+
+        if optimal_format_profiles:
+            cached_count = len(optimal_format_profiles) - len(profiles_to_download)
+            count_msg = t(
+                "quality_profiles_generated", count=len(optimal_format_profiles)
+            )
+            if cached_count > 0:
+                count_msg += f" ({cached_count} already cached)"
+            st.success(count_msg)
 
             with st.expander(t("quality_profiles_list_title"), expanded=True):
-                for i, profile in enumerate(optimal_profiles, 1):
+                for i, profile in enumerate(optimal_format_profiles, 1):
                     height = profile.get("height", "?")
                     vcodec = profile.get("vcodec", "unknown")
                     ext = profile.get("ext", "unknown")
                     format_id = profile.get("format_id", "unknown")
 
-                    st.markdown(f"**{i}. {height}p ({vcodec}) - {ext.upper()}**")
+                    # Check if THIS specific profile is cached
+                    is_cached = is_profile_cached(profile)
+                    cache_indicator = " 📦 (cached)" if is_cached else ""
+                    st.markdown(
+                        f"**{i}. {height}p ({vcodec}) - {ext.upper()}{cache_indicator}**"
+                    )
                     st.code(f"Format ID: {format_id}", language="text")
         else:
             st.warning(t("quality_no_profiles_warning"))
@@ -379,23 +335,32 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
     elif quality_strategy == "best_no_fallback":
         st.warning(t("quality_best_no_fallback_desc"))
 
-        # Show quality downgrade setting
-        st.checkbox(
-            t("quality_refuse_downgrade"),
-            value=not settings.QUALITY_DOWNGRADE,
-            help=t("quality_refuse_downgrade_help"),
-            key="refuse_quality_downgrade_best",
-        )
+        if optimal_format_profiles:
+            best_profile = optimal_format_profiles[0]
+            is_best_cached = is_profile_cached(best_profile)
 
-        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
-        if optimal_profiles:
-            best_profile = optimal_profiles[0]
+            # Only download if not cached
+            if is_best_cached:
+                st.session_state.chosen_format_profiles = []
+            else:
+                st.session_state.chosen_format_profiles = [best_profile]
+
+            # Show quality downgrade setting (only if not cached)
+            if not is_best_cached:
+                st.checkbox(
+                    t("quality_refuse_downgrade"),
+                    value=not settings.QUALITY_DOWNGRADE,
+                    help=t("quality_refuse_downgrade_help"),
+                    key="refuse_quality_downgrade_best",
+                )
+
             height = best_profile.get("height", "?")
             vcodec = best_profile.get("vcodec", "unknown")
             ext = best_profile.get("ext", "unknown")
             format_id = best_profile.get("format_id", "unknown")
 
-            profile_str = f"{height}p ({vcodec}) - {ext.upper()}"
+            cache_indicator = " 📦 (cached)" if is_best_cached else ""
+            profile_str = f"{height}p ({vcodec}) - {ext.upper()}{cache_indicator}"
             st.success(t("quality_selected_profile", profile=profile_str))
             st.code(f"Format ID: {format_id}", language="text")
         else:
@@ -404,16 +369,19 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
     elif quality_strategy == "choose_profile":
         st.info(t("quality_choose_profile_desc"))
 
-        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
-        if optimal_profiles:
+        if optimal_format_profiles:
+            # Build profile options with individual cache indicators
             profile_options = []
-            for i, profile in enumerate(optimal_profiles):
+            for i, profile in enumerate(optimal_format_profiles):
                 height = profile.get("height", "?")
                 vcodec = profile.get("vcodec", "unknown")
                 ext = profile.get("ext", "unknown")
-                label = f"{height}p ({vcodec}) - {ext.upper()}"
+                is_cached = is_profile_cached(profile)
+                cache_indicator = " 📦 (cached)" if is_cached else ""
+                label = f"{height}p ({vcodec}) - {ext.upper()}{cache_indicator}"
                 profile_options.append(label)
 
+            # Show selectbox even if profiles are cached (user may want to re-download)
             selected_index = st.selectbox(
                 t("quality_select_profile_prompt"),
                 options=range(len(profile_options)),
@@ -423,16 +391,24 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
 
             # Update chosen profiles based on selection
             if selected_index is not None:
-                st.session_state.chosen_format_profiles = [
-                    optimal_profiles[selected_index]
-                ]
+                selected_profile = optimal_format_profiles[selected_index]
+                is_selected_cached = is_profile_cached(selected_profile)
+
+                if is_selected_cached:
+                    st.session_state.chosen_format_profiles = []
+                else:
+                    st.session_state.chosen_format_profiles = [selected_profile]
 
                 # Show selected profile details
-                selected_profile = optimal_profiles[selected_index]
                 format_id = selected_profile.get("format_id", "unknown")
-                st.success(
-                    t("quality_selected", profile=profile_options[selected_index])
-                )
+                if is_selected_cached:
+                    st.info(
+                        f"📦 Selected profile is already cached: {profile_options[selected_index]}"
+                    )
+                else:
+                    st.success(
+                        t("quality_selected", profile=profile_options[selected_index])
+                    )
                 st.code(f"Format ID: {format_id}", language="text")
         else:
             st.warning(t("quality_no_profiles_selection"))
@@ -441,14 +417,21 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
         st.info(t("quality_choose_available_desc"))
         st.warning(t("quality_choose_available_warning"))
 
-        available_formats = st.session_state.get("available_formats_list", [])
+        safe_push_log(f"📊 Available formats count: {len(available_formats)}")
+
         if available_formats:
+            # Always show selectbox - user may want to download a different format
             format_options = [t("quality_format_auto_option")]
             for fmt in available_formats:
                 format_options.append(f"{fmt['description']} - {fmt['format_id']}")
 
+            # Add cache indicator to prompt if ANY video is cached
+            prompt = t("quality_select_format_prompt")
+            if has_any_cached_video:
+                prompt += " (📦 some formats cached - will re-download if different format selected)"
+
             selected_format = st.selectbox(
-                t("quality_select_format_prompt"),
+                prompt,
                 options=format_options,
                 key="selected_available_format",
             )
@@ -456,119 +439,42 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
             if selected_format != t("quality_format_auto_option"):
                 # Extract format_id from selection
                 format_id = selected_format.split(" - ")[-1]
-                st.success(t("quality_selected_format", format=selected_format))
 
-                # Create a profile-like dict for consistency
-                for fmt in available_formats:
-                    if fmt["format_id"] == format_id:
-                        chosen_profile = {
-                            "format_id": format_id,
-                            "height": fmt["height"],
-                            "vcodec": fmt["vcodec"],
-                            "ext": fmt["ext"],
-                            "label": f"Manual: {fmt['description']}",
-                        }
-                        st.session_state.chosen_format_profiles = [chosen_profile]
-                        break
-            else:
-                # Fallback to auto mode
-                st.session_state.chosen_format_profiles = st.session_state.get(
-                    "optimal_format_profiles", []
+                # Check if this specific format is cached
+                is_format_cached = tmp_url_workspace and is_format_completed(
+                    tmp_url_workspace, format_id
                 )
+
+                if is_format_cached:
+                    st.info(f"📦 Selected format is already cached: {selected_format}")
+                    st.session_state.chosen_format_profiles = []
+                else:
+                    st.success(t("quality_selected_format", format=selected_format))
+                    # Create a profile-like dict for consistency
+                    for fmt in available_formats:
+                        if fmt["format_id"] == format_id:
+                            chosen_profile = {
+                                "format_id": format_id,
+                                "height": fmt["height"],
+                                "vcodec": fmt["vcodec"],
+                                "ext": fmt["ext"],
+                                "label": f"Manual: {fmt['description']}",
+                            }
+                            st.session_state.chosen_format_profiles = [chosen_profile]
+                            break
+            else:
+                # Fallback to auto mode: use non-cached optimal profiles
+                if has_any_cached_video:
+                    profiles_to_download = [
+                        p for p in optimal_format_profiles if not is_profile_cached(p)
+                    ]
+                    st.session_state.chosen_format_profiles = profiles_to_download
+                else:
+                    st.session_state.chosen_format_profiles = st.session_state.get(
+                        "optimal_format_profiles", []
+                    )
         else:
             st.warning(t("quality_no_formats_selection"))
-
-
-def _get_optimal_profiles_from_json(url: str) -> List[Dict]:
-    """
-    Get optimal download profiles using get_profiles_with_formats_id_to_download().
-
-    This is a simple wrapper that calls get_profiles_with_formats_id_to_download() which now
-    returns complete profiles with all necessary fields (label, name, container, etc.).
-
-    Args:
-        url: Video URL to get profiles for
-
-    Returns:
-        List of complete profile dicts ready for download, or empty list if error
-    """
-    try:
-        # Get tmp directory and url_info from session state (set during url_analysis)
-        tmp_url_workspace = st.session_state.get("tmp_url_workspace")
-        url_info = st.session_state.get("url_info")
-        json_path_str = st.session_state.get("url_info_path")
-
-        if not tmp_url_workspace or not url_info or not json_path_str:
-            safe_push_log("⚠️ Video info not initialized. Analyze URL first.")
-            return []
-
-        json_path = Path(json_path_str)
-        if not json_path.exists():
-            safe_push_log("⚠️ url_info.json not found, cannot use profile strategy")
-            return []
-
-        # Get language preferences from settings
-        language_primary = settings.LANGUAGE_PRIMARY or "en"
-        # Convert list to comma-separated string
-        languages_secondaries = (
-            ",".join(settings.LANGUAGES_SECONDARIES)
-            if settings.LANGUAGES_SECONDARIES
-            else ""
-        )
-        vo_first = settings.VO_FIRST
-
-        # Analyze audio formats
-        safe_push_log("🎵 Analyzing audio tracks...")
-        vo_lang, audio_formats, multiple_langs = analyze_audio_formats(
-            url_info,
-            language_primary=language_primary,
-            languages_secondaries=languages_secondaries,
-            vo_first=vo_first,
-        )
-
-        safe_push_log(f"   VO language: {vo_lang or 'unknown'}")
-        safe_push_log(f"   Audio tracks: {len(audio_formats)}")
-        safe_push_log(f"   Multi-language: {'Yes' if multiple_langs else 'No'}")
-
-        # Get optimal profiles - now returns complete profiles with all fields
-        safe_push_log("🎯 Selecting optimal video formats (AV1/VP9 priority)...")
-        optimal_profiles = get_profiles_with_formats_id_to_download(
-            str(json_path), multiple_langs, audio_formats
-        )
-
-        if not optimal_profiles:
-            safe_push_log("❌ No optimal profiles returned")
-            return []
-
-        log_title(f"✅ Found {len(optimal_profiles)} optimal profile(s)")
-
-        # Log profile details
-        for idx, profile in enumerate(optimal_profiles, 1):
-            safe_push_log("")
-            safe_push_log(f"📦 Profile {idx}: {profile.get('label', 'Unknown')}")
-            safe_push_log(f"   🆔 Format ID: {profile.get('format_id', '')}")
-            safe_push_log(f"   🎬 Video Codec: {profile.get('vcodec', 'unknown')}")
-            safe_push_log(f"   📐 Resolution: {profile.get('height', 0)}p")
-            safe_push_log(f"   📦 Extension: {profile.get('ext', 'unknown')}")
-            safe_push_log(
-                f"   📁 Output Container: {profile.get('container', 'mkv').upper()}"
-            )
-            safe_push_log(f"   🌐 Protocol: {profile.get('protocol', 'https')}")
-
-        log_title(
-            f"🎯 Will try {len(optimal_profiles)} profile(s) in order (best codec first)"
-        )
-        return optimal_profiles
-
-    except FileNotFoundError:
-        safe_push_log("⚠️ url_info.json not found for profile strategy")
-        return []
-    except Exception as e:
-        safe_push_log(f"⚠️ Error in profile strategy: {e}")
-        import traceback
-
-        safe_push_log(f"   Traceback: {traceback.format_exc()}")
-        return []
 
 
 def smart_download_with_profiles(
@@ -631,20 +537,15 @@ def smart_download_with_profiles(
     chosen_profiles = st.session_state.get("chosen_format_profiles", [])
     quality_strategy = st.session_state.get("download_quality_strategy", "auto_best")
 
-    if chosen_profiles:
-        profiles_to_try = chosen_profiles
-        safe_push_log(
-            f"✅ Using {len(profiles_to_try)} profiles from {quality_strategy} strategy"
-        )
-    else:
-        # Fallback to old method if no strategy profiles available
-        safe_push_log("⚠️ No strategy profiles found, using fallback method")
-        profiles_to_try = _get_optimal_profiles_from_json(url)
-
-    if not profiles_to_try:
+    if not chosen_profiles:
         error_msg = "No profiles available for download. Please select a quality strategy first."
         safe_push_log(f"❌ {error_msg}")
         return 1, error_msg
+
+    profiles_to_try = chosen_profiles
+    safe_push_log(
+        f"✅ Using {len(profiles_to_try)} profiles from {quality_strategy} strategy"
+    )
 
     # Update download mode and refuse_quality_downgrade based on strategy
     if quality_strategy == "auto_best":
@@ -1164,6 +1065,85 @@ def init_url_workspace(
     return info
 
 
+def compute_optimal_profiles(url_info: Dict, json_path: Path) -> None:
+    """
+    Compute optimal format profiles for a VIDEO (not playlist).
+    This function is called once after URL analysis to pre-calculate all profiles.
+
+    For playlists, this function does nothing as profiles are computed per video.
+
+    Args:
+        url_info: Video information from yt-dlp
+        json_path: Path to url_info.json file
+    """
+    # Only compute profiles for videos, not playlists
+    is_playlist = url_info.get("_type") == "playlist"
+    if is_playlist:
+        safe_push_log(
+            "ℹ️ Playlist detected - skipping profile computation (done per video)"
+        )
+        st.session_state.optimal_format_profiles = []
+        st.session_state.available_formats_list = []
+        return
+
+    try:
+        safe_push_log("🎯 Computing optimal format profiles...")
+
+        # Get language preferences from settings
+        language_primary = settings.LANGUAGE_PRIMARY or "en"
+        languages_secondaries = (
+            ",".join(settings.LANGUAGES_SECONDARIES)
+            if settings.LANGUAGES_SECONDARIES
+            else ""
+        )
+        vo_first = settings.VO_FIRST
+
+        # Analyze audio formats
+        safe_push_log("🎵 Analyzing audio tracks...")
+        vo_lang, audio_formats, multiple_langs = analyze_audio_formats(
+            url_info,
+            language_primary=language_primary,
+            languages_secondaries=languages_secondaries,
+            vo_first=vo_first,
+        )
+
+        safe_push_log(f"   VO language: {vo_lang or 'unknown'}")
+        safe_push_log(f"   Audio tracks: {len(audio_formats)}")
+        safe_push_log(f"   Multi-language: {'Yes' if multiple_langs else 'No'}")
+
+        # Get optimal profiles - returns complete profiles with all fields
+        safe_push_log("🎯 Selecting optimal video formats (AV1/VP9 priority)...")
+        optimal_profiles = get_profiles_with_formats_id_to_download(
+            str(json_path), multiple_langs, audio_formats
+        )
+
+        if not optimal_profiles:
+            safe_push_log("❌ No optimal profiles found")
+            st.session_state.optimal_format_profiles = []
+        else:
+            safe_push_log(f"✅ Found {len(optimal_profiles)} optimal profile(s)")
+
+            # Log profile details
+            for idx, profile in enumerate(optimal_profiles, 1):
+                safe_push_log(f"📦 Profile {idx}: {profile.get('label', 'Unknown')}")
+                safe_push_log(f"   🆔 Format ID: {profile.get('format_id', '')}")
+                safe_push_log(f"   🎬 Video Codec: {profile.get('vcodec', 'unknown')}")
+                safe_push_log(f"   📐 Resolution: {profile.get('height', 0)}p")
+
+            st.session_state.optimal_format_profiles = optimal_profiles
+
+        # Also store available formats for "choose_available" strategy
+        available_formats = get_available_formats(url_info)
+        st.session_state.available_formats_list = available_formats
+
+        safe_push_log("✅ Profile computation complete")
+
+    except Exception as e:
+        safe_push_log(f"⚠️ Error computing profiles: {str(e)}")
+        st.session_state.optimal_format_profiles = []
+        st.session_state.available_formats_list = []
+
+
 def url_analysis(url: str) -> Optional[Dict]:
     """
     Analyze URL and fetch comprehensive video/playlist information using yt-dlp.
@@ -1175,6 +1155,7 @@ def url_analysis(url: str) -> Optional[Dict]:
     3. Checks if url_info.json exists with good integrity
     4. If exists: loads it and returns
     5. If not: fetches from yt-dlp via init_url_workspace()
+    6. For VIDEOS only: computes optimal format profiles
 
     Args:
         url: Video or playlist URL to analyze
@@ -1223,10 +1204,20 @@ def url_analysis(url: str) -> Optional[Dict]:
             # Store in session state and return immediately (no download needed)
             st.session_state["url_info"] = existing_info
             st.session_state["url_info_path"] = str(json_output_path)
+
+            # Compute optimal profiles for videos (not playlists) - SINGLE SOURCE OF TRUTH
+            compute_optimal_profiles(existing_info, json_output_path)
+
             return existing_info
         else:
             # Initialize workspace and fetch video info
-            return init_url_workspace(clean_url, json_output_path, tmp_url_workspace)
+            info = init_url_workspace(clean_url, json_output_path, tmp_url_workspace)
+
+            # Compute optimal profiles for videos (not playlists) - SINGLE SOURCE OF TRUTH
+            if info and "error" not in info:
+                compute_optimal_profiles(info, json_output_path)
+
+            return info
 
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
@@ -1568,10 +1559,20 @@ url = st.text_input(
 
 # Analyze URL and display information
 if url and url.strip():
-    with st.spinner(t("url_analysis_spinner")):
-        url_info = url_analysis(url)
-        if url_info:
-            display_url_info(url_info)
+    # Check if URL has changed or if it's the first analysis
+    current_url_in_session = st.session_state.get("current_video_url")
+    url_info_in_session = st.session_state.get("url_info")
+
+    # Only run analysis if URL changed or no info in session
+    if current_url_in_session != url or not url_info_in_session:
+        with st.spinner(t("url_analysis_spinner")):
+            url_info = url_analysis(url)
+            if url_info:
+                display_url_info(url_info)
+    else:
+        # Reuse existing url_info from session state
+        url_info = url_info_in_session
+        display_url_info(url_info)
 
 # Try to get last download attempt to pre-fill fields
 default_filename = ""
@@ -1783,10 +1784,11 @@ if (
 
 # subtitles multiselect from env
 # Default subtitles are determined by audio language preferences (LANGUAGE_PRIMARY, LANGUAGES_SECONDARIES)
+default_subtitle_languages = get_default_subtitle_languages()
 subs_selected = st.multiselect(
     t("subtitles_to_embed"),
-    options=SUBTITLES_CHOICES,
-    default=SUBTITLES_CHOICES,  # Pre-select subtitles based on audio preferences
+    options=default_subtitle_languages,
+    default=default_subtitle_languages,  # Pre-select subtitles based on audio preferences
     help=t("subtitles_help"),
 )
 
@@ -2087,13 +2089,8 @@ with st.expander(f"{t('quality_title')}", expanded=False):
         horizontal=False,
     )
 
-    # Process strategy selection and update profiles
-    if url and url.strip():
-        clean_url = sanitize_url(url)
-        _process_quality_strategy(quality_strategy, clean_url)
-
-    # Display strategy-specific content
-    _display_strategy_content(quality_strategy, url)
+    # Display strategy-specific content (also sets chosen_format_profiles)
+    _display_strategy_content(quality_strategy)
 
     # Store final configuration in session state for download
     st.session_state["download_quality_strategy"] = quality_strategy
@@ -2935,11 +2932,18 @@ if submitted:
 
     base_output = filename  # without extension
 
+    # Get requested format ID from chosen profiles (if user selected a specific format)
+    requested_format_id = None
+    chosen_format_profiles = st.session_state.get("chosen_format_profiles", [])
+    if chosen_format_profiles:
+        requested_format_id = chosen_format_profiles[0].get("format_id")
+
     # Record this download attempt in status.json
     add_download_attempt(
         tmp_url_workspace=tmp_url_workspace,
         custom_title=filename,
         video_location=video_subfolder,
+        requested_format_id=requested_format_id,
     )
 
     # Log download strategy
@@ -2950,6 +2954,8 @@ if submitted:
     push_log("  3️⃣  Skip if generic files exist (resume support)")
     push_log("")
     push_log(f"📝 Target filename: {base_output}")
+    if requested_format_id:
+        push_log(f"🎯 Requested format: {requested_format_id}")
 
     # Check if a completed download already exists (status.json verification)
     # Priority: 1) Check status.json for completed format 2) Fallback to generic file search
@@ -2957,26 +2963,36 @@ if submitted:
     completed_format_id = get_first_completed_format(tmp_video_dir)
 
     if completed_format_id:
-        # We have a completed format in status.json - find the corresponding file
-        log_title("✅ Found completed download in status")
-        push_log(f"  🎯 Format ID: {completed_format_id}")
+        # Check if user requested a different format than what's completed
+        if requested_format_id and requested_format_id != completed_format_id:
+            push_log(f"🔄 User requested different format: {requested_format_id}")
+            push_log(f"   Current cached format: {completed_format_id}")
+            push_log("   Will re-download with new format")
+            completed_format_id = None  # Force re-download
+            existing_generic_file = None
+        else:
+            # We have a completed format in status.json - find the corresponding file
+            log_title("✅ Found completed download in status")
+            push_log(f"  🎯 Format ID: {completed_format_id}")
 
-        # Try to find the video file with this format ID
-        existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
-        for track in existing_video_tracks:
-            track_format_id = tmp_files.extract_format_id_from_filename(track.name)
-            if track_format_id and track_format_id in completed_format_id:
-                existing_generic_file = track
-                push_log(f"  📦 Found file: {existing_generic_file.name}")
+            # Try to find the video file with this format ID
+            existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
+            for track in existing_video_tracks:
+                track_format_id = tmp_files.extract_format_id_from_filename(track.name)
+                if track_format_id and track_format_id in completed_format_id:
+                    existing_generic_file = track
+                    push_log(f"  📦 Found file: {existing_generic_file.name}")
+                    push_log(
+                        f"  📊 Size: {existing_generic_file.stat().st_size / (1024*1024):.2f}MiB"
+                    )
+                    push_log("  🔄 Skipping download, reusing completed file")
+                    push_log("")
+                    break
+
+            if not existing_generic_file:
                 push_log(
-                    f"  📊 Size: {existing_generic_file.stat().st_size / (1024*1024):.2f}MiB"
+                    "  ⚠️ Status shows completed but file not found, will re-download"
                 )
-                push_log("  🔄 Skipping download, reusing completed file")
-                push_log("")
-                break
-
-        if not existing_generic_file:
-            push_log("  ⚠️ Status shows completed but file not found, will re-download")
     else:
         # Fallback: check for any generic video file (backward compatibility)
         existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)

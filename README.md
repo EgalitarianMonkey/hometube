@@ -290,7 +290,9 @@ TZ=America/New_York
 
 # --- Languages ---
 UI_LANGUAGE=en
-SUBTITLES_CHOICES=en
+LANGUAGE_PRIMARY=en
+LANGUAGE_PRIMARY_INCLUDE_SUBTITLES=true
+LANGUAGES_SECONDARIES=  # Optional: comma-separated (e.g., fr,es)
 
 # --- Docker host paths ---
 # Docker environment variables to specify depending on your homelab setup.
@@ -335,7 +337,9 @@ services:
     image: ghcr.io/egalitarianmonkey/hometube:latest
     environment:
       UI_LANGUAGE: en
-      SUBTITLES_CHOICES: en
+      LANGUAGE_PRIMARY: en
+      LANGUAGE_PRIMARY_INCLUDE_SUBTITLES: true
+      LANGUAGES_SECONDARIES: ""  # Optional: comma-separated
       VIDEOS_FOLDER: /data/videos
       TMP_DOWNLOAD_FOLDER: /data/tmp
       YOUTUBE_COOKIES_FILE_PATH: /config/youtube_cookies.txt
@@ -374,6 +378,8 @@ services:
       TZ: "${TZ}"
       UI_LANGUAGE: en
       LANGUAGE_PRIMARY: en
+      LANGUAGE_PRIMARY_INCLUDE_SUBTITLES: true
+      LANGUAGES_SECONDARIES: ""  # Optional: comma-separated
       VIDEOS_FOLDER: /data/videos
       TMP_DOWNLOAD_FOLDER: /data/tmp
       YOUTUBE_COOKIES_FILE_PATH: "${YOUTUBE_COOKIES_FILE_PATH}"

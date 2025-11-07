@@ -240,8 +240,12 @@ TZ=Europe/Paris             # Your timezone
 # Storage Paths (Local Installation)
 VIDEOS_FOLDER=./downloads    # Where videos are saved
 TMP_DOWNLOAD_FOLDER=./tmp    # Temporary processing folder
-SUBTITLES_CHOICES=en,fr     # Default subtitle languages
 UI_LANGUAGE=en              # Interface language (en/fr)
+
+# Audio & Subtitle Language Preferences
+LANGUAGE_PRIMARY=en          # Primary audio language
+LANGUAGE_PRIMARY_INCLUDE_SUBTITLES=true  # Include subtitles for primary
+LANGUAGES_SECONDARIES=       # Secondary languages (comma-separated, e.g., fr,es)
 
 # Authentication
 YOUTUBE_COOKIES_FILE_PATH=./cookies/youtube_cookies.txt
@@ -265,10 +269,12 @@ YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST=./cookies/youtube_cookies.txt
 VIDEOS_FOLDER=/path/to/your/media/library
 ```
 
-**Add multiple subtitle languages**:
+**Configure audio and subtitle languages**:
 ```bash
 # Edit .env file
-SUBTITLES_CHOICES=en,fr,es,de,it
+LANGUAGE_PRIMARY=en                        # Primary audio language
+LANGUAGE_PRIMARY_INCLUDE_SUBTITLES=true    # Include subtitles for primary
+LANGUAGES_SECONDARIES=fr,es,de,it          # Additional languages (always get subtitles)
 ```
 
 **Change interface language**:

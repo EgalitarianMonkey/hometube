@@ -8,7 +8,7 @@ TRANSLATIONS = {
     "video_name_help": "Name of the output video file (without extension). If left empty, the default video title will be used.",
     "destination_folder": "Destination folder",
     "subtitles_to_embed": "Subtitles to embed",
-    "subtitles_help": "The subtitles list is specified from the SUBTITLES_CHOICES variable in the .env file",
+    "subtitles_help": "Subtitle languages are automatically selected based on LANGUAGE_PRIMARY (if LANGUAGE_PRIMARY_INCLUDE_SUBTITLES=true) and LANGUAGES_SECONDARIES configuration in .env file",
     "options": "Options",
     "other_options": "Other options",
     "download_button": "Download",
