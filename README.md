@@ -368,12 +368,15 @@ With Portainer, environment variables must be explicitly written in the `environ
 services:
   hometube:
     image: ghcr.io/egalitarianmonkey/hometube:latest
+    ports:
+      - "${PORT:-8501}:8501"
     environment:
+      TZ: "${TZ}"
       UI_LANGUAGE: en
-      SUBTITLES_CHOICES: en
+      LANGUAGE_PRIMARY: en
       VIDEOS_FOLDER: /data/videos
       TMP_DOWNLOAD_FOLDER: /data/tmp
-      YOUTUBE_COOKIES_FILE_PATH: /config/youtube_cookies.txt
+      YOUTUBE_COOKIES_FILE_PATH: "${YOUTUBE_COOKIES_FILE_PATH}"
     volumes:
       - type: bind
         source: ${VIDEOS_FOLDER_DOCKER_HOST:?set VIDEOS_FOLDER_DOCKER_HOST}
@@ -389,9 +392,13 @@ This **long volume structure** with `type:`, `source:`, and `target:` entries fo
 **Portainer environment variables in the UI**
 
 ```bash
-VIDEOS_FOLDER_DOCKER_HOST: /mnt/data/videos
-TMP_DOWNLOAD_FOLDER_DOCKER_HOST: /mnt/data/hometube/tmp
-YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST: /opt/cookies/youtube.txt
+VIDEOS_FOLDER_DOCKER_HOST=/mnt/data/videos
+TMP_DOWNLOAD_FOLDER_DOCKER_HOST=/mnt/data/hometube/tmp
+YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST=/opt/cookies/youtube.txt
+TZ=America/New_York
+PORT=8501
+YOUTUBE_COOKIES_FILE_PATH=/config/youtube_cookies.txt
+#COOKIES_FROM_BROWSER=chrome
 ```
 
 ### 🏠 Local Installation
