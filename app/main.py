@@ -1186,6 +1186,449 @@ def compute_optimal_profiles(url_info: Dict, json_path: Path) -> None:
         st.session_state.available_formats_list = []
 
 
+# === REUSABLE VIDEO DOWNLOAD FUNCTIONS ===
+# These functions encapsulate the video download workflow so it can be reused
+# for both single videos and videos within playlists
+
+
+def initialize_video_workspace(
+    video_url: str,
+    video_id: str,
+    video_title: str,
+    video_workspace: Path,
+) -> Tuple[Optional[Dict], bool]:
+    """
+    Initialize a video workspace with url_info.json and status.json.
+
+    This function:
+    1. Checks if url_info.json exists, loads it if available
+    2. Fetches url_info.json if it doesn't exist
+    3. Creates status.json if it doesn't exist
+    4. Computes optimal profiles for the video
+
+    Args:
+        video_url: Full URL of the video
+        video_id: Video ID
+        video_title: Video title
+        video_workspace: Path to video workspace directory
+
+    Returns:
+        Tuple[Optional[Dict], bool]: (url_info dict or None, success bool)
+    """
+    video_url_info_path = video_workspace / "url_info.json"
+    video_status_path = video_workspace / "status.json"
+
+    # Check if url_info.json already exists
+    video_url_info = None
+    if video_url_info_path.exists():
+        try:
+            import json
+
+            with open(video_url_info_path, "r", encoding="utf-8") as f:
+                video_url_info = json.load(f)
+            safe_push_log(f"📋 Using existing url_info.json for {video_title}")
+        except Exception as e:
+            safe_push_log(f"⚠️ Could not load existing url_info.json: {e}")
+
+    # If url_info.json doesn't exist, fetch it
+    if not video_url_info:
+        safe_push_log(f"📋 Fetching url_info.json for {video_title}...")
+        cookies_params = build_cookies_params_from_config()
+
+        video_url_info = build_url_info(
+            clean_url=video_url,
+            json_output_path=video_url_info_path,
+            cookies_params=cookies_params,
+            youtube_cookies_file_path=YOUTUBE_COOKIES_FILE_PATH,
+            cookies_from_browser=COOKIES_FROM_BROWSER,
+            youtube_clients=YOUTUBE_CLIENT_FALLBACKS,
+        )
+
+    if video_url_info and "error" not in video_url_info:
+        # Create status.json if it doesn't exist
+        if not video_status_path.exists():
+            create_initial_status(
+                url=video_url,
+                video_id=video_id,
+                title=video_title,
+                content_type="video",
+                tmp_url_workspace=video_workspace,
+            )
+            safe_push_log(f"📊 Created status.json for {video_title}")
+
+        # Compute optimal profiles for this video
+        compute_optimal_profiles(video_url_info, video_url_info_path)
+
+        # Copy to chosen_format_profiles for smart_download_with_profiles()
+        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
+        if optimal_profiles:
+            st.session_state["chosen_format_profiles"] = optimal_profiles
+            st.session_state["download_quality_strategy"] = "auto_best"
+
+        return video_url_info, True
+    else:
+        return None, False
+
+
+def check_existing_video_file(
+    video_workspace: Path,
+    requested_format_id: Optional[str] = None,
+) -> Tuple[Optional[Path], Optional[str]]:
+    """
+    Check if a video file already exists in the workspace.
+
+    This function implements the same logic as single videos:
+    1. Checks status.json for completed format
+    2. Finds the corresponding file
+    3. Falls back to any video file if no status.json entry
+
+    Args:
+        video_workspace: Path to video workspace directory
+        requested_format_id: Optional format ID requested by user
+
+    Returns:
+        Tuple[Optional[Path], Optional[str]]: (existing_file_path or None, completed_format_id or None)
+    """
+    existing_generic_file = None
+    completed_format_id = get_first_completed_format(video_workspace)
+
+    if completed_format_id:
+        # Check if user requested a different format than what's completed
+        if requested_format_id and requested_format_id != completed_format_id:
+            safe_push_log(f"🔄 User requested different format: {requested_format_id}")
+            safe_push_log(f"   Current cached format: {completed_format_id}")
+            safe_push_log("   Will re-download with new format")
+            return None, None
+
+        # We have a completed format in status.json - find the corresponding file
+        log_title("✅ Found completed download in status")
+        safe_push_log(f"  🎯 Format ID: {completed_format_id}")
+
+        # Try to find the video file with this format ID
+        existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
+        for track in existing_video_tracks:
+            track_format_id = tmp_files.extract_format_id_from_filename(track.name)
+            if track_format_id and track_format_id in completed_format_id:
+                existing_generic_file = track
+                safe_push_log(f"  📦 Found file: {existing_generic_file.name}")
+                safe_push_log(
+                    f"  📊 Size: {existing_generic_file.stat().st_size / (1024*1024):.2f}MiB"
+                )
+                safe_push_log("  🔄 Skipping download, reusing completed file")
+                safe_push_log("")
+                return existing_generic_file, completed_format_id
+
+        if not existing_generic_file:
+            safe_push_log(
+                "  ⚠️ Status shows completed but file not found, will re-download"
+            )
+    else:
+        # Fallback: check for any generic video file (backward compatibility)
+        existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
+        existing_generic_file = (
+            existing_video_tracks[0] if existing_video_tracks else None
+        )
+
+        if existing_generic_file:
+            log_title("✅ Found cached download (legacy detection)")
+            safe_push_log(f"  📦 Existing file: {existing_generic_file.name}")
+            safe_push_log("  🔄 Skipping download, reusing cached file")
+            safe_push_log(
+                "  ℹ️  Note: No status.json entry for this file, consider updating"
+            )
+            safe_push_log("")
+
+    return existing_generic_file, completed_format_id
+
+
+def download_single_video(
+    video_url: str,
+    video_id: str,
+    video_title: str,
+    video_workspace: Path,
+    base_output: str,
+    embed_chapters: bool,
+    embed_subs: bool,
+    force_mp4: bool,
+    ytdlp_custom_args: str,
+    do_cut: bool,
+    subs_selected: List[str],
+    sb_choice: str,
+    requested_format_id: Optional[str] = None,
+    progress_placeholder=None,
+    status_placeholder=None,
+    info_placeholder=None,
+) -> Tuple[int, Optional[Path], Optional[str]]:
+    """
+    Download a single video using the full workflow.
+
+    This function:
+    1. Initializes the video workspace
+    2. Checks for existing files
+    3. Downloads if needed or reuses existing file
+    4. Returns the final file path
+
+    Args:
+        video_url: Full URL of the video
+        video_id: Video ID
+        video_title: Video title
+        video_workspace: Path to video workspace directory
+        base_output: Base output filename (without extension)
+        embed_chapters: Whether to embed chapters
+        embed_subs: Whether to embed subtitles
+        force_mp4: Whether to force MP4 container
+        ytdlp_custom_args: Custom yt-dlp arguments
+        do_cut: Whether to cut sections
+        subs_selected: List of subtitle languages
+        sb_choice: SponsorBlock choice
+        requested_format_id: Optional format ID requested by user
+        progress_placeholder: Streamlit progress placeholder
+        status_placeholder: Streamlit status placeholder
+        info_placeholder: Streamlit info placeholder
+
+    Returns:
+        Tuple[int, Optional[Path], Optional[str]]: (return_code, final_file_path, error_message)
+        return_code: 0 = success, -1 = cancelled, >0 = error
+    """
+    # Initialize workspace
+    video_url_info, success = initialize_video_workspace(
+        video_url, video_id, video_title, video_workspace
+    )
+
+    if not success:
+        error_msg = (
+            video_url_info.get("error", "Unknown error")
+            if video_url_info
+            else "Failed to fetch video info"
+        )
+        return 1, None, error_msg
+
+    # Check for existing file
+    existing_file, completed_format_id = check_existing_video_file(
+        video_workspace, requested_format_id
+    )
+
+    if existing_file:
+        safe_push_log("⚡ Skipping download - using cached file")
+
+        # Update status to completed if not already
+        if completed_format_id:
+            update_format_status(
+                tmp_url_workspace=video_workspace,
+                video_format=completed_format_id,
+                final_file=existing_file,
+            )
+
+        return 0, existing_file, None
+    else:
+        safe_push_log(f"📥 Downloading {video_title} with full workflow...")
+        ret_dl, error_msg = smart_download_with_profiles(
+            base_output=base_output,
+            tmp_video_dir=video_workspace,
+            embed_chapters=embed_chapters,
+            embed_subs=embed_subs,
+            force_mp4=force_mp4,
+            ytdlp_custom_args=ytdlp_custom_args,
+            url=video_url,
+            download_mode="auto",
+            target_profile=None,
+            refuse_quality_downgrade=False,
+            do_cut=do_cut,
+            subs_selected=subs_selected,
+            sb_choice=sb_choice,
+            progress_placeholder=progress_placeholder,
+            status_placeholder=status_placeholder,
+            info_placeholder=info_placeholder,
+        )
+
+        if ret_dl == 0:
+            # Find the final file
+            final_file = find_final_video_file(video_workspace, base_output)
+
+            # Organize files: rename to generic name and create final.{ext} (same as single videos)
+            if final_file and final_file.exists():
+                final_file = organize_downloaded_video_file(
+                    video_workspace=video_workspace,
+                    downloaded_file=final_file,
+                    base_output=base_output,
+                    subs_selected=subs_selected,
+                )
+
+            return ret_dl, final_file, None
+        else:
+            return ret_dl, None, error_msg
+
+
+def find_final_video_file(
+    video_workspace: Path,
+    base_output: str,
+) -> Optional[Path]:
+    """
+    Find the final video file after download.
+
+    This function searches for the downloaded file in multiple ways:
+    1. By base output name (what yt-dlp created)
+    2. By generic name (final.{ext})
+    3. Any video file in the workspace (fallback)
+
+    Args:
+        video_workspace: Path to video workspace directory
+        base_output: Base output filename (without extension)
+
+    Returns:
+        Optional[Path]: Path to final file or None if not found
+    """
+    final_tmp = None
+
+    # First, try to find the file by the base output name (what yt-dlp created)
+    base_output_sanitized = sanitize_filename(base_output)
+    for ext in [".mkv", ".mp4", ".webm"]:
+        potential_file = video_workspace / f"{base_output_sanitized}{ext}"
+        if potential_file.exists():
+            final_tmp = potential_file
+            safe_push_log(f"✅ Found downloaded file: {potential_file.name}")
+            break
+
+    # Check for final.{ext} (generic name)
+    if not final_tmp:
+        for ext in [".mkv", ".mp4", ".webm"]:
+            final_path = tmp_files.get_final_path(video_workspace, ext.lstrip("."))
+            if final_path.exists():
+                final_tmp = final_path
+                safe_push_log(f"✅ Found final file: {final_path.name}")
+                break
+
+    # Fallback: find any video file in the workspace
+    if not final_tmp:
+        existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
+        if existing_video_tracks:
+            final_tmp = existing_video_tracks[0]
+            safe_push_log(f"✅ Found video file: {final_tmp.name}")
+
+    return final_tmp
+
+
+def organize_downloaded_video_file(
+    video_workspace: Path,
+    downloaded_file: Path,
+    base_output: str,
+    subs_selected: List[str] = None,
+) -> Path:
+    """
+    Organize downloaded video file: rename to generic name and create final.{ext}.
+
+    This function implements the same logic as single videos:
+    1. Renames downloaded file to video-{FORMAT_ID}.{ext}
+    2. Renames subtitle files to generic names
+    3. Copies video to final.{ext} for consistency
+
+    Args:
+        video_workspace: Path to video workspace directory
+        downloaded_file: Path to the downloaded video file
+        base_output: Base output filename (without extension)
+        subs_selected: List of subtitle languages (optional)
+
+    Returns:
+        Path: Path to final.{ext} file
+    """
+    import shutil
+
+    # Get format_id from session (stored during download)
+    format_id = st.session_state.get("downloaded_format_id", "unknown")
+    safe_push_log(f"  🔍 Format ID from session: {format_id}")
+
+    # Rename to generic filename with format ID: video-{FORMAT_ID}.{ext}
+    generic_name = tmp_files.get_video_track_path(
+        video_workspace, format_id, downloaded_file.suffix.lstrip(".")
+    )
+    safe_push_log(f"  🔍 Target generic name: {generic_name.name}")
+
+    # Rename video file if needed
+    if downloaded_file != generic_name:
+        try:
+            if generic_name.exists():
+                if should_remove_tmp_files():
+                    generic_name.unlink()
+                    safe_push_log(f"  🗑️ Removed existing: {generic_name.name}")
+                else:
+                    safe_push_log(
+                        f"  ⚠️ Generic file already exists: {generic_name.name}"
+                    )
+
+            safe_push_log(
+                f"  🔄 Renaming: {downloaded_file.name} → {generic_name.name}"
+            )
+            downloaded_file.rename(generic_name)
+            safe_push_log(
+                f"  ✅ Video renamed: {downloaded_file.name} → {generic_name.name}"
+            )
+
+            # Verify the file exists after rename
+            if generic_name.exists():
+                size_mb = generic_name.stat().st_size / (1024 * 1024)
+                safe_push_log(
+                    f"  ✅ Verified: {generic_name.name} exists ({size_mb:.1f} MiB)"
+                )
+            else:
+                safe_push_log(
+                    f"  ❌ ERROR: {generic_name.name} doesn't exist after rename!"
+                )
+                return downloaded_file  # Return original if rename failed
+
+            final_tmp = generic_name
+        except Exception as e:
+            safe_push_log(f"  ⚠️ Could not rename video: {str(e)}")
+            final_tmp = downloaded_file
+    else:
+        final_tmp = downloaded_file
+
+    # Rename subtitle files to generic names
+    if subs_selected:
+        for lang in subs_selected:
+            # Look for subtitle files with the original name
+            for ext in [".srt", ".vtt"]:
+                original_sub = video_workspace / f"{base_output}.{lang}{ext}"
+                if original_sub.exists():
+                    generic_sub = tmp_files.get_subtitle_path(
+                        video_workspace, lang, is_cut=False
+                    )
+                    try:
+                        if generic_sub.exists():
+                            generic_sub.unlink()
+                        original_sub.rename(generic_sub)
+                        safe_push_log(
+                            f"  ✅ Subtitle renamed: {original_sub.name} → {generic_sub.name}"
+                        )
+                    except Exception as e:
+                        safe_push_log(f"  ⚠️ Could not rename subtitle: {str(e)}")
+
+    # Copy to final.{ext} for consistency (keep original for cache reuse)
+    final_path = tmp_files.get_final_path(video_workspace, final_tmp.suffix.lstrip("."))
+
+    if final_tmp != final_path:
+        try:
+            # Remove existing final file if it exists
+            if final_path.exists():
+                if should_remove_tmp_files():
+                    final_path.unlink()
+                    safe_push_log("🗑️ Removed existing final file")
+                else:
+                    safe_push_log("🔍 Debug mode: Overwriting existing final file")
+
+            # Copy (not rename!) to final name, keeping original for cache
+            shutil.copy2(str(final_tmp), str(final_path))
+            safe_push_log(f"📦 Copied: {final_tmp.name} → {final_path.name}")
+            safe_push_log(f"💾 Kept original {final_tmp.name} for cache reuse")
+            return final_path
+        except Exception as e:
+            safe_push_log(f"⚠️ Could not copy to final, using original: {str(e)}")
+            return final_tmp
+    else:
+        # Already has final name
+        safe_push_log(f"✓ File already has final name: {final_tmp.name}")
+        return final_tmp
+
+
 def url_analysis(url: str) -> Optional[Dict]:
     """
     Analyze URL and fetch comprehensive video/playlist information using yt-dlp.
@@ -3165,298 +3608,78 @@ if submitted:
                 playlist_workspace, video_id
             )
 
-            # Initialize video workspace with url_info.json and status.json
-            # This ensures each video follows the same workflow as a standalone video
-            video_url_info_path = video_workspace / "url_info.json"
-            video_status_path = video_workspace / "status.json"
+            # Use the reusable video download function (same as single videos)
+            base_output = sanitize_filename(video_title)
+            do_cut_video = False  # No cutting for individual playlist videos
+            subs_selected_video = subs_selected  # Use playlist subtitle settings
+            force_mp4_video = False
+            ytdlp_custom_args_video = st.session_state.get("ytdlp_custom_args", "")
 
-            # Check if url_info.json already exists
-            video_url_info = None
-            if video_url_info_path.exists():
-                try:
-                    import json
+            # Download the video using the reusable function
+            ret_dl, final_tmp, error_msg = download_single_video(
+                video_url=video_url,
+                video_id=video_id,
+                video_title=video_title,
+                video_workspace=video_workspace,
+                base_output=base_output,
+                embed_chapters=embed_chapters,
+                embed_subs=embed_subs,
+                force_mp4=force_mp4_video,
+                ytdlp_custom_args=ytdlp_custom_args_video,
+                do_cut=do_cut_video,
+                subs_selected=subs_selected_video,
+                sb_choice=sb_choice,
+                requested_format_id=None,  # Auto mode for playlists
+                progress_placeholder=progress_placeholder,
+                status_placeholder=status_placeholder,
+                info_placeholder=info_placeholder,
+            )
 
-                    with open(video_url_info_path, "r", encoding="utf-8") as f:
-                        video_url_info = json.load(f)
-                    push_log(f"📋 Using existing url_info.json for {video_title}")
-                except Exception as e:
-                    push_log(f"⚠️ Could not load existing url_info.json: {e}")
+            # Handle cancellation
+            if ret_dl == -1:
+                push_log("⚠️ Download cancelled by user")
+                st.session_state.download_finished = True
+                st.stop()
 
-            # If url_info.json doesn't exist, fetch it
-            if not video_url_info:
-                push_log(f"📋 Fetching url_info.json for {video_title}...")
-                cookies_params = build_cookies_params_from_config()
-
-                video_url_info = build_url_info(
-                    clean_url=video_url,
-                    json_output_path=video_url_info_path,
-                    cookies_params=cookies_params,
-                    youtube_cookies_file_path=YOUTUBE_COOKIES_FILE_PATH,
-                    cookies_from_browser=COOKIES_FROM_BROWSER,
-                    youtube_clients=YOUTUBE_CLIENT_FALLBACKS,
+            # Process result
+            if ret_dl == 0 and final_tmp and final_tmp.exists():
+                # Copy to playlist destination with video title
+                dest_file = (
+                    playlist_dest
+                    / f"{sanitize_filename(video_title)}{final_tmp.suffix}"
                 )
+                import shutil
 
-            if video_url_info and "error" not in video_url_info:
-                # Create status.json if it doesn't exist
-                if not video_status_path.exists():
-                    create_initial_status(
-                        url=video_url,
-                        video_id=video_id,
-                        title=video_title,
-                        content_type="video",
-                        tmp_url_workspace=video_workspace,
-                    )
-                    push_log(f"📊 Created status.json for {video_title}")
+                shutil.copy2(str(final_tmp), str(dest_file))
+                push_log(f"✅ Copied to destination: {dest_file.name}")
 
-                # Compute optimal profiles for this video
-                compute_optimal_profiles(video_url_info, video_url_info_path)
-
-                # Use the full download workflow (same as single video)
-                # Get optimal profiles from session state (set by compute_optimal_profiles)
-                optimal_profiles = st.session_state.get("optimal_format_profiles", [])
-
-                # Copy to chosen_format_profiles for smart_download_with_profiles()
-                # This is required because smart_download_with_profiles() reads from chosen_format_profiles
-                if optimal_profiles:
-                    st.session_state["chosen_format_profiles"] = optimal_profiles
-                    # Also set the quality strategy to indicate we're using auto profiles
-                    st.session_state["download_quality_strategy"] = "auto_best"
-
-                # Use video title as base output
-                base_output = sanitize_filename(video_title)
-
-                # Check for existing completed download (same logic as single videos)
-                existing_generic_file = None
-                completed_format_id = get_first_completed_format(video_workspace)
-
-                if completed_format_id:
-                    # Check if user requested a different format than what's completed
-                    # (For playlists, we use auto mode, so no specific format requested)
-                    # We have a completed format in status.json - find the corresponding file
-                    log_title("✅ Found completed download in status")
-                    push_log(f"  🎯 Format ID: {completed_format_id}")
-
-                    # Try to find the video file with this format ID
-                    existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
-                    for track in existing_video_tracks:
-                        track_format_id = tmp_files.extract_format_id_from_filename(
-                            track.name
-                        )
-                        if track_format_id and track_format_id in completed_format_id:
-                            existing_generic_file = track
-                            push_log(f"  📦 Found file: {existing_generic_file.name}")
-                            push_log(
-                                f"  📊 Size: {existing_generic_file.stat().st_size / (1024*1024):.2f}MiB"
-                            )
-                            push_log("  🔄 Skipping download, reusing completed file")
-                            push_log("")
-                            break
-
-                    if not existing_generic_file:
-                        push_log(
-                            "  ⚠️ Status shows completed but file not found, will re-download"
-                        )
-                else:
-                    # Fallback: check for any generic video file (backward compatibility)
-                    existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
-                    existing_generic_file = (
-                        existing_video_tracks[0] if existing_video_tracks else None
-                    )
-
-                    if existing_generic_file:
-                        log_title("✅ Found cached download (legacy detection)")
-                        push_log(f"  📦 Existing file: {existing_generic_file.name}")
-                        push_log("  🔄 Skipping download, reusing cached file")
-                        push_log(
-                            "  ℹ️  Note: No status.json entry for this file, consider updating"
-                        )
-                        push_log("")
-
-                # Build cookies params
-                cookies_part = build_cookies_params()
-
-                # Setup for download (no cutting for playlist videos, use default subs)
-                do_cut_video = False  # No cutting for individual playlist videos
-                subs_selected_video = subs_selected  # Use playlist subtitle settings
-                embed_subs_video = embed_subs
-                embed_chapters_video = embed_chapters
-                sb_choice_video = sb_choice
-                force_mp4_video = False
-                ytdlp_custom_args_video = st.session_state.get("ytdlp_custom_args", "")
-
-                # Use smart_download_with_profiles for full workflow
-                if existing_generic_file:
-                    push_log("⚡ Skipping download - using cached file")
-                    ret_dl = 0
-                    final_tmp = existing_generic_file
-
-                    # Update status to completed if not already
-                    if completed_format_id:
-                        update_format_status(
-                            tmp_url_workspace=video_workspace,
-                            video_format=completed_format_id,
-                            final_file=existing_generic_file,
-                        )
-
-                    # Update playlist status to mark video as completed
-                    update_video_status_in_playlist(
-                        playlist_workspace, video_id, "completed"
-                    )
-
-                    # Copy to playlist destination even if file already exists (resilience)
-                    if final_tmp and final_tmp.exists():
-                        dest_file = (
-                            playlist_dest
-                            / f"{sanitize_filename(video_title)}{final_tmp.suffix}"
-                        )
-                        import shutil
-
-                        shutil.copy2(str(final_tmp), str(dest_file))
-                        push_log(f"✅ Copied to destination: {dest_file.name}")
-
-                        push_log(
-                            t(
-                                "playlist_video_completed",
-                                current=current_idx,
-                                total=total_videos,
-                                title=video_title,
-                            )
-                        )
-                        completed_count += 1
-                else:
-                    push_log(f"📥 Downloading {video_title} with full workflow...")
-                    ret_dl, error_msg = smart_download_with_profiles(
-                        base_output=base_output,
-                        tmp_video_dir=video_workspace,
-                        embed_chapters=embed_chapters_video,
-                        embed_subs=embed_subs_video,
-                        force_mp4=force_mp4_video,
-                        ytdlp_custom_args=ytdlp_custom_args_video,
-                        url=video_url,
-                        download_mode="auto",
-                        target_profile=None,
-                        refuse_quality_downgrade=False,
-                        do_cut=do_cut_video,
-                        subs_selected=subs_selected_video,
-                        sb_choice=sb_choice_video,
-                        progress_placeholder=progress_placeholder,
-                        status_placeholder=status_placeholder,
-                        info_placeholder=info_placeholder,
-                    )
-
-                # Handle cancellation
-                if ret_dl == -1:
-                    push_log("⚠️ Download cancelled by user")
-                    st.session_state.download_finished = True
-                    st.stop()
-
-                # Find the final file
-                if ret_dl == 0:
-                    # Look for final file
-                    final_tmp = None
-
-                    # First, try to find the file by the base output name (what yt-dlp created)
-                    base_output_sanitized = sanitize_filename(video_title)
-                    for ext in [".mkv", ".mp4", ".webm"]:
-                        potential_file = (
-                            video_workspace / f"{base_output_sanitized}{ext}"
-                        )
-                        if potential_file.exists():
-                            final_tmp = potential_file
-                            push_log(f"✅ Found downloaded file: {potential_file.name}")
-                            break
-
-                    # Check for final.{ext} (generic name)
-                    if not final_tmp:
-                        for ext in [".mkv", ".mp4", ".webm"]:
-                            final_path = tmp_files.get_final_path(
-                                video_workspace, ext.lstrip(".")
-                            )
-                            if final_path.exists():
-                                final_tmp = final_path
-                                push_log(f"✅ Found final file: {final_path.name}")
-                                break
-
-                    # Fallback: find any video file in the workspace
-                    if not final_tmp:
-                        existing_video_tracks = tmp_files.find_video_tracks(
-                            video_workspace
-                        )
-                        if existing_video_tracks:
-                            final_tmp = existing_video_tracks[0]
-                            push_log(f"✅ Found video file: {final_tmp.name}")
-
-                    if final_tmp and final_tmp.exists():
-                        # Copy to playlist destination with video title
-                        dest_file = (
-                            playlist_dest
-                            / f"{sanitize_filename(video_title)}{final_tmp.suffix}"
-                        )
-                        import shutil
-
-                        shutil.copy2(str(final_tmp), str(dest_file))
-                        push_log(f"✅ Copied to destination: {dest_file.name}")
-
-                        # Update status to completed
-                        if completed_format_id:
-                            update_format_status(
-                                tmp_url_workspace=video_workspace,
-                                video_format=completed_format_id,
-                                final_file=final_tmp,
-                            )
-
-                        update_video_status_in_playlist(
-                            playlist_workspace, video_id, "completed"
-                        )
-                        push_log(
-                            t(
-                                "playlist_video_completed",
-                                current=current_idx,
-                                total=total_videos,
-                                title=video_title,
-                            )
-                        )
-                        completed_count += 1
-                    else:
-                        update_video_status_in_playlist(
-                            playlist_workspace,
-                            video_id,
-                            "failed",
-                            "No file found after download",
-                        )
-                        push_log(
-                            t(
-                                "playlist_video_failed",
-                                current=current_idx,
-                                total=total_videos,
-                                title=video_title,
-                            )
-                        )
-                        failed_count += 1
-                else:
-                    update_video_status_in_playlist(
-                        playlist_workspace, video_id, "failed", f"Exit code: {ret_dl}"
-                    )
-                    push_log(
-                        t(
-                            "playlist_video_failed",
-                            current=current_idx,
-                            total=total_videos,
-                            title=video_title,
-                        )
-                    )
-                    failed_count += 1
-            else:
-                # Error fetching url_info
-                error_msg = (
-                    video_url_info.get("error", "Unknown error")
-                    if video_url_info
-                    else "Failed to fetch video info"
-                )
+                # Update playlist status to mark video as completed
                 update_video_status_in_playlist(
-                    playlist_workspace, video_id, "failed", error_msg
+                    playlist_workspace, video_id, "completed"
                 )
-                push_log(f"❌ Error fetching info for {video_title}: {error_msg}")
+                push_log(
+                    t(
+                        "playlist_video_completed",
+                        current=current_idx,
+                        total=total_videos,
+                        title=video_title,
+                    )
+                )
+                completed_count += 1
+            else:
+                # Download failed or file not found
+                error_msg_final = error_msg or "No file found after download"
+                update_video_status_in_playlist(
+                    playlist_workspace, video_id, "failed", error_msg_final
+                )
+                push_log(
+                    t(
+                        "playlist_video_failed",
+                        current=current_idx,
+                        total=total_videos,
+                        title=video_title,
+                    )
+                )
                 failed_count += 1
 
         # Final summary
