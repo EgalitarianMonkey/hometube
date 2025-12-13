@@ -87,6 +87,7 @@ try:
         get_last_download_attempt,
     )
     from .playlist_utils import (
+        save_playlist_status,
         is_playlist_url,
         is_playlist_info,
         get_playlist_entries,
@@ -185,6 +186,7 @@ except ImportError:
         get_profiles_cached,
     )
     from playlist_utils import (
+        save_playlist_status,
         is_playlist_url,
         is_playlist_info,
         get_playlist_entries,
@@ -3084,6 +3086,22 @@ if submitted:
                 playlist_title=playlist_name,
                 entries=playlist_entries,
             )
+        else:
+            # Update existing status with any new entries that might be missing
+            videos_status = existing_status.get("videos", {})
+            for entry in playlist_entries:
+                video_id = entry.get("id", "")
+                if video_id and video_id not in videos_status:
+                    # Add missing video entry
+                    videos_status[video_id] = {
+                        "title": entry.get("title", "Unknown"),
+                        "url": entry.get("url", ""),
+                        "status": "pending",
+                        "downloaded_at": None,
+                        "error": None,
+                    }
+            # Save updated status
+            save_playlist_status(playlist_workspace, existing_status)
 
         # Record download attempt
         add_playlist_download_attempt(
@@ -3197,15 +3215,28 @@ if submitted:
                 # Get optimal profiles from session state (set by compute_optimal_profiles)
                 optimal_profiles = st.session_state.get("optimal_format_profiles", [])
 
+                # Copy to chosen_format_profiles for smart_download_with_profiles()
+                # This is required because smart_download_with_profiles() reads from chosen_format_profiles
+                if optimal_profiles:
+                    st.session_state["chosen_format_profiles"] = optimal_profiles
+                    # Also set the quality strategy to indicate we're using auto profiles
+                    st.session_state["download_quality_strategy"] = "auto_best"
+
                 # Use video title as base output
                 base_output = sanitize_filename(video_title)
 
-                # Check for existing completed download
+                # Check for existing completed download (same logic as single videos)
                 existing_generic_file = None
                 completed_format_id = get_first_completed_format(video_workspace)
 
                 if completed_format_id:
-                    # Find the file with this format ID
+                    # Check if user requested a different format than what's completed
+                    # (For playlists, we use auto mode, so no specific format requested)
+                    # We have a completed format in status.json - find the corresponding file
+                    log_title("✅ Found completed download in status")
+                    push_log(f"  🎯 Format ID: {completed_format_id}")
+
+                    # Try to find the video file with this format ID
                     existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
                     for track in existing_video_tracks:
                         track_format_id = tmp_files.extract_format_id_from_filename(
@@ -3213,8 +3244,33 @@ if submitted:
                         )
                         if track_format_id and track_format_id in completed_format_id:
                             existing_generic_file = track
-                            push_log(f"✅ Found completed download: {track.name}")
+                            push_log(f"  📦 Found file: {existing_generic_file.name}")
+                            push_log(
+                                f"  📊 Size: {existing_generic_file.stat().st_size / (1024*1024):.2f}MiB"
+                            )
+                            push_log("  🔄 Skipping download, reusing completed file")
+                            push_log("")
                             break
+
+                    if not existing_generic_file:
+                        push_log(
+                            "  ⚠️ Status shows completed but file not found, will re-download"
+                        )
+                else:
+                    # Fallback: check for any generic video file (backward compatibility)
+                    existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
+                    existing_generic_file = (
+                        existing_video_tracks[0] if existing_video_tracks else None
+                    )
+
+                    if existing_generic_file:
+                        log_title("✅ Found cached download (legacy detection)")
+                        push_log(f"  📦 Existing file: {existing_generic_file.name}")
+                        push_log("  🔄 Skipping download, reusing cached file")
+                        push_log(
+                            "  ℹ️  Note: No status.json entry for this file, consider updating"
+                        )
+                        push_log("")
 
                 # Build cookies params
                 cookies_part = build_cookies_params()
@@ -3233,6 +3289,40 @@ if submitted:
                     push_log("⚡ Skipping download - using cached file")
                     ret_dl = 0
                     final_tmp = existing_generic_file
+
+                    # Update status to completed if not already
+                    if completed_format_id:
+                        update_format_status(
+                            tmp_url_workspace=video_workspace,
+                            video_format=completed_format_id,
+                            final_file=existing_generic_file,
+                        )
+
+                    # Update playlist status to mark video as completed
+                    update_video_status_in_playlist(
+                        playlist_workspace, video_id, "completed"
+                    )
+
+                    # Copy to playlist destination even if file already exists (resilience)
+                    if final_tmp and final_tmp.exists():
+                        dest_file = (
+                            playlist_dest
+                            / f"{sanitize_filename(video_title)}{final_tmp.suffix}"
+                        )
+                        import shutil
+
+                        shutil.copy2(str(final_tmp), str(dest_file))
+                        push_log(f"✅ Copied to destination: {dest_file.name}")
+
+                        push_log(
+                            t(
+                                "playlist_video_completed",
+                                current=current_idx,
+                                total=total_videos,
+                                title=video_title,
+                            )
+                        )
+                        completed_count += 1
                 else:
                     push_log(f"📥 Downloading {video_title} with full workflow...")
                     ret_dl, error_msg = smart_download_with_profiles(
@@ -3242,16 +3332,16 @@ if submitted:
                         embed_subs=embed_subs_video,
                         force_mp4=force_mp4_video,
                         ytdlp_custom_args=ytdlp_custom_args_video,
-                        clean_url=video_url,
-                        quality_strategy="auto",
+                        url=video_url,
+                        download_mode="auto",
                         target_profile=None,
                         refuse_quality_downgrade=False,
                         do_cut=do_cut_video,
                         subs_selected=subs_selected_video,
                         sb_choice=sb_choice_video,
-                        progress=progress_placeholder,
-                        status=status_placeholder,
-                        info=info_placeholder,
+                        progress_placeholder=progress_placeholder,
+                        status_placeholder=status_placeholder,
+                        info_placeholder=info_placeholder,
                     )
 
                 # Handle cancellation
@@ -3265,22 +3355,36 @@ if submitted:
                     # Look for final file
                     final_tmp = None
 
-                    # Check for final.{ext}
+                    # First, try to find the file by the base output name (what yt-dlp created)
+                    base_output_sanitized = sanitize_filename(video_title)
                     for ext in [".mkv", ".mp4", ".webm"]:
-                        final_path = tmp_files.get_final_path(
-                            video_workspace, ext.lstrip(".")
+                        potential_file = (
+                            video_workspace / f"{base_output_sanitized}{ext}"
                         )
-                        if final_path.exists():
-                            final_tmp = final_path
+                        if potential_file.exists():
+                            final_tmp = potential_file
+                            push_log(f"✅ Found downloaded file: {potential_file.name}")
                             break
 
-                    # Fallback to video-{format_id}.{ext}
+                    # Check for final.{ext} (generic name)
+                    if not final_tmp:
+                        for ext in [".mkv", ".mp4", ".webm"]:
+                            final_path = tmp_files.get_final_path(
+                                video_workspace, ext.lstrip(".")
+                            )
+                            if final_path.exists():
+                                final_tmp = final_path
+                                push_log(f"✅ Found final file: {final_path.name}")
+                                break
+
+                    # Fallback: find any video file in the workspace
                     if not final_tmp:
                         existing_video_tracks = tmp_files.find_video_tracks(
                             video_workspace
                         )
                         if existing_video_tracks:
                             final_tmp = existing_video_tracks[0]
+                            push_log(f"✅ Found video file: {final_tmp.name}")
 
                     if final_tmp and final_tmp.exists():
                         # Copy to playlist destination with video title
