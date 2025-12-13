@@ -47,12 +47,13 @@ def sanitize_filename(name: str) -> str:
 
 def get_unique_video_folder_name_from_url(url: str) -> str:
     """
-    Generate a unique folder name for a video based on its URL.
+    Generate a unique folder name for a video or playlist based on its URL.
 
-    Extracts platform and video ID from the URL to create a consistent,
+    Extracts platform and video/playlist ID from the URL to create a consistent,
     filesystem-safe folder name. The same URL will always produce the same folder name.
 
     Supported platforms:
+    - YouTube Playlist: youtube-playlist-{playlist_id}
     - YouTube: youtube-{video_id}
     - YouTube Shorts: youtube-shorts-{video_id}
     - Instagram: instagram-{post_id}
@@ -65,7 +66,7 @@ def get_unique_video_folder_name_from_url(url: str) -> str:
         url: Sanitized video URL (should be cleaned with sanitize_url first)
 
     Returns:
-        Unique folder name string (e.g., "youtube-dQw4w9WgXcQ")
+        Unique folder name string (e.g., "youtube-dQw4w9WgXcQ" or "youtube-playlist-PLxxxxx")
 
     Examples:
         >>> get_unique_video_folder_name_from_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
@@ -74,6 +75,8 @@ def get_unique_video_folder_name_from_url(url: str) -> str:
         'youtube-dQw4w9WgXcQ'
         >>> get_unique_video_folder_name_from_url("https://www.youtube.com/shorts/abc123")
         'youtube-shorts-abc123'
+        >>> get_unique_video_folder_name_from_url("https://www.youtube.com/playlist?list=PLxxx")
+        'youtube-playlist-PLxxx'
         >>> get_unique_video_folder_name_from_url("https://www.instagram.com/p/ABC123/")
         'instagram-ABC123'
         >>> get_unique_video_folder_name_from_url("https://www.tiktok.com/@user/video/1234567890")
@@ -86,6 +89,15 @@ def get_unique_video_folder_name_from_url(url: str) -> str:
 
     # Clean URL for processing
     url = url.strip()
+
+    # YouTube Playlist: youtube.com/playlist?list=PLAYLIST_ID
+    # Must be checked BEFORE video detection to prioritize playlists
+    youtube_playlist_match = re.search(
+        r"youtube\.com/playlist\?list=([a-zA-Z0-9_-]+)", url
+    )
+    if youtube_playlist_match:
+        playlist_id = youtube_playlist_match.group(1)
+        return f"youtube-playlist-{playlist_id}"
 
     # YouTube standard format: youtube.com/watch?v=VIDEO_ID
     youtube_watch_match = re.search(

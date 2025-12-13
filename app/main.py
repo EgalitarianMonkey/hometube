@@ -86,6 +86,26 @@ try:
         add_download_attempt,
         get_last_download_attempt,
     )
+    from .playlist_utils import (
+        is_playlist_url,
+        is_playlist_info,
+        get_playlist_entries,
+        get_playlist_video_count,
+        check_existing_videos_in_destination,
+        get_download_ratio,
+        get_download_progress_percent,
+        create_playlist_workspace,
+        create_video_workspace_in_playlist,
+        create_playlist_status,
+        load_playlist_status,
+        update_video_status_in_playlist,
+        get_playlist_progress,
+        get_videos_to_download,
+        mark_video_as_skipped,
+        copy_playlist_to_destination,
+        add_playlist_download_attempt,
+        get_last_playlist_download_attempt,
+    )
 except ImportError:
     # Fallback for direct execution from app directory
     from translations import t, configure_language
@@ -163,6 +183,26 @@ except ImportError:
         get_last_download_attempt,
         is_format_completed,
         get_profiles_cached,
+    )
+    from playlist_utils import (
+        is_playlist_url,
+        is_playlist_info,
+        get_playlist_entries,
+        get_playlist_video_count,
+        check_existing_videos_in_destination,
+        get_download_ratio,
+        get_download_progress_percent,
+        create_playlist_workspace,
+        create_video_workspace_in_playlist,
+        create_playlist_status,
+        load_playlist_status,
+        update_video_status_in_playlist,
+        get_playlist_progress,
+        get_videos_to_download,
+        mark_video_as_skipped,
+        copy_playlist_to_destination,
+        add_playlist_download_attempt,
+        get_last_playlist_download_attempt,
     )
 
 # Configuration import (must be after translations for configure_language)
@@ -1266,6 +1306,7 @@ def display_url_info(url_info: Dict) -> None:
         # ===== PLAYLIST INFORMATION =====
         title = url_info.get("title", "Unknown Playlist")
         uploader = url_info.get("uploader", url_info.get("channel", ""))
+        playlist_id = url_info.get("id", "")
 
         # Get playlist count
         entries_count = url_info.get("playlist_count") or len(
@@ -1291,6 +1332,13 @@ def display_url_info(url_info: Dict) -> None:
         # Render card
         st.html(render_media_card(title, info_items))
 
+        # Store playlist info in session state
+        st.session_state["is_playlist"] = True
+        st.session_state["playlist_title"] = title
+        st.session_state["playlist_id"] = playlist_id
+        st.session_state["playlist_entries"] = get_playlist_entries(url_info)
+        st.session_state["playlist_total_count"] = entries_count
+
     elif url_info.get("_type") == "video" or "duration" in url_info:
         # ===== SINGLE VIDEO INFORMATION =====
         title = url_info.get("title", "Unknown Video")
@@ -1312,6 +1360,9 @@ def display_url_info(url_info: Dict) -> None:
 
         # Render card
         st.html(render_media_card(title, info_items))
+
+        # Mark as not a playlist
+        st.session_state["is_playlist"] = False
 
     else:
         # Unknown format - not a video or playlist
@@ -1558,6 +1609,7 @@ url = st.text_input(
 )
 
 # Analyze URL and display information
+url_info = None
 if url and url.strip():
     # Check if URL has changed or if it's the first analysis
     current_url_in_session = st.session_state.get("current_video_url")
@@ -1576,17 +1628,68 @@ if url and url.strip():
 
 # Try to get last download attempt to pre-fill fields
 default_filename = ""
+default_folder = ""
 last_attempt = None  # Initialize to avoid NameError
 
 tmp_url_workspace = st.session_state.get("tmp_url_workspace")
-if tmp_url_workspace:
-    last_attempt = get_last_download_attempt(tmp_url_workspace)
-    if last_attempt:
-        default_filename = last_attempt.get("custom_title", "")
+# Check if it's a playlist - prioritize url_info from current analysis
+is_playlist_mode = False
+url_info_check = url_info if url_info else st.session_state.get("url_info", {})
+if url_info_check:
+    is_playlist_mode = is_playlist_info(url_info_check)
+    # Update session state for consistency
+    if is_playlist_mode:
+        st.session_state["is_playlist"] = True
+elif st.session_state.get("is_playlist", False):
+    # Fallback to session state if url_info not available
+    is_playlist_mode = True
 
-filename = st.text_input(
-    t("video_name"), value=default_filename, help=t("video_name_help")
-)
+if tmp_url_workspace:
+    if is_playlist_mode:
+        # For playlists, use playlist-specific function
+        last_attempt = get_last_playlist_download_attempt(tmp_url_workspace)
+        if last_attempt:
+            default_filename = last_attempt.get("custom_title", "")
+            default_folder = last_attempt.get("playlist_location", "")
+    else:
+        # For single videos, use regular function
+        last_attempt = get_last_download_attempt(tmp_url_workspace)
+        if last_attempt:
+            default_filename = last_attempt.get("custom_title", "")
+            default_folder = last_attempt.get("video_location", "")
+
+# === PLAYLIST PROGRESS DISPLAY ===
+# Show download ratio for playlists
+is_playlist_mode = st.session_state.get("is_playlist", False)
+playlist_already_downloaded = []
+playlist_to_download = []
+
+if is_playlist_mode:
+    playlist_entries = st.session_state.get("playlist_entries", [])
+    playlist_total = st.session_state.get("playlist_total_count", 0)
+    playlist_title = st.session_state.get("playlist_title", "Playlist")
+
+    # Default filename to playlist title if not set (but only if not pre-filled from last attempt)
+    if not default_filename:
+        default_filename = playlist_title
+
+    # Show playlist progress section
+    st.markdown(f"### {t('playlist_progress_title')}")
+
+    # Check if destination folder is selected to compute progress
+    # We'll compute the ratio based on the selected destination folder
+    # For now, show the total count
+    st.info(t("playlist_videos_found", count=playlist_total))
+
+    # Display input for playlist name (instead of video name)
+    filename = st.text_input(
+        t("playlist_name"), value=default_filename, help=t("playlist_name_help")
+    )
+else:
+    # Regular video mode
+    filename = st.text_input(
+        t("video_name"), value=default_filename, help=t("video_name_help")
+    )
 
 # === FOLDER SELECTION ===
 # Handle cancel action - reset to root folder
@@ -1607,11 +1710,10 @@ if "default_folder_initialized" not in st.session_state:
 
 if (
     tmp_url_workspace
-    and last_attempt
+    and default_folder
     and not st.session_state.default_folder_initialized
 ):
-    last_location = last_attempt.get("video_location", "/")
-    st.session_state.prefilled_folder = last_location
+    st.session_state.prefilled_folder = default_folder
     st.session_state.default_folder_initialized = True
 
 # Reload folder list if a new folder was just created to include it in the options
@@ -1740,8 +1842,8 @@ if "new_folder_created" in st.session_state:
     video_subfolder = st.session_state.new_folder_created
     del st.session_state.new_folder_created
 
-# === FILE EXISTENCE WARNING ===
-# Check if file already exists with the current filename and location
+# === FILE/PLAYLIST EXISTENCE CHECK ===
+# Check what already exists in destination
 if (
     filename
     and filename.strip()
@@ -1754,33 +1856,81 @@ if (
     else:
         check_dest_dir = VIDEOS_FOLDER / video_subfolder
 
-    # Check for existing files with all common video extensions
-    existing_files = []
-    for ext in [".mkv", ".mp4", ".webm", ".avi", ".mov"]:
-        potential_file = check_dest_dir / f"{filename}{ext}"
-        if potential_file.exists():
-            existing_files.append(potential_file)
+    if is_playlist_mode:
+        # === PLAYLIST PROGRESS CALCULATION ===
+        # Check which videos from the playlist already exist in destination
+        playlist_entries = st.session_state.get("playlist_entries", [])
 
-    if existing_files:
-        # File already exists - show warning
-        existing_file = existing_files[0]
-        file_size_mb = existing_file.stat().st_size / (1024 * 1024)
+        if playlist_entries:
+            # For playlists, destination is a subfolder with the playlist name
+            playlist_dest_dir = check_dest_dir / sanitize_filename(filename)
 
-        if settings.ALLOW_OVERWRITE_EXISTING_VIDEO:
-            st.warning(
-                f"⚠️ **File already exists:** `{existing_file.name}`\n\n"
-                f"📊 Size: {file_size_mb:.2f} MiB\n\n"
-                f"🔄 **Overwrite mode enabled** (ALLOW_OVERWRITE_EXISTING_VIDEO=true)\n\n"
-                f"The existing file will be replaced if you proceed with the download."
+            playlist_already_downloaded, playlist_to_download, total = (
+                check_existing_videos_in_destination(
+                    playlist_dest_dir,
+                    playlist_entries,
+                    playlist_workspace=tmp_url_workspace,
+                )
             )
-        else:
-            st.error(
-                f"❌ **File already exists:** `{existing_file.name}`\n\n"
-                f"📊 Size: {file_size_mb:.2f} MiB\n\n"
-                f"🛡️ **Protection active:** ALLOW_OVERWRITE_EXISTING_VIDEO=false\n\n"
-                f"Download will be skipped to protect the existing file.\n\n"
-                f"💡 To allow overwrites, set `ALLOW_OVERWRITE_EXISTING_VIDEO=true` in your `.env` file."
+
+            # Store in session state for download logic
+            st.session_state["playlist_already_downloaded"] = (
+                playlist_already_downloaded
             )
+            st.session_state["playlist_to_download"] = playlist_to_download
+
+            # Display progress
+            ratio = get_download_ratio(
+                playlist_already_downloaded, playlist_to_download
+            )
+            progress_percent = get_download_progress_percent(
+                playlist_already_downloaded, playlist_to_download
+            )
+
+            if len(playlist_to_download) == 0:
+                st.success(t("playlist_all_downloaded"))
+            else:
+                # Show progress bar
+                st.progress(
+                    progress_percent / 100.0,
+                    text=t(
+                        "playlist_ratio",
+                        downloaded=len(playlist_already_downloaded),
+                        total=total,
+                    ),
+                )
+
+                # Show count of videos to download
+                st.info(t("playlist_to_download", count=len(playlist_to_download)))
+    else:
+        # === SINGLE VIDEO FILE EXISTENCE WARNING ===
+        # Check for existing files with all common video extensions
+        existing_files = []
+        for ext in [".mkv", ".mp4", ".webm", ".avi", ".mov"]:
+            potential_file = check_dest_dir / f"{filename}{ext}"
+            if potential_file.exists():
+                existing_files.append(potential_file)
+
+        if existing_files:
+            # File already exists - show warning
+            existing_file = existing_files[0]
+            file_size_mb = existing_file.stat().st_size / (1024 * 1024)
+
+            if settings.ALLOW_OVERWRITE_EXISTING_VIDEO:
+                st.warning(
+                    f"⚠️ **File already exists:** `{existing_file.name}`\n\n"
+                    f"📊 Size: {file_size_mb:.2f} MiB\n\n"
+                    f"🔄 **Overwrite mode enabled** (ALLOW_OVERWRITE_EXISTING_VIDEO=true)\n\n"
+                    f"The existing file will be replaced if you proceed with the download."
+                )
+            else:
+                st.error(
+                    f"❌ **File already exists:** `{existing_file.name}`\n\n"
+                    f"📊 Size: {file_size_mb:.2f} MiB\n\n"
+                    f"🛡️ **Protection active:** ALLOW_OVERWRITE_EXISTING_VIDEO=false\n\n"
+                    f"Download will be skipped to protect the existing file.\n\n"
+                    f"💡 To allow overwrites, set `ALLOW_OVERWRITE_EXISTING_VIDEO=true` in your `.env` file."
+                )
 
 # subtitles multiselect from env
 # Default subtitles are determined by audio language preferences (LANGUAGE_PRIMARY, LANGUAGES_SECONDARIES)
@@ -2354,14 +2504,23 @@ st.markdown("\n")
 st.markdown("\n")
 
 # Create a centered, prominent download button
+# Use different label for playlists vs single videos
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    submitted = st.button(
-        f"🎬 &nbsp; {t('download_button')}",
-        type="primary",
-        use_container_width=True,
-        help=t("download_button_help"),
-    )
+    if is_playlist_mode:
+        submitted = st.button(
+            f"{t('playlist_download_button')}",
+            type="primary",
+            use_container_width=True,
+            help=t("playlist_download_help"),
+        )
+    else:
+        submitted = st.button(
+            f"{t('download_button')}",
+            type="primary",
+            use_container_width=True,
+            help=t("download_button_help"),
+        )
 
 st.markdown("\n")
 
@@ -2866,6 +3025,367 @@ if submitted:
     ensure_dir(dest_dir)
 
     push_log(f"📁 Destination folder: {dest_dir}")
+
+    # === PLAYLIST DOWNLOAD MODE ===
+    if is_playlist_mode:
+        playlist_name = filename or st.session_state.get("playlist_title", "Playlist")
+        playlist_id = st.session_state.get("playlist_id", "unknown")
+        playlist_to_download = st.session_state.get("playlist_to_download", [])
+        playlist_entries = st.session_state.get("playlist_entries", [])
+
+        if not playlist_to_download:
+            st.success(t("playlist_all_downloaded"))
+            st.session_state.download_finished = True
+            st.stop()
+
+        total_videos = len(playlist_entries)
+        videos_to_dl = len(playlist_to_download)
+
+        log_title(f"📋 PLAYLIST DOWNLOAD: {playlist_name}")
+        push_log(f"📊 {videos_to_dl} videos to download out of {total_videos}")
+        push_log("")
+
+        # Create playlist workspace
+        playlist_workspace = create_playlist_workspace(TMP_DOWNLOAD_FOLDER, playlist_id)
+        push_log(f"🔧 Playlist workspace: {playlist_workspace}")
+
+        # Create playlist destination folder
+        playlist_dest = dest_dir / sanitize_filename(playlist_name)
+        ensure_dir(playlist_dest)
+        push_log(f"📁 Playlist destination: {playlist_dest}")
+
+        # Ensure url_info.json exists in playlist workspace
+        url_info = st.session_state.get("url_info", {})
+        url_info_path = st.session_state.get("url_info_path")
+        playlist_url_info_path = playlist_workspace / "url_info.json"
+
+        if url_info_path and Path(url_info_path).exists():
+            # Copy url_info.json to playlist workspace if it doesn't exist
+            if not playlist_url_info_path.exists():
+                import shutil
+
+                shutil.copy2(url_info_path, playlist_url_info_path)
+                push_log(f"📋 Copied url_info.json to playlist workspace")
+        elif url_info and "error" not in url_info:
+            # Save url_info.json if we have it but no file exists
+            import json
+
+            with open(playlist_url_info_path, "w", encoding="utf-8") as f:
+                json.dump(url_info, f, indent=2, ensure_ascii=False)
+            push_log(f"📋 Saved url_info.json to playlist workspace")
+
+        # Create or load playlist status
+        existing_status = load_playlist_status(playlist_workspace)
+        if not existing_status:
+            create_playlist_status(
+                playlist_workspace=playlist_workspace,
+                url=url,
+                playlist_id=playlist_id,
+                playlist_title=playlist_name,
+                entries=playlist_entries,
+            )
+
+        # Record download attempt
+        add_playlist_download_attempt(
+            playlist_workspace=playlist_workspace,
+            custom_title=playlist_name,
+            playlist_location=video_subfolder,
+        )
+
+        # Mark already downloaded videos as skipped
+        playlist_already_downloaded = st.session_state.get(
+            "playlist_already_downloaded", []
+        )
+        for entry in playlist_already_downloaded:
+            video_id = entry.get("id", "")
+            if video_id:
+                mark_video_as_skipped(playlist_workspace, video_id)
+
+        # Download each video in the playlist
+        completed_count = len(playlist_already_downloaded)
+        failed_count = 0
+
+        for idx, entry in enumerate(playlist_to_download, 1):
+            video_id = entry.get("id", "")
+            video_title = entry.get("title", f"Video {idx}")
+            video_url = entry.get("url", "")
+
+            if not video_url and video_id:
+                video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+            current_idx = completed_count + idx
+
+            push_log("")
+            log_title(
+                t(
+                    "playlist_downloading_video",
+                    current=current_idx,
+                    total=total_videos,
+                    title=video_title,
+                )
+            )
+
+            # Update status
+            update_video_status_in_playlist(playlist_workspace, video_id, "downloading")
+            status_placeholder.info(
+                t(
+                    "playlist_downloading_video",
+                    current=current_idx,
+                    total=total_videos,
+                    title=video_title,
+                )
+            )
+
+            # Update progress
+            progress_percent = (current_idx - 1) / total_videos
+            progress_placeholder.progress(
+                progress_percent, text=f"{current_idx}/{total_videos}"
+            )
+
+            # Create video workspace within playlist
+            video_workspace = create_video_workspace_in_playlist(
+                playlist_workspace, video_id
+            )
+
+            # Initialize video workspace with url_info.json and status.json
+            # This ensures each video follows the same workflow as a standalone video
+            video_url_info_path = video_workspace / "url_info.json"
+            video_status_path = video_workspace / "status.json"
+
+            # Check if url_info.json already exists
+            video_url_info = None
+            if video_url_info_path.exists():
+                try:
+                    import json
+
+                    with open(video_url_info_path, "r", encoding="utf-8") as f:
+                        video_url_info = json.load(f)
+                    push_log(f"📋 Using existing url_info.json for {video_title}")
+                except Exception as e:
+                    push_log(f"⚠️ Could not load existing url_info.json: {e}")
+
+            # If url_info.json doesn't exist, fetch it
+            if not video_url_info:
+                push_log(f"📋 Fetching url_info.json for {video_title}...")
+                cookies_params = build_cookies_params_from_config()
+
+                video_url_info = build_url_info(
+                    clean_url=video_url,
+                    json_output_path=video_url_info_path,
+                    cookies_params=cookies_params,
+                    youtube_cookies_file_path=YOUTUBE_COOKIES_FILE_PATH,
+                    cookies_from_browser=COOKIES_FROM_BROWSER,
+                    youtube_clients=YOUTUBE_CLIENT_FALLBACKS,
+                )
+
+            if video_url_info and "error" not in video_url_info:
+                # Create status.json if it doesn't exist
+                if not video_status_path.exists():
+                    create_initial_status(
+                        url=video_url,
+                        video_id=video_id,
+                        title=video_title,
+                        content_type="video",
+                        tmp_url_workspace=video_workspace,
+                    )
+                    push_log(f"📊 Created status.json for {video_title}")
+
+                # Compute optimal profiles for this video
+                compute_optimal_profiles(video_url_info, video_url_info_path)
+
+                # Use the full download workflow (same as single video)
+                # Get optimal profiles from session state (set by compute_optimal_profiles)
+                optimal_profiles = st.session_state.get("optimal_format_profiles", [])
+
+                # Use video title as base output
+                base_output = sanitize_filename(video_title)
+
+                # Check for existing completed download
+                existing_generic_file = None
+                completed_format_id = get_first_completed_format(video_workspace)
+
+                if completed_format_id:
+                    # Find the file with this format ID
+                    existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
+                    for track in existing_video_tracks:
+                        track_format_id = tmp_files.extract_format_id_from_filename(
+                            track.name
+                        )
+                        if track_format_id and track_format_id in completed_format_id:
+                            existing_generic_file = track
+                            push_log(f"✅ Found completed download: {track.name}")
+                            break
+
+                # Build cookies params
+                cookies_part = build_cookies_params()
+
+                # Setup for download (no cutting for playlist videos, use default subs)
+                do_cut_video = False  # No cutting for individual playlist videos
+                subs_selected_video = subs_selected  # Use playlist subtitle settings
+                embed_subs_video = embed_subs
+                embed_chapters_video = embed_chapters
+                sb_choice_video = sb_choice
+                force_mp4_video = False
+                ytdlp_custom_args_video = st.session_state.get("ytdlp_custom_args", "")
+
+                # Use smart_download_with_profiles for full workflow
+                if existing_generic_file:
+                    push_log("⚡ Skipping download - using cached file")
+                    ret_dl = 0
+                    final_tmp = existing_generic_file
+                else:
+                    push_log(f"📥 Downloading {video_title} with full workflow...")
+                    ret_dl, error_msg = smart_download_with_profiles(
+                        base_output=base_output,
+                        tmp_video_dir=video_workspace,
+                        embed_chapters=embed_chapters_video,
+                        embed_subs=embed_subs_video,
+                        force_mp4=force_mp4_video,
+                        ytdlp_custom_args=ytdlp_custom_args_video,
+                        clean_url=video_url,
+                        quality_strategy="auto",
+                        target_profile=None,
+                        refuse_quality_downgrade=False,
+                        do_cut=do_cut_video,
+                        subs_selected=subs_selected_video,
+                        sb_choice=sb_choice_video,
+                        progress=progress_placeholder,
+                        status=status_placeholder,
+                        info=info_placeholder,
+                    )
+
+                # Handle cancellation
+                if ret_dl == -1:
+                    push_log("⚠️ Download cancelled by user")
+                    st.session_state.download_finished = True
+                    st.stop()
+
+                # Find the final file
+                if ret_dl == 0:
+                    # Look for final file
+                    final_tmp = None
+
+                    # Check for final.{ext}
+                    for ext in [".mkv", ".mp4", ".webm"]:
+                        final_path = tmp_files.get_final_path(
+                            video_workspace, ext.lstrip(".")
+                        )
+                        if final_path.exists():
+                            final_tmp = final_path
+                            break
+
+                    # Fallback to video-{format_id}.{ext}
+                    if not final_tmp:
+                        existing_video_tracks = tmp_files.find_video_tracks(
+                            video_workspace
+                        )
+                        if existing_video_tracks:
+                            final_tmp = existing_video_tracks[0]
+
+                    if final_tmp and final_tmp.exists():
+                        # Copy to playlist destination with video title
+                        dest_file = (
+                            playlist_dest
+                            / f"{sanitize_filename(video_title)}{final_tmp.suffix}"
+                        )
+                        import shutil
+
+                        shutil.copy2(str(final_tmp), str(dest_file))
+                        push_log(f"✅ Copied to destination: {dest_file.name}")
+
+                        # Update status to completed
+                        if completed_format_id:
+                            update_format_status(
+                                tmp_url_workspace=video_workspace,
+                                video_format=completed_format_id,
+                                final_file=final_tmp,
+                            )
+
+                        update_video_status_in_playlist(
+                            playlist_workspace, video_id, "completed"
+                        )
+                        push_log(
+                            t(
+                                "playlist_video_completed",
+                                current=current_idx,
+                                total=total_videos,
+                                title=video_title,
+                            )
+                        )
+                        completed_count += 1
+                    else:
+                        update_video_status_in_playlist(
+                            playlist_workspace,
+                            video_id,
+                            "failed",
+                            "No file found after download",
+                        )
+                        push_log(
+                            t(
+                                "playlist_video_failed",
+                                current=current_idx,
+                                total=total_videos,
+                                title=video_title,
+                            )
+                        )
+                        failed_count += 1
+                else:
+                    update_video_status_in_playlist(
+                        playlist_workspace, video_id, "failed", f"Exit code: {ret_dl}"
+                    )
+                    push_log(
+                        t(
+                            "playlist_video_failed",
+                            current=current_idx,
+                            total=total_videos,
+                            title=video_title,
+                        )
+                    )
+                    failed_count += 1
+            else:
+                # Error fetching url_info
+                error_msg = (
+                    video_url_info.get("error", "Unknown error")
+                    if video_url_info
+                    else "Failed to fetch video info"
+                )
+                update_video_status_in_playlist(
+                    playlist_workspace, video_id, "failed", error_msg
+                )
+                push_log(f"❌ Error fetching info for {video_title}: {error_msg}")
+                failed_count += 1
+
+        # Final summary
+        push_log("")
+        log_title("📊 PLAYLIST DOWNLOAD COMPLETE")
+        push_log(
+            t(
+                "playlist_download_complete",
+                completed=completed_count,
+                total=total_videos,
+            )
+        )
+        if failed_count > 0:
+            push_log(f"⚠️ {failed_count} video(s) failed")
+
+        # Final progress
+        progress_placeholder.progress(1.0, text=t("status_completed"))
+        status_placeholder.success(
+            t(
+                "playlist_copy_complete",
+                copied=completed_count - len(playlist_already_downloaded),
+                folder=playlist_name,
+            )
+        )
+
+        # Trigger media-server integrations
+        post_download_actions(safe_push_log, log_title)
+
+        st.toast(t("toast_download_completed"), icon="✅")
+        st.session_state.download_finished = True
+        st.stop()
+
+    # === SINGLE VIDEO DOWNLOAD MODE (existing logic continues below) ===
 
     # Check if video already exists in destination (safety check)
     if filename:
