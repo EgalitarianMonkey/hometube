@@ -2,10 +2,6 @@
 Tests for playlist utilities
 """
 
-import json
-import pytest
-from pathlib import Path
-
 from app.playlist_utils import (
     is_playlist_url,
     extract_playlist_id,

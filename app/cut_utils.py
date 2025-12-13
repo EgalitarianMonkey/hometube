@@ -288,7 +288,7 @@ def build_cut_command(
             "-map",
             "0:v:0",  # First video stream
             "-map",
-            "0:a",  # ALL audio streams (not "0:a?" which might only get first)
+            "0:a?",  # ALL audio streams (optional - won't fail if no audio exists)
         ]
     )
 

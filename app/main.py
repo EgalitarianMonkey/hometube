@@ -88,10 +88,8 @@ try:
     )
     from .playlist_utils import (
         save_playlist_status,
-        is_playlist_url,
         is_playlist_info,
         get_playlist_entries,
-        get_playlist_video_count,
         check_existing_videos_in_destination,
         get_download_ratio,
         get_download_progress_percent,
@@ -100,10 +98,7 @@ try:
         create_playlist_status,
         load_playlist_status,
         update_video_status_in_playlist,
-        get_playlist_progress,
-        get_videos_to_download,
         mark_video_as_skipped,
-        copy_playlist_to_destination,
         add_playlist_download_attempt,
         get_last_playlist_download_attempt,
     )
@@ -187,10 +182,8 @@ except ImportError:
     )
     from playlist_utils import (
         save_playlist_status,
-        is_playlist_url,
         is_playlist_info,
         get_playlist_entries,
-        get_playlist_video_count,
         check_existing_videos_in_destination,
         get_download_ratio,
         get_download_progress_percent,
@@ -199,10 +192,7 @@ except ImportError:
         create_playlist_status,
         load_playlist_status,
         update_video_status_in_playlist,
-        get_playlist_progress,
-        get_videos_to_download,
         mark_video_as_skipped,
-        copy_playlist_to_destination,
         add_playlist_download_attempt,
         get_last_playlist_download_attempt,
     )
@@ -2071,6 +2061,14 @@ if url and url.strip():
         url_info = url_info_in_session
         display_url_info(url_info)
 
+        # Compute optimal profiles for videos (not playlists) when reusing URL
+        # This ensures the quality selection UI displays correct profiles
+        url_info_path = st.session_state.get("url_info_path")
+        if url_info and "error" not in url_info and url_info_path:
+            json_output_path = Path(url_info_path)
+            if json_output_path.exists():
+                compute_optimal_profiles(url_info, json_output_path)
+
 # Try to get last download attempt to pre-fill fields
 default_filename = ""
 default_folder = ""
@@ -3510,14 +3508,14 @@ if submitted:
                 import shutil
 
                 shutil.copy2(url_info_path, playlist_url_info_path)
-                push_log(f"📋 Copied url_info.json to playlist workspace")
+                push_log("📋 Copied url_info.json to playlist workspace")
         elif url_info and "error" not in url_info:
             # Save url_info.json if we have it but no file exists
             import json
 
             with open(playlist_url_info_path, "w", encoding="utf-8") as f:
                 json.dump(url_info, f, indent=2, ensure_ascii=False)
-            push_log(f"📋 Saved url_info.json to playlist workspace")
+            push_log("📋 Saved url_info.json to playlist workspace")
 
         # Create or load playlist status
         existing_status = load_playlist_status(playlist_workspace)

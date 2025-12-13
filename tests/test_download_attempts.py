@@ -214,7 +214,8 @@ def test_download_attempt_preserves_other_status_fields(tmp_path):
     assert status_data["id"] == "testABC"
     assert status_data["title"] == "Test Video"
     assert len(status_data["downloaded_formats"]) == 1
-    assert status_data["downloaded_formats"][0]["video_format"] == "399+251"
+    assert "399+251" in status_data["downloaded_formats"]
+    assert status_data["downloaded_formats"]["399+251"]["status"] == "downloading"
     assert len(status_data["download_attempts"]) == 1
 
 

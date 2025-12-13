@@ -91,20 +91,14 @@ def get_unique_video_folder_name_from_url(url: str) -> str:
     url = url.strip()
 
     # YouTube Playlist: youtube.com/playlist?list=PLAYLIST_ID
-    # OR youtube.com/watch?v=VIDEO_ID&list=PLAYLIST_ID (video in playlist context)
     # Must be checked BEFORE video detection to prioritize playlists
+    # Note: watch URLs with &list= are treated as videos, not playlists
+    # (when watching a video from a playlist, we want to download the video, not the playlist)
     youtube_playlist_match = re.search(
         r"youtube\.com/playlist\?list=([a-zA-Z0-9_-]+)", url
     )
     if youtube_playlist_match:
         playlist_id = youtube_playlist_match.group(1)
-        return f"youtube-playlist-{playlist_id}"
-
-    # Also check for list parameter in watch URLs (video from playlist)
-    # Pattern: youtube.com/watch?v=VIDEO_ID&list=PLAYLIST_ID or youtube.com/watch?list=PLAYLIST_ID&v=VIDEO_ID
-    youtube_watch_with_list = re.search(r"[?&]list=([a-zA-Z0-9_-]+)", url)
-    if youtube_watch_with_list:
-        playlist_id = youtube_watch_with_list.group(1)
         return f"youtube-playlist-{playlist_id}"
 
     # YouTube standard format: youtube.com/watch?v=VIDEO_ID

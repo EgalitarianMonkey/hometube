@@ -136,10 +136,12 @@ def add_selected_format(
         "status": "downloading",
     }
 
+    # Check if format already exists BEFORE adding it
+    action = "Updated" if video_format in status_data["downloaded_formats"] else "Added"
+
     # Add or update format entry using format_id as key
     status_data["downloaded_formats"][video_format] = format_entry
 
-    action = "Updated" if video_format in status_data["downloaded_formats"] else "Added"
     safe_push_log(f"📊 {action} format {video_format} with status 'downloading'")
 
     return save_status(tmp_url_workspace, status_data)
