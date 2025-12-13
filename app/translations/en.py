@@ -353,6 +353,17 @@ Update your file cookies or try using **browser cookies** instead of file cookie
     "playlist_status_failed": "❌ Failed",
     "playlist_status_skipped": "⏭️ Skipped",
     "playlist_status_exists": "📁 Already exists",
+    "playlist_title_pattern": "Video titles pattern",
+    "playlist_title_pattern_help": """Pattern for naming downloaded videos. Supported placeholders:
+• `{idx}` - Smart zero-padded index (01, 02... or 001, 002... based on total)
+• `{i}` or `{i:04d}` - Video index with custom format (1-based)
+• `{title}` - Original video title
+• `{pretty(title)}` - Prettified title (Title Case with spaces, keeps accents)
+• `{slug(title)}` - Slugified title (lowercase-kebab-case, no accents)
+• `{id}` - Video ID
+• `{ext}` - File extension (mkv, mp4...)
+
+Example: `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`""",
 }
 
 # Direct access to translation values (for backward compatibility)

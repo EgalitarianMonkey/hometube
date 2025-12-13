@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Tuple
 
 from app.file_system_utils import sanitize_filename, ensure_dir
 from app.logs_utils import safe_push_log
+from app.text_utils import render_title
 
 
 # === PLAYLIST DETECTION ===
@@ -101,7 +102,14 @@ def get_playlist_entries(url_info: Dict) -> List[Dict]:
         return []
 
     entries = url_info.get("entries", [])
-    return [e for e in entries if e is not None and isinstance(e, dict)]
+    result = []
+    for idx, e in enumerate(entries, 1):  # 1-based index
+        if e is not None and isinstance(e, dict):
+            # Add playlist_index to each entry for pattern rendering
+            entry_with_index = e.copy()
+            entry_with_index["playlist_index"] = idx
+            result.append(entry_with_index)
+    return result
 
 
 def get_playlist_video_count(url_info: Dict) -> int:
@@ -135,19 +143,22 @@ def check_existing_videos_in_destination(
     playlist_entries: List[Dict],
     video_extensions: List[str] = None,
     playlist_workspace: Optional[Path] = None,
+    title_pattern: Optional[str] = None,
 ) -> Tuple[List[Dict], List[Dict], int]:
     """
     Check which playlist videos already exist in destination folder.
 
     Uses multiple strategies:
-    1. Check status.json in playlist workspace (if provided) for "completed" status
-    2. Check filesystem for existing video files by title or video ID
+    1. Check status.json in playlist workspace for "completed" status with resolved_title
+    2. Check filesystem for files matching the title pattern (if provided)
+    3. Check filesystem for existing video files by title or video ID
 
     Args:
         dest_dir: Destination directory to check
         playlist_entries: List of video entries from get_playlist_entries()
         video_extensions: List of video extensions to check (default: [".mkv", ".mp4", ".webm"])
         playlist_workspace: Optional path to playlist workspace to check status.json
+        title_pattern: Optional title pattern for filename matching
 
     Returns:
         Tuple of:
@@ -159,27 +170,28 @@ def check_existing_videos_in_destination(
         video_extensions = [".mkv", ".mp4", ".webm", ".avi", ".mov"]
 
     # First, check status.json if playlist workspace is provided
-    status_completed_videos = set()
+    status_completed_videos = {}  # video_id -> video_data (for resolved_title)
     if playlist_workspace:
         status_data = load_playlist_status(playlist_workspace)
         if status_data:
             videos = status_data.get("videos", {})
             for video_id, video_data in videos.items():
                 if video_data.get("status") == "completed":
-                    status_completed_videos.add(video_id)
+                    status_completed_videos[video_id] = video_data
 
-    # Then check filesystem
-    existing_files = []
+    # Build set of existing filenames in destination
+    existing_files_set = set()
     if dest_dir.exists():
         for ext in video_extensions:
-            existing_files.extend(dest_dir.glob(f"*{ext}"))
+            for f in dest_dir.glob(f"*{ext}"):
+                existing_files_set.add(f.name)
 
-    # Normalize filenames for comparison (lowercase, remove special chars)
+    # Normalize filenames for comparison (legacy method)
     existing_names = set()
     existing_video_ids = set()
-    for f in existing_files:
-        # Store normalized name
-        name_without_ext = f.stem
+    for filename in existing_files_set:
+        # Store normalized name (without extension)
+        name_without_ext = Path(filename).stem
         normalized = _normalize_for_comparison(name_without_ext)
         existing_names.add(normalized)
         # Also check if any video ID is in the filename
@@ -194,29 +206,53 @@ def check_existing_videos_in_destination(
     for entry in playlist_entries:
         video_title = entry.get("title", "")
         video_id = entry.get("id", "")
+        playlist_index = entry.get("playlist_index", 1)
 
         if not video_title and not video_id:
             to_download.append(entry)
             continue
 
         # Check if video exists by priority:
-        # 1. status.json shows "completed" status (most reliable)
-        # 2. Normalized title match in filesystem
-        # 3. Video ID in filename
+        # 1. status.json shows "completed" status with resolved_title in filesystem
+        # 2. Pattern-based filename match in filesystem (if pattern provided)
+        # 3. Normalized title match in filesystem
+        # 4. Video ID in filename
 
         found = False
 
-        # Priority 1: Check status.json
+        # Priority 1: Check status.json with resolved_title
         if video_id and video_id in status_completed_videos:
-            found = True
+            video_data = status_completed_videos[video_id]
+            resolved_title = video_data.get("resolved_title")
+            if resolved_title and resolved_title in existing_files_set:
+                found = True
+            elif resolved_title is None:
+                # Old status without resolved_title, just trust completed status
+                found = True
 
-        # Priority 2: Check normalized title in filesystem
+        # Priority 2: Check pattern-based filename (if pattern provided)
+        if not found and title_pattern:
+            total_entries = len(playlist_entries)
+            for ext in ["mkv", "mp4", "webm", "avi", "mov"]:
+                expected_filename = render_title(
+                    title_pattern,
+                    i=playlist_index,
+                    title=video_title,
+                    video_id=video_id,
+                    ext=ext,
+                    total=total_entries,
+                )
+                if expected_filename in existing_files_set:
+                    found = True
+                    break
+
+        # Priority 3: Check normalized title in filesystem
         if not found and video_title:
             normalized_title = _normalize_for_comparison(video_title)
             if normalized_title in existing_names:
                 found = True
 
-        # Priority 3: Check video ID in existing filenames
+        # Priority 4: Check video ID in existing filenames
         if not found and video_id and video_id in existing_video_ids:
             found = True
 
@@ -464,6 +500,7 @@ def update_video_status_in_playlist(
     video_id: str,
     status: str,
     error: Optional[str] = None,
+    extra_data: Optional[Dict] = None,
 ) -> bool:
     """
     Update the status of a specific video in playlist status.
@@ -473,6 +510,7 @@ def update_video_status_in_playlist(
         video_id: Video ID to update
         status: New status ("pending", "downloading", "completed", "failed", "skipped")
         error: Optional error message (for failed status)
+        extra_data: Optional dict with additional fields to store (e.g., title_pattern, resolved_title)
 
     Returns:
         bool: True if updated successfully
@@ -492,6 +530,11 @@ def update_video_status_in_playlist(
         videos[video_id]["downloaded_at"] = datetime.now(timezone.utc).isoformat()
     if error:
         videos[video_id]["error"] = error
+
+    # Add extra data if provided (for pattern info, resolved title, etc.)
+    if extra_data:
+        for key, value in extra_data.items():
+            videos[video_id][key] = value
 
     return save_playlist_status(playlist_workspace, status_data)
 
@@ -578,6 +621,7 @@ def add_playlist_download_attempt(
     playlist_workspace: Path,
     custom_title: str,
     playlist_location: str,
+    title_pattern: Optional[str] = None,
 ) -> bool:
     """
     Record a download attempt in playlist status.json.
@@ -585,6 +629,7 @@ def add_playlist_download_attempt(
     Each time the user clicks the Download button for a playlist, this function records:
     - custom_title: The playlist name entered by the user
     - playlist_location: The subfolder/category selected
+    - title_pattern: The pattern used for naming videos (optional)
     - date: ISO timestamp of the download attempt
 
     New attempts are added at the beginning of the list (index 0) for easy access.
@@ -593,6 +638,7 @@ def add_playlist_download_attempt(
         playlist_workspace: Path to playlist workspace
         custom_title: User-provided playlist name/title
         playlist_location: Destination subfolder path
+        title_pattern: Pattern used for naming videos (optional)
 
     Returns:
         bool: True if recorded successfully, False otherwise
@@ -610,6 +656,10 @@ def add_playlist_download_attempt(
         "playlist_location": playlist_location,
         "date": datetime.now(timezone.utc).isoformat(),
     }
+
+    # Add title_pattern if provided
+    if title_pattern:
+        attempt_entry["title_pattern"] = title_pattern
 
     # Initialize download_attempts list if it doesn't exist
     if "download_attempts" not in status_data:

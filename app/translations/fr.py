@@ -351,6 +351,17 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
     "playlist_status_failed": "❌ Échec",
     "playlist_status_skipped": "⏭️ Ignoré",
     "playlist_status_exists": "📁 Existe déjà",
+    "playlist_title_pattern": "Pattern des titres vidéo",
+    "playlist_title_pattern_help": """Pattern pour nommer les vidéos téléchargées. Placeholders supportés :
+• `{idx}` - Index avec padding intelligent (01, 02... ou 001, 002... selon le total)
+• `{i}` ou `{i:04d}` - Index de la vidéo avec format personnalisé (commence à 1)
+• `{title}` - Titre original de la vidéo
+• `{pretty(title)}` - Titre formaté (Title Case avec espaces, garde les accents)
+• `{slug(title)}` - Titre slugifié (minuscules-tirets, sans accents)
+• `{id}` - ID de la vidéo
+• `{ext}` - Extension du fichier (mkv, mp4...)
+
+Exemple : `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`""",
 }
 
 # Accès direct aux valeurs de traduction (pour la compatibilité ascendante)
