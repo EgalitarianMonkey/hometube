@@ -44,6 +44,7 @@ try:
         is_url_info_complet,
         sanitize_url,
         build_url_info,
+        video_id_from_url,
     )
     from . import tmp_files
     from .subtitles_utils import (
@@ -137,6 +138,7 @@ except ImportError:
         is_url_info_complet,
         sanitize_url,
         build_url_info,
+        video_id_from_url,
     )
     import tmp_files
     from subtitles_utils import (
@@ -1857,111 +1859,6 @@ def get_tmp_video_dir() -> Optional[Path]:
     return st.session_state.get("tmp_url_workspace")
 
 
-def ensure_workspace_for_url_info(
-    url_info: Optional[Dict], url: str = ""
-) -> Optional[Path]:
-    """
-    Ensure tmp_url_workspace is correctly set based on url_info type (playlist or video).
-
-    This function handles the case where yt-dlp detects a playlist even from a watch?v=...&list=... URL.
-    In such cases, we need to use the playlist workspace instead of the video workspace.
-
-    Args:
-        url_info: URL info dict from yt-dlp (may be None)
-        url: Original URL string (for fallback reconstruction)
-
-    Returns:
-        Path to the correct workspace or None if cannot be determined
-    """
-    if not url_info:
-        return st.session_state.get("tmp_url_workspace")
-
-    is_playlist = is_playlist_info(url_info)
-
-    if is_playlist:
-        playlist_id = url_info.get("id", "")
-        if playlist_id:
-            playlist_workspace = create_playlist_workspace(
-                TMP_DOWNLOAD_FOLDER, playlist_id
-            )
-            st.session_state["tmp_url_workspace"] = playlist_workspace
-            st.session_state["unique_folder_name"] = f"youtube-playlist-{playlist_id}"
-            return playlist_workspace
-        # If no playlist_id, fall through to video logic
-
-    # For videos or if playlist_id is missing, use video workspace
-    # Only update if not already set or if we're switching from playlist to video
-    current_workspace = st.session_state.get("tmp_url_workspace")
-    if not current_workspace and url:
-        clean_url = sanitize_url(url)
-        unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
-        video_workspace = TMP_DOWNLOAD_FOLDER / unique_folder_name
-        st.session_state["tmp_url_workspace"] = video_workspace
-        st.session_state["unique_folder_name"] = unique_folder_name
-        return video_workspace
-
-    return current_workspace
-
-
-def get_playlist_mode_from_url_info(url_info: Optional[Dict]) -> bool:
-    """
-    Determine if we're in playlist mode based on url_info or session state.
-
-    Args:
-        url_info: URL info dict from yt-dlp (may be None)
-
-    Returns:
-        True if playlist mode, False otherwise
-    """
-    if url_info:
-        is_playlist = is_playlist_info(url_info)
-        if is_playlist:
-            st.session_state["is_playlist"] = True
-        return is_playlist
-
-    # Fallback to session state
-    return st.session_state.get("is_playlist", False)
-
-
-def get_default_fields_from_last_attempt(
-    tmp_url_workspace: Optional[Path], is_playlist_mode: bool
-) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Get default filename and folder from last download attempt.
-
-    Args:
-        tmp_url_workspace: Path to workspace directory
-        is_playlist_mode: True if playlist mode, False for single video
-
-    Returns:
-        Tuple of (default_filename, default_folder) or (None, None) if no attempt found
-    """
-    if not tmp_url_workspace:
-        return None, None
-
-    if is_playlist_mode:
-        last_attempt = get_last_playlist_download_attempt(tmp_url_workspace)
-        if last_attempt:
-            # Pre-fill title_pattern if available
-            if "title_pattern" in last_attempt:
-                st.session_state["playlist_title_pattern"] = last_attempt[
-                    "title_pattern"
-                ]
-            return (
-                last_attempt.get("custom_title"),
-                last_attempt.get("playlist_location"),
-            )
-    else:
-        last_attempt = get_last_download_attempt(tmp_url_workspace)
-        if last_attempt:
-            return (
-                last_attempt.get("custom_title"),
-                last_attempt.get("video_location"),
-            )
-
-    return None, None
-
-
 def build_cookies_params() -> List[str]:
     """
     Builds cookie parameters based on user selection.
@@ -2163,14 +2060,46 @@ if url and url.strip():
             url_info = url_analysis(url)
             if url_info:
                 display_url_info(url_info)
-                # Ensure workspace is correctly set for playlist or video
-                ensure_workspace_for_url_info(url_info, url)
+                # IMPORTANT: If yt-dlp detected a playlist (even from a watch?v=...&list=... URL),
+                # we need to update tmp_url_workspace to use the playlist workspace
+                if is_playlist_info(url_info):
+                    playlist_id = url_info.get("id", "")
+                    if playlist_id:
+                        playlist_workspace = create_playlist_workspace(
+                            TMP_DOWNLOAD_FOLDER, playlist_id
+                        )
+                        st.session_state["tmp_url_workspace"] = playlist_workspace
+                        st.session_state["unique_folder_name"] = (
+                            f"youtube-playlist-{playlist_id}"
+                        )
     else:
         # Reuse existing url_info from session state
         url_info = url_info_in_session
         display_url_info(url_info)
-        # Ensure workspace is correctly set (especially important for playlists)
-        ensure_workspace_for_url_info(url_info, url)
+
+        # Ensure tmp_url_workspace is set correctly when reusing URL
+        # For playlists, always use the playlist workspace path
+        clean_url = sanitize_url(url)
+        is_playlist = is_playlist_info(url_info)
+        if is_playlist:
+            playlist_id = url_info.get("id", "")
+            if playlist_id:
+                playlist_workspace = create_playlist_workspace(
+                    TMP_DOWNLOAD_FOLDER, playlist_id
+                )
+                # Always update to ensure we use the correct playlist workspace
+                st.session_state["tmp_url_workspace"] = playlist_workspace
+                st.session_state["unique_folder_name"] = (
+                    f"youtube-playlist-{playlist_id}"
+                )
+        elif "tmp_url_workspace" not in st.session_state or not st.session_state.get(
+            "tmp_url_workspace"
+        ):
+            # Only reconstruct for videos if not already set
+            unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
+            tmp_url_workspace = TMP_DOWNLOAD_FOLDER / unique_folder_name
+            st.session_state["tmp_url_workspace"] = tmp_url_workspace
+            st.session_state["unique_folder_name"] = unique_folder_name
 
         # Compute optimal profiles for videos (not playlists) when reusing URL
         # This ensures the quality selection UI displays correct profiles
@@ -2180,17 +2109,63 @@ if url and url.strip():
             if json_output_path.exists():
                 compute_optimal_profiles(url_info, json_output_path)
 
-# Determine playlist mode and ensure workspace is set
-is_playlist_mode = get_playlist_mode_from_url_info(url_info)
-tmp_url_workspace = ensure_workspace_for_url_info(url_info, url)
+# Try to get last download attempt to pre-fill fields
+default_filename = None  # Use None to distinguish "not set" from "empty string"
+default_folder = None
+last_attempt = None  # Initialize to avoid NameError
 
-# Get default fields from last download attempt to pre-fill UI
-default_filename, default_folder = get_default_fields_from_last_attempt(
-    tmp_url_workspace, is_playlist_mode
-)
+tmp_url_workspace = st.session_state.get("tmp_url_workspace")
+# Check if it's a playlist - prioritize url_info from current analysis
+is_playlist_mode = False
+url_info_check = url_info if url_info else st.session_state.get("url_info", {})
+if url_info_check:
+    is_playlist_mode = is_playlist_info(url_info_check)
+    # Update session state for consistency
+    if is_playlist_mode:
+        st.session_state["is_playlist"] = True
+elif st.session_state.get("is_playlist", False):
+    # Fallback to session state if url_info not available
+    is_playlist_mode = True
+
+# For playlists, ensure we have the correct workspace even if tmp_url_workspace is not set
+if is_playlist_mode and not tmp_url_workspace:
+    # Try to construct workspace from playlist_id or URL
+    playlist_id = st.session_state.get("playlist_id")
+    if playlist_id:
+        tmp_url_workspace = create_playlist_workspace(TMP_DOWNLOAD_FOLDER, playlist_id)
+    elif url and url.strip():
+        # Fallback: construct from URL
+        clean_url = sanitize_url(url)
+        unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
+        tmp_url_workspace = TMP_DOWNLOAD_FOLDER / unique_folder_name
+    # Update session state with the workspace we found/created
+    if tmp_url_workspace:
+        st.session_state["tmp_url_workspace"] = tmp_url_workspace
+
+if tmp_url_workspace:
+    if is_playlist_mode:
+        # For playlists, use playlist-specific function
+        last_attempt = get_last_playlist_download_attempt(tmp_url_workspace)
+        if last_attempt:
+            # Use custom_title even if it's an empty string (user might have cleared it)
+            default_filename = last_attempt.get("custom_title")
+            default_folder = last_attempt.get("playlist_location")
+            # Pre-fill title_pattern if available
+            if "title_pattern" in last_attempt:
+                st.session_state["playlist_title_pattern"] = last_attempt[
+                    "title_pattern"
+                ]
+    else:
+        # For single videos, use regular function
+        last_attempt = get_last_download_attempt(tmp_url_workspace)
+        if last_attempt:
+            default_filename = last_attempt.get("custom_title")
+            default_folder = last_attempt.get("video_location")
 
 # === PLAYLIST PROGRESS DISPLAY ===
 # Show download ratio for playlists
+# Use the is_playlist_mode already determined above (don't re-check)
+# is_playlist_mode is already set from lines 2081-2090
 playlist_already_downloaded = []
 playlist_to_download = []
 
@@ -2203,6 +2178,7 @@ if is_playlist_mode:
     # Use None check to distinguish "not set" from "empty string"
     if default_filename is None:
         default_filename = playlist_title
+    # If default_filename is empty string from last_attempt, keep it (user might have cleared it)
     # Ensure default_filename is a string for st.text_input
     if default_filename is None:
         default_filename = ""
@@ -2256,17 +2232,17 @@ if "folder_selection_reset" in st.session_state:
 if "folder_selectbox_key" not in st.session_state:
     st.session_state.folder_selectbox_key = 0
 
-# Initialize default folder from last attempt
-# Always update prefilled_folder if we have a default_folder from last attempt
-# This ensures consistency when videos are removed and re-downloaded
-if tmp_url_workspace and default_folder is not None:
-    # Check if prefilled_folder needs to be updated
-    current_prefilled = st.session_state.get("prefilled_folder")
-    if current_prefilled != default_folder:
-        # Update prefilled_folder and force selectbox refresh
-        st.session_state.prefilled_folder = default_folder
-        # Increment selectbox key to force UI update
-        st.session_state.folder_selectbox_key += 1
+# Initialize default folder from last attempt (only once per URL)
+if "default_folder_initialized" not in st.session_state:
+    st.session_state.default_folder_initialized = False
+
+if (
+    tmp_url_workspace
+    and default_folder is not None
+    and not st.session_state.default_folder_initialized
+):
+    st.session_state.prefilled_folder = default_folder
+    st.session_state.default_folder_initialized = True
 
 # Reload folder list if a new folder was just created to include it in the options
 existing_subdirs = list_subdirs_recursive(
@@ -2281,12 +2257,10 @@ if "prefilled_folder" in st.session_state:
     try:
         if prefilled in folder_options:
             folder_index = folder_options.index(prefilled)
-            # Keep prefilled_folder in session state for consistency
-            # Only clear it if the user explicitly changes the selection
-            # This ensures the folder stays consistent when re-downloading missing videos
+            # Clear the prefilled value after using it once
+            del st.session_state.prefilled_folder
     except ValueError:
-        # Prefilled folder doesn't exist in options, clear it
-        del st.session_state.prefilled_folder
+        pass
 
 video_subfolder = st.selectbox(
     t("destination_folder"),
@@ -2300,11 +2274,6 @@ video_subfolder = st.selectbox(
     # Dynamic key for reset
     key=f"folder_selectbox_{st.session_state.folder_selectbox_key}",
 )
-
-# Update prefilled_folder when user manually changes the selection
-# This ensures consistency for future downloads
-if video_subfolder and video_subfolder != t("create_new_folder"):
-    st.session_state.prefilled_folder = video_subfolder
 
 # Handle new folder creation
 if video_subfolder == t("create_new_folder"):
@@ -4509,8 +4478,30 @@ if submitted:
             # Get original title for preservation in album field
             original_title = get_video_title(clean_url, cookies_part)
 
-            # Apply custom metadata with user title
-            if not customize_video_metadata(final_source, filename, original_title):
+            # Extract video ID from URL
+            video_id = video_id_from_url(clean_url)
+
+            # Extract source platform from URL
+            from app.medias_utils import get_source_from_url
+
+            source = get_source_from_url(clean_url)
+
+            # Get playlist ID if in playlist mode
+            playlist_id = None
+            if is_playlist_mode:
+                playlist_id = st.session_state.get("playlist_id")
+
+            # Apply custom metadata with all available information
+            if not customize_video_metadata(
+                final_source,
+                filename,
+                original_title,
+                video_id,
+                source=source,
+                playlist_id=playlist_id,
+                webpage_url=clean_url,
+                duration=None,  # Will be read from file
+            ):
                 push_log("⚠️ Metadata customization failed, using original metadata")
             else:
                 # Measure file size after metadata customization

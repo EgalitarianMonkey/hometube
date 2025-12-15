@@ -804,17 +804,97 @@ def get_video_title(url: str, cookies_part: List[str] = None) -> str:
         return "video"
 
 
+def get_video_duration_from_file(video_path: Path) -> Optional[int]:
+    """
+    Get video duration in seconds from file using ffprobe.
+
+    Args:
+        video_path: Path to the video file
+
+    Returns:
+        Duration in seconds (int) or None if unavailable
+    """
+    try:
+        import subprocess
+        import json
+
+        cmd = [
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            str(video_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout)
+        duration_str = data.get("format", {}).get("duration")
+        if duration_str:
+            return int(float(duration_str))
+        return None
+    except Exception:
+        return None
+
+
+def get_source_from_url(url: str) -> str:
+    """
+    Extract platform source from URL (e.g., "youtube", "tiktok", "vimeo").
+
+    Args:
+        url: Video URL
+
+    Returns:
+        Platform name (e.g., "youtube") or "unknown"
+    """
+    if not url:
+        return "unknown"
+
+    url_lower = url.lower()
+    if "youtube.com" in url_lower or "youtu.be" in url_lower:
+        return "youtube"
+    elif (
+        "tiktok.com" in url_lower
+        or "vm.tiktok.com" in url_lower
+        or "vt.tiktok.com" in url_lower
+    ):
+        return "tiktok"
+    elif "vimeo.com" in url_lower:
+        return "vimeo"
+    elif "dailymotion.com" in url_lower:
+        return "dailymotion"
+    elif "instagram.com" in url_lower:
+        return "instagram"
+    elif "facebook.com" in url_lower:
+        return "facebook"
+    elif "twitch.tv" in url_lower:
+        return "twitch"
+    else:
+        return "unknown"
+
+
 def customize_video_metadata(
-    video_path: Path, user_title: str, original_title: str = None
+    video_path: Path,
+    user_title: str,
+    original_title: str = None,
+    video_id: str = None,
+    source: str = None,
+    playlist_id: str = None,
+    webpage_url: str = None,
+    duration: int = None,
 ) -> bool:
     """
-    Customize video metadata using FFmpeg, replacing title with user-provided name
-    and preserving original title in album field
+    Customize video metadata using FFmpeg, adding comprehensive metadata fields.
 
     Args:
         video_path: Path to the video file
         user_title: Title provided by the user (from filename input)
         original_title: Original video title from yt-dlp (optional)
+        video_id: Video ID to embed in metadata (optional)
+        source: Platform source (e.g., "youtube", "tiktok") (optional)
+        playlist_id: Playlist ID if video is from a playlist (optional)
+        webpage_url: Full URL of the video webpage (optional)
+        duration: Video duration in seconds (optional, will be read from file if not provided)
 
     Returns:
         bool: True if successful, False otherwise
@@ -825,6 +905,12 @@ def customize_video_metadata(
         from app.process_utils import run_subprocess_safe
 
         safe_push_log("📝 Customizing video metadata...")
+
+        # Get duration from file if not provided
+        if duration is None:
+            duration = get_video_duration_from_file(video_path)
+            if duration:
+                safe_push_log(f"📊 Video duration detected: {duration}s")
 
         # Create temporary output file
         temp_output = video_path.with_suffix(f".temp{video_path.suffix}")
@@ -845,6 +931,26 @@ def customize_video_metadata(
         if original_title and original_title != user_title:
             cmd_metadata.extend(["-metadata", f"album={original_title}"])
 
+        # Add video ID in comment field (standard metadata field for video IDs)
+        if video_id:
+            cmd_metadata.extend(["-metadata", f"comment={video_id}"])
+
+        # Add source platform
+        if source:
+            cmd_metadata.extend(["-metadata", f"source={source}"])
+
+        # Add playlist ID if available
+        if playlist_id:
+            cmd_metadata.extend(["-metadata", f"playlist_id={playlist_id}"])
+
+        # Add webpage URL
+        if webpage_url:
+            cmd_metadata.extend(["-metadata", f"purl={webpage_url}"])
+
+        # Add duration
+        if duration:
+            cmd_metadata.extend(["-metadata", f"duration={duration}"])
+
         # Add output path
         cmd_metadata.append(str(temp_output))
 
@@ -858,6 +964,19 @@ def customize_video_metadata(
             video_path.unlink()  # Remove original
             temp_output.rename(video_path)  # Rename temp to original
             safe_push_log(f"✅ Metadata customized - Title: {user_title}")
+            metadata_added = []
+            if video_id:
+                metadata_added.append(f"Video ID: {video_id}")
+            if source:
+                metadata_added.append(f"Source: {source}")
+            if playlist_id:
+                metadata_added.append(f"Playlist ID: {playlist_id}")
+            if webpage_url:
+                metadata_added.append(f"URL: {webpage_url}")
+            if duration:
+                metadata_added.append(f"Duration: {duration}s")
+            if metadata_added:
+                safe_push_log(f"✅ Added metadata: {', '.join(metadata_added)}")
             return True
         else:
             error_msg = result.stderr.strip()
