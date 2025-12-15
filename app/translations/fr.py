@@ -362,6 +362,26 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
 • `{ext}` - Extension du fichier (mkv, mp4...)
 
 Exemple : `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`""",
+    # Synchronisation des playlists
+    "playlist_sync_title": "Synchronisation de la Playlist",
+    "playlist_sync_recent": "✅ Playlist synchronisée récemment",
+    "playlist_sync_needed": "⚠️ La playlist doit être synchronisée avant le téléchargement",
+    "playlist_plan_sync": "🔍 Planifier la Sync",
+    "playlist_plan_sync_help": "Prévisualiser les changements sans les appliquer (dry-run)",
+    "playlist_refreshing": "🔄 Récupération des dernières données de la playlist depuis YouTube...",
+    "playlist_refresh_failed": "⚠️ Impossible de récupérer les dernières données. Utilisation de la version en cache.",
+    "playlist_computing_sync": "Calcul du plan de synchronisation...",
+    "playlist_sync_plan": "Plan de Synchronisation",
+    "playlist_sync_details": "Voir les changements détaillés",
+    "playlist_apply_sync": "✅ Appliquer les Changements",
+    "playlist_apply_sync_help": "Appliquer les changements de synchronisation",
+    "playlist_applying_sync": "Application de la synchronisation...",
+    "playlist_sync_success": "✅ Synchronisation terminée avec succès !",
+    "playlist_sync_failed": "❌ La synchronisation a échoué. Consultez les logs pour plus de détails.",
+    "playlist_sync_no_changes": "✅ La playlist est déjà synchronisée. Aucun changement nécessaire.",
+    "playlist_sync_required": "⚠️ Veuillez d'abord synchroniser la playlist (la sync doit dater de moins de 2 heures)",
+    "playlist_keep_old_videos": "Garder les vidéos supprimées de la playlist",
+    "playlist_keep_old_videos_help": "Archiver les vidéos supprimées au lieu de les supprimer",
 }
 
 # Accès direct aux valeurs de traduction (pour la compatibilité ascendante)

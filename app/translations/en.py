@@ -364,6 +364,26 @@ Update your file cookies or try using **browser cookies** instead of file cookie
 • `{ext}` - File extension (mkv, mp4...)
 
 Example: `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`""",
+    # Playlist Synchronization
+    "playlist_sync_title": "Playlist Synchronization",
+    "playlist_sync_recent": "✅ Playlist synchronized recently",
+    "playlist_sync_needed": "⚠️ Playlist needs synchronization before downloading",
+    "playlist_plan_sync": "🔍 Plan Playlist Sync",
+    "playlist_plan_sync_help": "Preview changes without applying them (dry-run)",
+    "playlist_refreshing": "🔄 Fetching latest playlist data from YouTube...",
+    "playlist_refresh_failed": "⚠️ Could not fetch latest playlist data. Using cached version.",
+    "playlist_computing_sync": "Computing synchronization plan...",
+    "playlist_sync_plan": "Synchronization Plan",
+    "playlist_sync_details": "View detailed changes",
+    "playlist_apply_sync": "✅ Apply Playlist Changes",
+    "playlist_apply_sync_help": "Apply the synchronization changes",
+    "playlist_applying_sync": "Applying synchronization...",
+    "playlist_sync_success": "✅ Synchronization completed successfully!",
+    "playlist_sync_failed": "❌ Synchronization failed. Check logs for details.",
+    "playlist_sync_no_changes": "✅ Playlist is already synchronized. No changes needed.",
+    "playlist_sync_required": "⚠️ Please synchronize the playlist first (sync must be less than 2 hours old)",
+    "playlist_keep_old_videos": "Keep videos removed from playlist",
+    "playlist_keep_old_videos_help": "Archive removed videos instead of deleting them",
 }
 
 # Direct access to translation values (for backward compatibility)
