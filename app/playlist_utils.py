@@ -433,7 +433,10 @@ def create_playlist_status(
         "type": "playlist",
         "total_videos": len(entries),
         "videos": videos_status,
-        "download_attempts": [],  # Track download attempts for pre-filling UI
+        # User preferences (updated on each download)
+        "custom_title": None,  # User-provided folder name
+        "playlist_location": None,  # Destination subfolder
+        "title_pattern": None,  # Pattern for video filenames
         "created_at": datetime.now(timezone.utc).isoformat(),
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
@@ -624,19 +627,18 @@ def add_playlist_download_attempt(
     title_pattern: Optional[str] = None,
 ) -> bool:
     """
-    Record a download attempt in playlist status.json.
+    Update playlist preferences in status.json.
 
-    Each time the user clicks the Download button for a playlist, this function records:
-    - custom_title: The playlist name entered by the user
+    Updates the root-level fields with the user's current choices:
+    - custom_title: The playlist folder name entered by the user
     - playlist_location: The subfolder/category selected
-    - title_pattern: The pattern used for naming videos (optional)
-    - date: ISO timestamp of the download attempt
+    - title_pattern: The pattern used for naming videos
 
-    New attempts are added at the beginning of the list (index 0) for easy access.
+    These values are overwritten each time (only the latest matters).
 
     Args:
         playlist_workspace: Path to playlist workspace
-        custom_title: User-provided playlist name/title
+        custom_title: User-provided playlist folder name
         playlist_location: Destination subfolder path
         title_pattern: Pattern used for naming videos (optional)
 
@@ -650,26 +652,14 @@ def add_playlist_download_attempt(
         )
         return False
 
-    # Create attempt entry
-    attempt_entry = {
-        "custom_title": custom_title,
-        "playlist_location": playlist_location,
-        "date": datetime.now(timezone.utc).isoformat(),
-    }
-
-    # Add title_pattern if provided
+    # Update root-level preferences (overwrite previous values)
+    status_data["custom_title"] = custom_title
+    status_data["playlist_location"] = playlist_location
     if title_pattern:
-        attempt_entry["title_pattern"] = title_pattern
-
-    # Initialize download_attempts list if it doesn't exist
-    if "download_attempts" not in status_data:
-        status_data["download_attempts"] = []
-
-    # Insert at the beginning (position 0) so most recent is first
-    status_data["download_attempts"].insert(0, attempt_entry)
+        status_data["title_pattern"] = title_pattern
 
     safe_push_log(
-        f"📊 Recorded playlist download attempt: title='{custom_title}', "
+        f"📊 Updated playlist preferences: folder='{custom_title}', "
         f"location='{playlist_location}'"
     )
 
@@ -678,15 +668,15 @@ def add_playlist_download_attempt(
 
 def get_last_playlist_download_attempt(playlist_workspace: Path) -> Optional[Dict]:
     """
-    Get the most recent download attempt from playlist status.json.
+    Get the current playlist preferences from status.json.
 
-    Returns the first entry in download_attempts list (newest first).
+    Returns the root-level custom_title, playlist_location, and title_pattern.
 
     Args:
         playlist_workspace: Path to playlist workspace
 
     Returns:
-        Dict with keys 'custom_title', 'playlist_location', 'date' or None if no attempts
+        Dict with keys 'custom_title', 'playlist_location', 'title_pattern' or None if not set
     """
     if not playlist_workspace or not playlist_workspace.exists():
         return None
@@ -695,12 +685,17 @@ def get_last_playlist_download_attempt(playlist_workspace: Path) -> Optional[Dic
     if not status_data:
         return None
 
-    attempts = status_data.get("download_attempts", [])
-    if not attempts:
+    # Check if preferences have been set (custom_title is the key indicator)
+    custom_title = status_data.get("custom_title")
+    if not custom_title:
         return None
 
-    # Return the first entry (most recent)
-    return attempts[0]
+    # Return preferences from root level
+    return {
+        "custom_title": custom_title,
+        "playlist_location": status_data.get("playlist_location", "/"),
+        "title_pattern": status_data.get("title_pattern"),
+    }
 
 
 # === FINAL COPY TO DESTINATION ===

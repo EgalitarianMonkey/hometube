@@ -103,26 +103,29 @@ def get_video_metadata_from_file(video_path: Path) -> Optional[Dict]:
 
         format_data = data.get("format", {})
         tags = format_data.get("tags", {})
-        
+
         # Try to get video_id - it might be stored as just the ID or as a full URL
         # Check both lowercase and uppercase tag names (MKV uses uppercase)
         comment = tags.get("comment", "") or tags.get("COMMENT", "")
-        
+
         # Extract video_id from URL if necessary
         video_id = ""
         if comment:
             # Check if it's a YouTube URL and extract video_id
             if "youtube.com/watch?v=" in comment:
                 # Extract video_id from URL like https://www.youtube.com/watch?v=IJT23BvjWMM
-                match = re.search(r'[?&]v=([a-zA-Z0-9_-]{11})', comment)
+                match = re.search(r"[?&]v=([a-zA-Z0-9_-]{11})", comment)
                 if match:
                     video_id = match.group(1)
             elif "youtu.be/" in comment:
                 # Extract from short URL like https://youtu.be/IJT23BvjWMM
-                match = re.search(r'youtu\.be/([a-zA-Z0-9_-]{11})', comment)
+                match = re.search(r"youtu\.be/([a-zA-Z0-9_-]{11})", comment)
                 if match:
                     video_id = match.group(1)
-            elif len(comment) == 11 and comment.replace("-", "").replace("_", "").isalnum():
+            elif (
+                len(comment) == 11
+                and comment.replace("-", "").replace("_", "").isalnum()
+            ):
                 # It's already a video_id (11 chars, alphanumeric with - and _)
                 video_id = comment
             else:
@@ -349,19 +352,16 @@ def sync_playlist(
     # This is where videos were previously downloaded, not the new destination
     existing_dest_dir = None
     if status_data:
-        download_attempts = status_data.get("download_attempts", [])
-        if download_attempts:
-            last_attempt = download_attempts[0]
-            old_location = last_attempt.get("playlist_location", "/")
-            # Use custom_title from the download attempt, NOT the playlist title
-            # The folder name is based on what the user chose, not the original playlist title
-            old_folder_name = last_attempt.get("custom_title", "") or status_data.get("title", playlist_title)
+        # Read preferences from root level (simplified structure)
+        old_location = status_data.get("playlist_location", "/")
+        old_folder_name = status_data.get("custom_title") or status_data.get(
+            "title", playlist_title
+        )
 
+        if old_folder_name:
             videos_folder = settings.VIDEOS_FOLDER
-            if old_location == "/" or old_location == "":
-                existing_dest_dir = videos_folder / sanitize_filename(
-                    old_folder_name
-                )
+            if old_location == "/" or old_location == "" or old_location is None:
+                existing_dest_dir = videos_folder / sanitize_filename(old_folder_name)
             else:
                 existing_dest_dir = (
                     videos_folder / old_location / sanitize_filename(old_folder_name)
@@ -380,25 +380,22 @@ def sync_playlist(
         playlist_title=playlist_title,
     )
 
-    # Get last download attempt for location/pattern comparison
+    # Get preferences for location/pattern comparison
     if status_data:
-        download_attempts = status_data.get("download_attempts", [])
-        if download_attempts:
-            last_attempt = download_attempts[0]
-            old_location = last_attempt.get("playlist_location", "")
-            old_pattern = last_attempt.get("title_pattern", "")
+        old_location = status_data.get("playlist_location", "")
+        old_pattern = status_data.get("title_pattern", "")
 
-            # Check for location change
-            if old_location and old_location != new_location:
-                plan.location_changed = True
-                plan.old_location = old_location
-                plan.new_location = new_location
+        # Check for location change
+        if old_location and old_location != new_location:
+            plan.location_changed = True
+            plan.old_location = old_location
+            plan.new_location = new_location
 
-            # Check for pattern change
-            if old_pattern and old_pattern != new_pattern:
-                plan.pattern_changed = True
-                plan.old_pattern = old_pattern
-                plan.new_pattern = new_pattern
+        # Check for pattern change
+        if old_pattern and old_pattern != new_pattern:
+            plan.pattern_changed = True
+            plan.old_pattern = old_pattern
+            plan.new_pattern = new_pattern
 
     # Get entries from new playlist
     new_entries = get_playlist_entries(new_url_info)
@@ -414,16 +411,18 @@ def sync_playlist(
     # Get existing videos from status.json
     existing_videos = status_data.get("videos", {}) if status_data else {}
     existing_video_ids = set(existing_videos.keys())
-    
+
     safe_push_log(f"📋 Status.json has {len(existing_videos)} videos tracked")
     safe_push_log(f"📥 New playlist has {len(new_video_ids)} videos")
 
     # Scan destination folder for actual files (use existing location)
     dest_videos_by_id = scan_destination_videos(scan_dest_dir)
-    
+
     safe_push_log(f"📊 Found {len(dest_videos_by_id)} videos in {scan_dest_dir}")
     if dest_videos_by_id:
-        safe_push_log(f"   Video IDs: {list(dest_videos_by_id.keys())[:5]}...")  # Show first 5
+        safe_push_log(
+            f"   Video IDs: {list(dest_videos_by_id.keys())[:5]}..."
+        )  # Show first 5
 
     # === PHASE 1: Handle videos no longer in playlist ===
     removed_video_ids = existing_video_ids - new_video_ids
@@ -476,7 +475,7 @@ def sync_playlist(
         video_data = existing_videos.get(video_id, {})
         old_status = video_data.get("status", "pending")
         title = video_data.get("title", video_id)
-        
+
         safe_push_log(f"🔍 Processing {video_id[:11]}... | Status: {old_status}")
 
         # Get new index from playlist
@@ -485,7 +484,7 @@ def sync_playlist(
 
         # Check if file actually exists (ALWAYS check, regardless of status)
         file_metadata = dest_videos_by_id.get(video_id)
-        
+
         safe_push_log(f"   File metadata found: {'Yes' if file_metadata else 'No'}")
 
         # Also check by resolved_title if metadata scan didn't find the video
@@ -642,12 +641,10 @@ def sync_playlist(
         # All videos with existing files need to be relocated
         # This includes both already_synced and to_rename videos
         videos_to_relocate_set = set()
-        
+
         # Collect all videos that have physical files and need relocation
-        all_actions_with_files = (
-            plan.videos_already_synced + plan.videos_to_rename
-        )
-        
+        all_actions_with_files = plan.videos_already_synced + plan.videos_to_rename
+
         for action in all_actions_with_files:
             if action.old_path and action.video_id not in videos_to_relocate_set:
                 relocate_action = SyncAction(
@@ -662,11 +659,12 @@ def sync_playlist(
                 )
                 plan.videos_to_relocate.append(relocate_action)
                 videos_to_relocate_set.add(action.video_id)
-        
+
         # Remove relocated videos from to_download list
         # (They should not be re-downloaded, just moved)
         plan.videos_to_download = [
-            action for action in plan.videos_to_download
+            action
+            for action in plan.videos_to_download
             if action.video_id not in videos_to_relocate_set
         ]
 
@@ -800,15 +798,17 @@ def apply_sync_plan(
 
     # === Apply rename actions ===
     # Skip rename actions for videos that will be relocated (relocation handles renaming)
-    videos_being_relocated = {
-        action.video_id for action in plan.videos_to_relocate
-    } if plan.location_changed else set()
-    
+    videos_being_relocated = (
+        {action.video_id for action in plan.videos_to_relocate}
+        if plan.location_changed
+        else set()
+    )
+
     for action in plan.videos_to_rename:
         # Skip if this video will be relocated (relocation handles both move and rename)
         if action.video_id in videos_being_relocated:
             continue
-            
+
         if action.old_path and action.old_path.exists() and action.new_path:
             try:
                 # Handle case where target exists
@@ -860,15 +860,17 @@ def apply_sync_plan(
                     else:
                         # Fallback to old name if we can't compute new name
                         new_filename = action.old_path.name
-                    
+
                     new_path = playlist_dest / new_filename
-                    
+
                     # Handle case where target exists
                     if new_path.exists() and new_path != action.old_path:
-                        safe_push_log(f"⚠️ Target exists during relocation, backup: {new_path.name}")
+                        safe_push_log(
+                            f"⚠️ Target exists during relocation, backup: {new_path.name}"
+                        )
                         backup_path = new_path.with_suffix(f".backup{new_path.suffix}")
                         new_path.rename(backup_path)
-                    
+
                     shutil.move(str(action.old_path), str(new_path))
                     safe_push_log(
                         f"📁 Relocated: {action.old_path.name} → {new_location}/{new_filename}"
@@ -876,7 +878,7 @@ def apply_sync_plan(
                 except Exception as e:
                     safe_push_log(f"❌ Failed to relocate {action.old_path.name}: {e}")
                     success = False
-        
+
         # Clean up old directory if it's now empty
         # Get the old directory from the first relocated video
         if plan.videos_to_relocate:
@@ -884,8 +886,9 @@ def apply_sync_plan(
             try:
                 # Check if directory is empty (no files or subdirectories except possibly .DS_Store)
                 remaining_files = [
-                    f for f in old_dir.iterdir() 
-                    if f.name not in ['.DS_Store', 'Thumbs.db']
+                    f
+                    for f in old_dir.iterdir()
+                    if f.name not in [".DS_Store", "Thumbs.db"]
                 ]
                 if not remaining_files:
                     old_dir.rmdir()
@@ -954,15 +957,14 @@ def apply_sync_plan(
         for action in plan.videos_already_synced:
             if action.video_id in videos:
                 videos[action.video_id]["status"] = "completed"
-        
+
         # Mark relocated videos as completed with updated resolved_title
         for action in plan.videos_to_relocate:
             if action.video_id in videos:
                 videos[action.video_id]["status"] = "completed"
                 # Calculate the new filename (same logic as in apply)
                 entry = next(
-                    (e for e in new_entries if e.get("id") == action.video_id),
-                    None
+                    (e for e in new_entries if e.get("id") == action.video_id), None
                 )
                 if entry and action.new_index is not None and action.old_path:
                     new_filename = render_title(

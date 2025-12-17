@@ -1690,7 +1690,7 @@ def url_analysis(url: str) -> Optional[Dict]:
 
         # Reset folder initialization flag for new URL
         st.session_state["default_folder_initialized"] = False
-        # Reset selected destination folder when URL changes (allows re-initialization from download_attempts)
+        # Reset selected destination folder when URL changes (allows re-initialization from status preferences)
         if "selected_destination_folder" in st.session_state:
             del st.session_state["selected_destination_folder"]
         # Reset sync plan when URL changes
@@ -2289,7 +2289,7 @@ existing_subdirs = list_subdirs_recursive(
 folder_options = ["/"] + existing_subdirs + [t("create_new_folder")]
 
 # Determine default folder index
-# Priority: 1. Previously selected folder (persisted), 2. Prefilled from download_attempts, 3. Root folder
+# Priority: 1. Previously selected folder (persisted), 2. Prefilled from status preferences, 3. Root folder
 folder_index = 0  # Default to root
 
 # Check if we have a previously selected folder for this URL
@@ -2300,7 +2300,7 @@ if selected_folder_key in st.session_state:
     if selected_folder in folder_options:
         folder_index = folder_options.index(selected_folder)
 elif "prefilled_folder" in st.session_state:
-    # Use the prefilled folder from download_attempts (first time initialization)
+    # Use the prefilled folder from status preferences (first time initialization)
     prefilled = st.session_state.prefilled_folder
     if prefilled in folder_options:
         folder_index = folder_options.index(prefilled)
@@ -2489,8 +2489,8 @@ if (
                 st.info(t("playlist_to_download", count=len(playlist_to_download)))
 
             # === PLAYLIST SYNCHRONIZATION SECTION ===
-            # Check if this playlist has been downloaded before (status.json with download_attempts)
-            # Only show sync options if there are actual previous download attempts
+            # Check if this playlist has been downloaded before (status.json with custom_title set)
+            # Only show sync options if there are actual previous download preferences
             playlist_id_for_sync = st.session_state.get("playlist_id", "")
             playlist_workspace_for_sync = None
             existing_status_for_sync = None
@@ -2503,15 +2503,12 @@ if (
                 existing_status_for_sync = load_playlist_status(
                     playlist_workspace_for_sync
                 )
-                # Only consider it as "existing" if there are actual download attempts
+                # Only consider it as "existing" if custom_title has been set
                 if existing_status_for_sync:
-                    download_attempts = existing_status_for_sync.get(
-                        "download_attempts", []
-                    )
-                    has_previous_downloads = len(download_attempts) > 0
+                    has_previous_downloads = existing_status_for_sync.get("custom_title") is not None
 
             # If we have an existing status WITH previous downloads, show synchronization options
-            # For new playlists (no download_attempts), skip this section entirely
+            # For new playlists (no custom_title), skip this section entirely
             if existing_status_for_sync and has_previous_downloads:
                 st.markdown("---")
                 st.markdown(
