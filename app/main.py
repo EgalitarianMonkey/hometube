@@ -1704,14 +1704,53 @@ def url_analysis(url: str) -> Optional[Dict]:
         url_info_is_complet, existing_info = is_url_info_complet(json_output_path)
 
         if url_info_is_complet and existing_info:
-            # Store in session state and return immediately (no download needed)
-            st.session_state["url_info"] = existing_info
-            st.session_state["url_info_path"] = str(json_output_path)
+            # Check if this is an existing playlist that needs fresh data
+            # (playlist with previous downloads should always get fresh url_info)
+            should_refresh_playlist = False
 
-            # Compute optimal profiles for videos (not playlists) - SINGLE SOURCE OF TRUTH
-            compute_optimal_profiles(existing_info, json_output_path)
+            if is_playlist_info(existing_info):
+                playlist_id = existing_info.get("id", "")
+                if playlist_id:
+                    # Check if this playlist has been downloaded before (custom_title set)
+                    playlist_workspace = create_playlist_workspace(
+                        TMP_DOWNLOAD_FOLDER, playlist_id
+                    )
+                    existing_status = load_playlist_status(playlist_workspace)
+                    if existing_status and existing_status.get("custom_title") is not None:
+                        # This is an existing playlist - always refresh to get latest state
+                        should_refresh_playlist = True
+                        safe_push_log(
+                            f"🔄 Existing playlist detected - refreshing url_info.json"
+                        )
 
-            return existing_info
+            if should_refresh_playlist:
+                # Refresh playlist data from YouTube
+                fresh_info = refresh_playlist_url_info(
+                    playlist_workspace=tmp_url_workspace,
+                    playlist_url=clean_url,
+                )
+                if fresh_info:
+                    st.session_state["url_info"] = fresh_info
+                    st.session_state["url_info_path"] = str(json_output_path)
+                    # No need to compute optimal profiles for playlists
+                    return fresh_info
+                else:
+                    # Fallback to cached data if refresh fails
+                    safe_push_log(
+                        "⚠️ Could not refresh playlist data, using cached version"
+                    )
+                    st.session_state["url_info"] = existing_info
+                    st.session_state["url_info_path"] = str(json_output_path)
+                    return existing_info
+            else:
+                # Store in session state and return immediately (no download needed)
+                st.session_state["url_info"] = existing_info
+                st.session_state["url_info_path"] = str(json_output_path)
+
+                # Compute optimal profiles for videos (not playlists) - SINGLE SOURCE OF TRUTH
+                compute_optimal_profiles(existing_info, json_output_path)
+
+                return existing_info
         else:
             # Initialize workspace and fetch video info
             info = init_url_workspace(clean_url, json_output_path, tmp_url_workspace)
@@ -2464,37 +2503,18 @@ if (
             )
             st.session_state["playlist_to_download"] = playlist_to_download
 
-            # Display progress
-            ratio = get_download_ratio(
-                playlist_already_downloaded, playlist_to_download
-            )
+            # Calculate progress metrics
             progress_percent = get_download_progress_percent(
                 playlist_already_downloaded, playlist_to_download
             )
 
-            if len(playlist_to_download) == 0:
-                st.success(t("playlist_all_downloaded"))
-            else:
-                # Show progress bar
-                st.progress(
-                    progress_percent / 100.0,
-                    text=t(
-                        "playlist_ratio",
-                        downloaded=len(playlist_already_downloaded),
-                        total=total,
-                    ),
-                )
-
-                # Show count of videos to download
-                st.info(t("playlist_to_download", count=len(playlist_to_download)))
-
-            # === PLAYLIST SYNCHRONIZATION SECTION ===
+            # === PLAYLIST SYNCHRONIZATION (AUTOMATIC FOR EXISTING PLAYLISTS) ===
             # Check if this playlist has been downloaded before (status.json with custom_title set)
-            # Only show sync options if there are actual previous download preferences
             playlist_id_for_sync = st.session_state.get("playlist_id", "")
             playlist_workspace_for_sync = None
             existing_status_for_sync = None
             has_previous_downloads = False
+            sync_plan = None
 
             if playlist_id_for_sync:
                 playlist_workspace_for_sync = create_playlist_workspace(
@@ -2509,249 +2529,166 @@ if (
                         existing_status_for_sync.get("custom_title") is not None
                     )
 
-            # If we have an existing status WITH previous downloads, show synchronization options
-            # For new playlists (no custom_title), skip this section entirely
+            # For existing playlists, calculate sync plan automatically
             if existing_status_for_sync and has_previous_downloads:
-                st.markdown("---")
-                st.markdown(
-                    f"#### 🔄 {t('playlist_sync_title', fallback='Playlist Synchronization')}"
+                # Get saved preferences from status.json
+                saved_location = existing_status_for_sync.get("playlist_location", "/")
+                saved_pattern = existing_status_for_sync.get(
+                    "title_pattern",
+                    settings.PLAYLIST_VIDEOS_TITLES_PATTERN or DEFAULT_PLAYLIST_TITLE_PATTERN
                 )
 
-                # Check if sync is recent
-                sync_is_recent_flag = is_sync_recent(
-                    playlist_workspace_for_sync, max_hours=2.0
+                # Get current UI values
+                current_location = "/"
+                if (
+                    video_subfolder
+                    and video_subfolder != "/"
+                    and video_subfolder != t("create_new_folder")
+                ):
+                    current_location = video_subfolder
+
+                current_pattern = st.session_state.get(
+                    "playlist_title_pattern",
+                    settings.PLAYLIST_VIDEOS_TITLES_PATTERN or DEFAULT_PLAYLIST_TITLE_PATTERN
                 )
 
-                if sync_is_recent_flag:
-                    last_sync = existing_status_for_sync.get(
-                        "playlist_synchronisation", ""
+                # Compute sync plan automatically
+                new_url_info = st.session_state.get("url_info", {})
+                keep_old_videos_val = settings.PLAYLIST_KEEP_OLD_VIDEOS
+
+                sync_plan = sync_playlist(
+                    playlist_workspace=playlist_workspace_for_sync,
+                    dest_dir=playlist_dest_dir,
+                    new_url_info=new_url_info,
+                    new_location=current_location,
+                    new_pattern=current_pattern,
+                    dry_run=True,
+                    keep_old_videos=keep_old_videos_val,
+                )
+
+                # Store sync plan in session state
+                st.session_state["playlist_sync_plan"] = sync_plan
+                st.session_state["playlist_sync_dest"] = playlist_dest_dir
+                st.session_state["playlist_sync_location"] = current_location
+                st.session_state["playlist_sync_pattern"] = current_pattern
+                st.session_state["playlist_workspace_for_sync"] = playlist_workspace_for_sync
+
+            # === DISPLAY STATUS AND CHANGES ===
+            if sync_plan and sync_plan.has_changes:
+                # Show what changes are pending
+                changes_lines = []
+                
+                if sync_plan.videos_to_rename:
+                    changes_lines.append(
+                        t("playlist_changes_rename", count=len(sync_plan.videos_to_rename))
                     )
-                    if last_sync:
-                        st.success(
-                            t(
-                                "playlist_sync_recent",
-                                fallback=f"✅ Playlist synchronized recently ({last_sync[:16]})",
-                            )
-                        )
-                else:
-                    st.warning(
-                        t(
-                            "playlist_sync_needed",
-                            fallback="⚠️ Playlist needs synchronization before downloading",
-                        )
+                if sync_plan.videos_to_download:
+                    changes_lines.append(
+                        t("playlist_changes_download", count=len(sync_plan.videos_to_download))
+                    )
+                if sync_plan.videos_to_relocate:
+                    changes_lines.append(
+                        t("playlist_changes_relocate", count=len(sync_plan.videos_to_relocate))
+                    )
+                if sync_plan.videos_to_archive:
+                    changes_lines.append(
+                        t("playlist_changes_archive", count=len(sync_plan.videos_to_archive))
+                    )
+                if sync_plan.videos_to_delete:
+                    changes_lines.append(
+                        t("playlist_changes_delete", count=len(sync_plan.videos_to_delete))
                     )
 
-                # Option to keep old videos
+                # Show progress bar
+                st.progress(
+                    progress_percent / 100.0,
+                    text=t(
+                        "playlist_ratio",
+                        downloaded=len(playlist_already_downloaded),
+                        total=total,
+                    ),
+                )
+
+                # Show changes summary
+                st.warning(
+                    t("playlist_changes_summary") + "\n\n" + "\n\n".join(changes_lines)
+                )
+
+                # Show details in expander
+                with st.expander(
+                    t("playlist_sync_details", fallback="View detailed changes")
+                ):
+                    st.markdown(format_sync_plan_details(sync_plan))
+
+                # Keep old videos option
                 keep_old_videos_checkbox = st.checkbox(
                     t("playlist_keep_old_videos"),
                     value=settings.PLAYLIST_KEEP_OLD_VIDEOS,
                     help=t("playlist_keep_old_videos_help"),
                     key="playlist_keep_old_videos_checkbox",
                 )
-                # Store in session for sync functions to use
                 st.session_state["playlist_keep_old_videos"] = keep_old_videos_checkbox
 
-                # Sync plan button
-                col_sync1, col_sync2 = st.columns(2)
+                # Apply button
+                apply_changes_clicked = st.button(
+                    t("playlist_apply_changes", fallback="✅ Apply Changes"),
+                    help=t(
+                        "playlist_apply_changes_help",
+                        fallback="Apply all pending synchronization changes",
+                    ),
+                    type="primary",
+                    key="apply_sync_btn",
+                )
 
-                with col_sync1:
-                    plan_sync_clicked = st.button(
-                        t("playlist_plan_sync", fallback="🔍 Plan Playlist Sync"),
-                        help=t(
-                            "playlist_plan_sync_help",
-                            fallback="Preview changes without applying them (dry-run)",
-                        ),
-                        key="plan_sync_btn",
-                    )
-
-                # Store sync plan in session state
-                if "playlist_sync_plan" not in st.session_state:
-                    st.session_state["playlist_sync_plan"] = None
-
-                # Check if we have a pending sync plan to compute (after refresh rerun)
-                pending_sync = st.session_state.pop("_pending_sync_plan", False)
-
-                if plan_sync_clicked:
-                    # Step 1: Refresh url_info.json from YouTube to get latest playlist state
+                if apply_changes_clicked:
                     with st.spinner(
                         t(
-                            "playlist_refreshing",
-                            fallback="🔄 Fetching latest playlist data from YouTube...",
+                            "playlist_applying_sync",
+                            fallback="Applying synchronization...",
                         )
                     ):
-                        # This archives the old url_info.json and fetches fresh data
-                        playlist_url = st.session_state.get("url", "") or url
-                        fresh_url_info = refresh_playlist_url_info(
+                        success = apply_sync_plan(
+                            plan=sync_plan,
                             playlist_workspace=playlist_workspace_for_sync,
-                            playlist_url=playlist_url,
-                        )
-
-                        if fresh_url_info:
-                            # Update session state with fresh data
-                            st.session_state["url_info"] = fresh_url_info
-                            # Update playlist entries
-                            from app.playlist_utils import get_playlist_entries
-
-                            fresh_entries = get_playlist_entries(fresh_url_info)
-                            st.session_state["playlist_entries"] = fresh_entries
-                            st.session_state["playlist_total_count"] = len(
-                                fresh_entries
-                            )
-                            # Mark that we need to compute sync plan after rerun
-                            st.session_state["_pending_sync_plan"] = True
-                            st.rerun()
-                        else:
-                            # Fallback: continue with existing data
-                            st.warning(
-                                t(
-                                    "playlist_refresh_failed",
-                                    fallback="⚠️ Could not fetch latest playlist data. Using cached version.",
-                                )
-                            )
-                            # Compute sync plan with existing data
-                            pending_sync = True
-
-                # Compute sync plan if pending (after refresh rerun or fallback)
-                if pending_sync:
-                    with st.spinner(
-                        t(
-                            "playlist_computing_sync",
-                            fallback="Computing synchronization plan...",
-                        )
-                    ):
-                        # Use the current video_subfolder value (now correctly persisted)
-                        current_location = "/"
-                        if (
-                            video_subfolder
-                            and video_subfolder != "/"
-                            and video_subfolder != t("create_new_folder")
-                        ):
-                            current_location = video_subfolder
-
-                        # Get pattern from UI or use default
-                        current_pattern = st.session_state.get(
-                            "playlist_title_pattern",
-                            settings.PLAYLIST_VIDEOS_TITLES_PATTERN
-                            or DEFAULT_PLAYLIST_TITLE_PATTERN,
-                        )
-
-                        # Use playlist_dest_dir which is already correctly computed
-                        dest_for_sync = playlist_dest_dir
-
-                        # Use the fresh url_info from session state
-                        new_url_info = st.session_state.get("url_info", {})
-
-                        # Generate sync plan (dry-run)
-                        keep_old_videos_val = st.session_state.get(
-                            "playlist_keep_old_videos",
-                            settings.PLAYLIST_KEEP_OLD_VIDEOS,
-                        )
-
-                        sync_plan_result = sync_playlist(
-                            playlist_workspace=playlist_workspace_for_sync,
-                            dest_dir=dest_for_sync,
-                            new_url_info=new_url_info,
+                            dest_dir=playlist_dest_dir,
                             new_location=current_location,
                             new_pattern=current_pattern,
-                            dry_run=True,
-                            keep_old_videos=keep_old_videos_val,
+                            new_url_info=new_url_info,
                         )
 
-                        st.session_state["playlist_sync_plan"] = sync_plan_result
-                        st.session_state["playlist_sync_dest"] = dest_for_sync
-                        st.session_state["playlist_sync_location"] = current_location
-                        st.session_state["playlist_sync_pattern"] = current_pattern
-                        st.session_state["playlist_workspace_for_sync"] = (
-                            playlist_workspace_for_sync
-                        )
-
-                # Display sync plan if computed
-                sync_plan_display = st.session_state.get("playlist_sync_plan")
-                if sync_plan_display:
-                    st.markdown("---")
-                    st.markdown(
-                        f"##### 📋 {t('playlist_sync_plan', fallback='Synchronization Plan')}"
-                    )
-
-                    # Show summary
-                    st.code(format_sync_plan_summary(sync_plan_display), language=None)
-
-                    # Show details in expander
-                    with st.expander(
-                        t("playlist_sync_details", fallback="View detailed changes")
-                    ):
-                        st.markdown(format_sync_plan_details(sync_plan_display))
-
-                    # Apply button (only if there are changes)
-                    if sync_plan_display.has_changes:
-                        with col_sync2:
-                            apply_sync_clicked = st.button(
+                        if success:
+                            st.success(
                                 t(
-                                    "playlist_apply_sync",
-                                    fallback="✅ Apply Playlist Changes",
-                                ),
-                                help=t(
-                                    "playlist_apply_sync_help",
-                                    fallback="Apply the synchronization changes",
-                                ),
-                                type="primary",
-                                key="apply_sync_btn",
+                                    "playlist_sync_success",
+                                    fallback="✅ Synchronization completed successfully!",
+                                )
                             )
-
-                        if apply_sync_clicked:
-                            with st.spinner(
+                            # Clear sync plan and reload
+                            st.session_state["playlist_sync_plan"] = None
+                            st.rerun()
+                        else:
+                            st.error(
                                 t(
-                                    "playlist_applying_sync",
-                                    fallback="Applying synchronization...",
+                                    "playlist_sync_failed",
+                                    fallback="❌ Synchronization failed. Check logs for details.",
                                 )
-                            ):
-                                new_url_info = st.session_state.get("url_info", {})
-                                dest_for_sync = st.session_state.get(
-                                    "playlist_sync_dest"
-                                )
-                                current_location = st.session_state.get(
-                                    "playlist_sync_location"
-                                )
-                                current_pattern = st.session_state.get(
-                                    "playlist_sync_pattern"
-                                )
-                                ws_for_apply = st.session_state.get(
-                                    "playlist_workspace_for_sync"
-                                )
-
-                                success = apply_sync_plan(
-                                    plan=sync_plan_display,
-                                    playlist_workspace=ws_for_apply,
-                                    dest_dir=dest_for_sync,
-                                    new_location=current_location,
-                                    new_pattern=current_pattern,
-                                    new_url_info=new_url_info,
-                                )
-
-                                if success:
-                                    st.success(
-                                        t(
-                                            "playlist_sync_success",
-                                            fallback="✅ Synchronization completed successfully!",
-                                        )
-                                    )
-                                    # Clear sync plan and reload
-                                    st.session_state["playlist_sync_plan"] = None
-                                    st.rerun()
-                                else:
-                                    st.error(
-                                        t(
-                                            "playlist_sync_failed",
-                                            fallback="❌ Synchronization failed. Check logs for details.",
-                                        )
-                                    )
-                    else:
-                        st.info(
-                            t(
-                                "playlist_sync_no_changes",
-                                fallback="✅ Playlist is already synchronized. No changes needed.",
                             )
-                        )
+            elif len(playlist_to_download) == 0:
+                # No changes and nothing to download - fully up to date
+                st.success(t("playlist_already_up_to_date", fallback="✅ Playlist is already up to date!"))
+            else:
+                # Show progress bar and download count
+                st.progress(
+                    progress_percent / 100.0,
+                    text=t(
+                        "playlist_ratio",
+                        downloaded=len(playlist_already_downloaded),
+                        total=total,
+                    ),
+                )
+
+                # Show count of videos to download
+                st.info(t("playlist_to_download", count=len(playlist_to_download)))
 
     else:
         # === SINGLE VIDEO FILE EXISTENCE WARNING ===
@@ -3359,33 +3296,44 @@ st.markdown("\n")
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     if is_playlist_mode:
-        # Check if playlist has existing status and needs sync validation
-        playlist_id_for_btn = st.session_state.get("playlist_id", "")
-        playlist_needs_sync = False
+        # Check if playlist has pending sync changes or is up to date
+        playlist_to_download_list = st.session_state.get("playlist_to_download", [])
+        sync_plan_for_btn = st.session_state.get("playlist_sync_plan")
+        
+        # Determine button state based on sync plan
+        has_pending_sync_changes = (
+            sync_plan_for_btn is not None and sync_plan_for_btn.has_changes
+        )
+        playlist_is_up_to_date = (
+            len(playlist_to_download_list) == 0 and not has_pending_sync_changes
+        )
 
-        if playlist_id_for_btn:
-            playlist_ws_for_btn = create_playlist_workspace(
-                TMP_DOWNLOAD_FOLDER, playlist_id_for_btn
-            )
-            existing_status_for_btn = load_playlist_status(playlist_ws_for_btn)
-
-            # If status exists, check if sync is recent enough
-            if existing_status_for_btn:
-                sync_recent_for_btn = is_sync_recent(playlist_ws_for_btn, max_hours=2.0)
-                if not sync_recent_for_btn:
-                    playlist_needs_sync = True
-
-        if playlist_needs_sync:
-            # Show warning and disabled-looking button
-            st.warning(t("playlist_sync_required"))
+        if playlist_is_up_to_date:
+            # Playlist is completely up to date - button disabled (message already shown above)
             submitted = st.button(
                 f"{t('playlist_download_button')}",
-                type="secondary",  # Use secondary style to indicate it's not ready
+                type="secondary",
+                use_container_width=True,
+                help=t("playlist_already_up_to_date", fallback="All videos are already downloaded."),
+                disabled=True,
+            )
+        elif has_pending_sync_changes:
+            # Has changes to apply first - show warning
+            st.warning(
+                t(
+                    "playlist_sync_required",
+                    fallback="⚠️ Please apply pending changes first"
+                )
+            )
+            submitted = st.button(
+                f"{t('playlist_download_button')}",
+                type="secondary",
                 use_container_width=True,
                 help=t("playlist_sync_required"),
                 disabled=True,
             )
         else:
+            # Ready to download
             submitted = st.button(
                 f"{t('playlist_download_button')}",
                 type="primary",

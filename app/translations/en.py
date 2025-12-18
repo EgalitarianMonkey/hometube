@@ -383,6 +383,17 @@ Example: `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`""
     "playlist_sync_required": "⚠️ Please synchronize the playlist first (sync must be less than 2 hours old)",
     "playlist_keep_old_videos": "Keep videos removed from playlist",
     "playlist_keep_old_videos_help": "Archive removed videos instead of deleting them",
+    "playlist_sync_up_to_date": "✅ Playlist is up to date. Ready to download new videos.",
+    "playlist_changes_pending": "📋 {count} change(s) pending",
+    "playlist_changes_summary": "**Pending changes:**",
+    "playlist_changes_rename": "✏️ {count} video(s) to rename",
+    "playlist_changes_download": "📥 {count} video(s) to download",
+    "playlist_changes_relocate": "📁 {count} video(s) to relocate",
+    "playlist_changes_archive": "📦 {count} video(s) to archive",
+    "playlist_changes_delete": "🗑️ {count} video(s) to delete",
+    "playlist_apply_changes": "✅ Apply Changes",
+    "playlist_apply_changes_help": "Apply all pending synchronization changes",
+    "playlist_already_up_to_date": "✅ Playlist is already up to date!",
 }
 
 # Direct access to translation values (for backward compatibility)
