@@ -2055,7 +2055,7 @@ def parse_generic_percentage(line: str) -> Optional[float]:
 
 # URL input for main form
 # url = st.text_input(
-#     t("video_url"),
+#     t("video_or_playlist_url"),
 #     value="",
 #     help="Enter the YouTube video URL",
 #     key="main_url",
@@ -2065,7 +2065,7 @@ st.markdown("\n")
 
 # === MAIN INPUTS (OUTSIDE FORM FOR DYNAMIC BEHAVIOR) ===
 url = st.text_input(
-    t("video_url"),
+    t("video_or_playlist_url"),
     value="",
     placeholder="https://www.youtube.com/watch?v=...",
     key="main_url",
@@ -2214,7 +2214,7 @@ if is_playlist_mode:
         default_filename = ""
 
     # Show playlist progress section
-    st.markdown(f"### {t('playlist_progress_title')}")
+    # st.markdown(f"### {t('playlist_progress_title')}")
 
     # Check if destination folder is selected to compute progress
     # We'll compute the ratio based on the selected destination folder
@@ -2505,7 +2505,9 @@ if (
                 )
                 # Only consider it as "existing" if custom_title has been set
                 if existing_status_for_sync:
-                    has_previous_downloads = existing_status_for_sync.get("custom_title") is not None
+                    has_previous_downloads = (
+                        existing_status_for_sync.get("custom_title") is not None
+                    )
 
             # If we have an existing status WITH previous downloads, show synchronization options
             # For new playlists (no custom_title), skip this section entirely

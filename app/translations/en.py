@@ -3,7 +3,7 @@ TRANSLATIONS = {
     # === PAGE & INTERFACE ===
     "page_title": "HomeTube",
     "page_header": "🎬 &nbsp; HomeTube",
-    "video_url": "Video URL",
+    "video_or_playlist_url": "Video or Playlist URL",
     "video_name": "Video name",
     "video_name_help": "Name of the output video file (without extension). If left empty, the default video title will be used.",
     "destination_folder": "Destination folder",
@@ -328,7 +328,6 @@ Update your file cookies or try using **browser cookies** instead of file cookie
     # === PLAYLIST SUPPORT ===
     "playlist_name": "Playlist name",
     "playlist_name_help": "Destination folder name for the playlist videos",
-    "playlist_progress_title": "📊 Playlist Progress",
     "playlist_ratio": "{downloaded}/{total} videos already downloaded",
     "playlist_all_downloaded": "✅ All videos are already downloaded!",
     "playlist_to_download": "{count} video(s) to download",
