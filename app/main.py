@@ -92,7 +92,6 @@ try:
         is_playlist_info,
         get_playlist_entries,
         check_existing_videos_in_destination,
-        get_download_ratio,
         get_download_progress_percent,
         create_playlist_workspace,
         create_video_workspace_in_playlist,
@@ -106,10 +105,7 @@ try:
     from .playlist_sync import (
         sync_playlist,
         apply_sync_plan,
-        is_sync_recent,
-        format_sync_plan_summary,
         format_sync_plan_details,
-        archive_url_info,
         refresh_playlist_url_info,
     )
     from .text_utils import render_title, DEFAULT_PLAYLIST_TITLE_PATTERN
@@ -197,7 +193,6 @@ except ImportError:
         is_playlist_info,
         get_playlist_entries,
         check_existing_videos_in_destination,
-        get_download_ratio,
         get_download_progress_percent,
         create_playlist_workspace,
         create_video_workspace_in_playlist,
@@ -211,10 +206,7 @@ except ImportError:
     from playlist_sync import (
         sync_playlist,
         apply_sync_plan,
-        is_sync_recent,
-        format_sync_plan_summary,
         format_sync_plan_details,
-        archive_url_info,
         refresh_playlist_url_info,
     )
     from text_utils import render_title, DEFAULT_PLAYLIST_TITLE_PATTERN
@@ -1723,7 +1715,7 @@ def url_analysis(url: str) -> Optional[Dict]:
                         # This is an existing playlist - always refresh to get latest state
                         should_refresh_playlist = True
                         safe_push_log(
-                            f"🔄 Existing playlist detected - refreshing url_info.json"
+                            "🔄 Existing playlist detected - refreshing url_info.json"
                         )
 
             if should_refresh_playlist:
@@ -2644,7 +2636,9 @@ if (
                     t("playlist_sync_details", fallback="View detailed changes")
                 ):
                     playlist_channel = st.session_state.get("playlist_channel", "")
-                    st.markdown(format_sync_plan_details(sync_plan, channel=playlist_channel))
+                    st.markdown(
+                        format_sync_plan_details(sync_plan, channel=playlist_channel)
+                    )
 
                 # Keep old videos option
                 keep_old_videos_checkbox = st.checkbox(
@@ -2675,9 +2669,10 @@ if (
                     ):
                         # Get keep_old_videos preference from checkbox
                         keep_old_videos_pref = st.session_state.get(
-                            "playlist_keep_old_videos", settings.PLAYLIST_KEEP_OLD_VIDEOS
+                            "playlist_keep_old_videos",
+                            settings.PLAYLIST_KEEP_OLD_VIDEOS,
                         )
-                        
+
                         success = apply_sync_plan(
                             plan=sync_plan,
                             playlist_workspace=playlist_workspace_for_sync,
@@ -4842,7 +4837,9 @@ if submitted:
                 push_log(f"⚠️ Could not get uploader from url_info: {e}")
 
             # Log metadata information for debugging
-            push_log(f"📝 Metadata to embed: video_id={video_id}, source={source}, playlist_id={playlist_id}, uploader={uploader}")
+            push_log(
+                f"📝 Metadata to embed: video_id={video_id}, source={source}, playlist_id={playlist_id}, uploader={uploader}"
+            )
 
             # Apply custom metadata with all available information
             if not customize_video_metadata(

@@ -930,7 +930,8 @@ def customize_video_metadata(
             str(video_path),
             "-c",
             "copy",  # Copy streams without re-encoding (fast)
-            "-map_metadata", "0",  # Preserve existing metadata from yt-dlp
+            "-map_metadata",
+            "0",  # Preserve existing metadata from yt-dlp
             "-metadata",
             f"title={display_title}",  # Title with channel name
         ]

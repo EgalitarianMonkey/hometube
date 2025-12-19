@@ -15,7 +15,7 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from app.config import get_settings
 from app.file_system_utils import sanitize_filename, ensure_dir
@@ -461,7 +461,7 @@ def sync_playlist(
                     action_type="archive",
                     video_id=video_id,
                     title=title,
-                    details=f"Move to Archives/ (removed from playlist)",
+                    details="Move to Archives/ (removed from playlist)",
                     old_path=old_path,
                     new_path=new_path,
                 )
@@ -763,14 +763,19 @@ def apply_sync_plan(
     )
 
     settings = get_settings()
-    
+
+    # Extract playlist channel for render_title calls
+    playlist_channel = new_url_info.get("uploader", new_url_info.get("channel", ""))
+
     # Use setting default if not specified
     if keep_old_videos is None:
         keep_old_videos = settings.PLAYLIST_KEEP_OLD_VIDEOS
-    
+
     # If keep_old_videos is True, convert delete actions to archive actions
     if keep_old_videos and plan.videos_to_delete:
-        safe_push_log(f"📦 Converting {len(plan.videos_to_delete)} delete actions to archive (keep_old_videos=True)")
+        safe_push_log(
+            f"📦 Converting {len(plan.videos_to_delete)} delete actions to archive (keep_old_videos=True)"
+        )
         for delete_action in plan.videos_to_delete:
             # Create archive action from delete action
             archive_dir = dest_dir / "Archives"
@@ -778,17 +783,17 @@ def apply_sync_plan(
                 clean_title = sanitize_filename(delete_action.title)
                 new_filename = f"{clean_title}{delete_action.old_path.suffix}"
                 new_path = archive_dir / new_filename
-                
+
                 archive_action = SyncAction(
                     action_type="archive",
                     video_id=delete_action.video_id,
                     title=delete_action.title,
-                    details=f"Move to Archives/ (removed from playlist)",
+                    details="Move to Archives/ (removed from playlist)",
                     old_path=delete_action.old_path,
                     new_path=new_path,
                 )
                 plan.videos_to_archive.append(archive_action)
-        
+
         # Clear delete actions since they're now archive actions
         plan.videos_to_delete = []
     success = True
@@ -1109,7 +1114,9 @@ def format_sync_plan_summary(plan: PlaylistSyncPlan) -> str:
     return "\n".join(lines)
 
 
-def format_sync_plan_details(plan: PlaylistSyncPlan, channel: Optional[str] = None) -> str:
+def format_sync_plan_details(
+    plan: PlaylistSyncPlan, channel: Optional[str] = None
+) -> str:
     """
     Format detailed list of all sync actions.
 
@@ -1119,7 +1126,9 @@ def format_sync_plan_details(plan: PlaylistSyncPlan, channel: Optional[str] = No
     """
     lines = []
 
-    def format_title(title: str, index: Optional[int] = None, include_channel: bool = True) -> str:
+    def format_title(
+        title: str, index: Optional[int] = None, include_channel: bool = True
+    ) -> str:
         """Helper to format title with optional index and channel."""
         parts = []
         if index is not None:

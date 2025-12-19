@@ -783,7 +783,7 @@ def embed_subtitles_manually_mp4_optimized(
 
         # Map video and audio streams only (skip existing subtitles)
         cmd.extend(["-map", "0:v", "-map", "0:a"])
-        
+
         # Preserve all container metadata (critical for VIDEO_ID, SOURCE, etc.)
         cmd.extend(["-map_metadata", "0"])
 
@@ -871,7 +871,7 @@ def embed_subtitles_manually(video_path: Path, subtitle_files: List[Path]) -> bo
 
         # Map video and audio streams (copy existing)
         cmd.extend(["-map", "0:v", "-map", "0:a"])
-        
+
         # Preserve all container metadata (critical for VIDEO_ID, SOURCE, etc.)
         cmd.extend(["-map_metadata", "0"])
 
