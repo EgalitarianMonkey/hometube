@@ -1,3 +1,4 @@
+<!-- markdownlint-disable-file -->
 <div align="center">
 
 <br/>
@@ -84,7 +85,8 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 <br/>
 <br/>
 
-![Application Demo](./docs/images/simple_ui_demo.gif)
+<!-- ![Application Demo](./docs/images/simple_ui_demo.gif) -->
+![Application Demo](https://github.com/EgalitarianMonkey/hometube/releases/download/v2.0.0/HomeTube-demo.gif)
 
 <br/>
 <br/>
@@ -250,6 +252,8 @@ HomeTube uses **intelligent quality detection** that analyzes each video and aut
 - Detailed sync plan preview before applying changes
 - Full logging of all operations for transparency
 
+Set `PLAYLIST_KEEP_OLD_VIDEOS=true` (or enable *Keep videos removed from playlist* in the UI) to move removed entries into an `Archives/` folder instead of deleting them.
+
 ### 🌐 Universal Platform Support
 
 **1800+ supported platforms** - way beyond just YouTube:
@@ -262,9 +266,9 @@ HomeTube uses **intelligent quality detection** that analyzes each video and aut
 
 [See complete platform list](docs/supported-platforms.md).
 
-<br/><br/>
-![Application Demo](./docs/images/options_ui_demo.gif)
-<br/><br/>
+<!-- <br/><br/> -->
+<!-- ![Application Demo](./docs/images/options_ui_demo.gif) -->
+<!-- <br/><br/> -->
 
 ## 🚀 Quick Start
 
@@ -404,7 +408,7 @@ This **long volume structure** with `type:`, `source:`, and `target:` entries fo
 
 With Portainer, environment variables must be explicitly written in the `environment:` section of the container setup to get those environment variables in the app.
 
-**Portainer environment variables management is different than Docker Compose as:**
+#### Portainer environment variables management
 
 - It does not support `env_file:` entry for passing environment variables **in the container** from a `.env` file involving that the environment variables must be explicitly written in the `environment:` section of the container setup to get those environment variables in the app.
 - It does not retrieve any Docker environment variables from a `.env` file as the stack isn't linked to any location. Environment variables for the Portainer docker-compose.yml stack must be **manually** entered from the UI either one by one or with a convenient `.env` upload.
@@ -511,44 +515,46 @@ uv run streamlit run app/main.py
 
 HomeTube configuration is managed through the `.env` file:
 
-| Variable | Purpose | Defaults | Examples |
-|---------|---------|---------|---------|
-| **Core Paths & System** | | | |
-| `VIDEOS_FOLDER` | Where videos will be moved at the end of download | `/data/videos` if in Docker container else `./downloads` | `/data/videos` |
-| `TMP_DOWNLOAD_FOLDER` | Temporary download location | `/data/tmp` if in Docker container else `./tmp` | `/data/tmp` |
-| `PORT` | Web interface port | `8501` | `8501` |
-| `TZ` | Timezone for Docker | `America/New_York` | `Europe/Paris` |
-| `DEBUG` | Debug logging mode | `false` | `true` |
-| **Authentication & Cookies** | | | |
-| `YOUTUBE_COOKIES_FILE_PATH` | Authentication for private videos | **Must be defined** (or `COOKIES_FROM_BROWSER`) | `/config/youtube_cookies.txt` |
-| `COOKIES_FROM_BROWSER` | Cookies auth directly from active local browser |  | `chrome,firefox,brave,chromium,edge,opera,safari,vivaldi,whale` |
-| `BROWSER_SELECT` | Default browser for cookie extraction | `chrome` | `chrome,firefox,edge,safari` |
-| **Localization** | | | |
-| `UI_LANGUAGE` | UI language. English (en) and French (fr) supported | `en` | `en,fr` |
-| **Audio Language Preferences** | | | |
-| `LANGUAGE_PRIMARY` | Primary audio language preference | `en` | `en,fr,es,de,ja` |
-| `LANGUAGES_SECONDARIES` | Secondary audio languages (comma-separated) | _(empty)_ | `en,es,de` |
-| `LANGUAGE_PRIMARY_INCLUDE_SUBTITLES` | Include subtitles for primary language | `true` | `true,false` |
-| `VO_FIRST` | Prioritize original voice (VO) before primary language | `true` | `true,false` |
-| **Quality & Download Preferences** | | | |
-| `VIDEO_QUALITY_MAX` | Maximum video resolution limit | `max` | `max,2160,1440,1080,720,480,360` |
-| `QUALITY_DOWNGRADE` | Allow quality downgrade if best profile fails (false = best quality only, no fallback) | `true` | `true,false` |
-| `EMBED_CHAPTERS` | Embed chapters by default | `true` | `true,false` |
-| `EMBED_SUBTITLES` | Embed subtitles by default | `true` | `true,false` |
-| `CUTTING_MODE` | Video cutting precision | `keyframes` | `keyframes,precise` |
-| **Safety Options** | | | |
-| `ALLOW_OVERWRITE_EXISTING_VIDEO` | Allow overwriting existing videos in destination folder | `false` | `true,false` (false = protect existing files) |
-| **Advanced Options** | | | |
-| `YTDLP_CUSTOM_ARGS` | Custom yt-dlp arguments |  | `--max-filesize 5M --write-info-json` |
-| `REMOVE_TMP_FILES_AFTER_DOWNLOAD` | Remove temporary files after successful download | `false` | `true,false` (false = keep for debugging/reuse) |
-| `NEW_DOWNLOAD_WITHOUT_TMP_FILES` | Clean tmp folder before each new download | `false` | `true,false` (true = fresh start, useful after errors) |
-| **Media Server Integration** | | | |
-| `JELLYFIN_BASE_URL` | Base URL of your Jellyfin server |  | `https://jellyfin.local:8096` |
-| `JELLYFIN_API_KEY` | Jellyfin API key used to trigger library scans |  | `0123456789abcdef0123456789abcdef` |
-| **Docker-specific Variables** | | | |
-| `VIDEOS_FOLDER_DOCKER_HOST` | Host videos folder in Docker context | **Must be defined** | `/mnt/data/videos` if in Docker container else `/downloads` |
-| `TMP_DOWNLOAD_FOLDER_DOCKER_HOST` | Host tmp download videos folder in Docker context | **Must be defined** | `/mnt/data/hometube/tmp` if in Docker container else `./tmp` |
-| `YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST` | Youtube cookies file path in Docker context | **Must be defined** | `/opt/cookies/youtube.txt` if in Docker container else `./cookies/youtube_cookies.txt` |
+|Variable|Purpose|Defaults|Examples|
+|--------|-------|--------|--------|
+|**Core Paths & System**||||
+|`VIDEOS_FOLDER`|Where videos will be moved at the end of download|`/data/videos` if in Docker container else `./downloads`|`/data/videos`|
+|`TMP_DOWNLOAD_FOLDER`|Temporary download location|`/data/tmp` if in Docker container else `./tmp`|`/data/tmp`|
+|`PORT`|Web interface port|`8501`|`8501`|
+|`TZ`|Timezone for Docker|`America/New_York`|`Europe/Paris`|
+|`DEBUG`|Debug logging mode|`false`|`true`|
+|**Authentication & Cookies**||||
+|`YOUTUBE_COOKIES_FILE_PATH`|Authentication for private videos|**Must be defined** (or `COOKIES_FROM_BROWSER`)|`/config/youtube_cookies.txt`|
+|`COOKIES_FROM_BROWSER`|Cookies auth directly from active local browser||`chrome,firefox,brave,chromium,edge,opera,safari,vivaldi,whale`|
+|`BROWSER_SELECT`|Default browser for cookie extraction|`chrome`|`chrome,firefox,edge,safari`|
+|**Localization**||||
+|`UI_LANGUAGE`|UI language. English (en) and French (fr) supported|`en`|`en,fr`|
+|**Audio Language Preferences**||||
+|`LANGUAGE_PRIMARY`|Primary audio language preference|`en`|`en,fr,es,de,ja`|
+|`LANGUAGES_SECONDARIES`|Secondary audio languages (comma-separated)|*(empty)*|`en,es,de`|
+|`LANGUAGE_PRIMARY_INCLUDE_SUBTITLES`|Include subtitles for primary language|`true`|`true,false`|
+|`VO_FIRST`|Prioritize original voice (VO) before primary language|`true`|`true,false`|
+|**Quality & Download Preferences**||||
+|`VIDEO_QUALITY_MAX`|Maximum video resolution limit|`max`|`max,2160,1440,1080,720,480,360`|
+|`QUALITY_DOWNGRADE`|Allow quality downgrade if best profile fails (false = best quality only, no fallback)|`true`|`true,false`|
+|`EMBED_CHAPTERS`|Embed chapters by default|`true`|`true,false`|
+|`EMBED_SUBTITLES`|Embed subtitles by default|`true`|`true,false`|
+|`CUTTING_MODE`|Video cutting precision|`keyframes`|`keyframes,precise`|
+|**Playlist Sync**||||
+|`PLAYLIST_KEEP_OLD_VIDEOS`|Archive playlist videos removed upstream instead of deleting them (moved to `Archives/`)|`false`|`true,false`|
+|**Safety Options**||||
+|`ALLOW_OVERWRITE_EXISTING_VIDEO`|Allow overwriting existing videos in destination folder|`false`|`true,false` (false = protect existing files)|
+|**Advanced Options**||||
+|`YTDLP_CUSTOM_ARGS`|Custom yt-dlp arguments||`--max-filesize 5M --write-info-json`|
+|`REMOVE_TMP_FILES_AFTER_DOWNLOAD`|Remove temporary files after successful download|`false`|`true,false` (false = keep for debugging/reuse)|
+|`NEW_DOWNLOAD_WITHOUT_TMP_FILES`|Clean tmp folder before each new download|`false`|`true,false` (true = fresh start, useful after errors)|
+|**Media Server Integration**||||
+|`JELLYFIN_BASE_URL`|Base URL of your Jellyfin server||`https://jellyfin.local:8096`|
+|`JELLYFIN_API_KEY`|Jellyfin API key used to trigger library scans||`0123456789abcdef0123456789abcdef`|
+|**Docker-specific Variables**||||
+|`VIDEOS_FOLDER_DOCKER_HOST`|Host videos folder in Docker context|**Must be defined**|`/mnt/data/videos` if in Docker container else `/downloads`|
+|`TMP_DOWNLOAD_FOLDER_DOCKER_HOST`|Host tmp download videos folder in Docker context|**Must be defined**|`/mnt/data/hometube/tmp` if in Docker container else `./tmp`|
+|`YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST`|Youtube cookies file path in Docker context|**Must be defined**|`/opt/cookies/youtube.txt` if in Docker container else `./cookies/youtube_cookies.txt`|
 
 ### 🔄 Configuration Validation
 
@@ -559,7 +565,8 @@ DEBUG=1 python -c "import app.main" 2>/dev/null
 ```
 
 **Expected output:**
-```
+
+```text
 🔧 HomeTube Configuration Summary:
 📁 Videos folder: downloads
 📁 Temp folder: tmp
@@ -576,11 +583,13 @@ DEBUG=1 python -c "import app.main" 2>/dev/null
 **📋 Complete Documentation Hub: [docs/README.md](docs/README.md)**
 
 ### Core Guides
+
 - **[Installation Guide](docs/installation.md)** - System setup and requirements
 - **[Usage Guide](docs/usage.md)** - Complete feature walkthrough
 - **[Docker Guide](docs/docker.md)** - Container deployment strategies
 
 ### Development & Operations
+
 - **[Development Setup](docs/development-setup.md)** - Multi-environment development guide
 - **[UV Workflow Guide](docs/uv-workflow.md)** - Modern dependency management
 - **[Testing Documentation](docs/testing.md)** - Test framework and guidelines
@@ -588,24 +597,24 @@ DEBUG=1 python -c "import app.main" 2>/dev/null
 
 ## 🛠️ Tech Stack
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| **Backend** | Python 3.10+, yt-dlp, FFmpeg | Core processing |
-| **Frontend** | Streamlit | Web interface |
-| **Container** | 🐳 jauderho/yt-dlp (Alpine + yt-dlp + FFmpeg) | Optimized deployment |
-| **CI/CD** | GitHub Actions | Automation |
-| **Testing** | pytest, coverage | Quality assurance |
-| **Dependencies** | UV, conda, pip | Package management |
+|Component|Technology|Purpose|
+|---------|----------|-------|
+|**Backend**|Python 3.10+, yt-dlp, FFmpeg|Core processing|
+|**Frontend**|Streamlit|Web interface|
+|**Container**|🐳 jauderho/yt-dlp (Alpine + yt-dlp + FFmpeg)|Optimized deployment|
+|**CI/CD**|GitHub Actions|Automation|
+|**Testing**|pytest, coverage|Quality assurance|
+|**Dependencies**|UV, conda, pip|Package management|
 
 ## 📊 System Requirements
 
-| Requirement | Minimum | Recommended |
-|-------------|---------|-------------|
-| **Python** | 3.10+ | 3.11+ |
-| **FFmpeg** | Latest | Latest |
-| **Storage** | 2GB free | 10GB+ |
-| **Memory** | 512MB | 2GB |
-| **Network** | Broadband | High-speed |
+|Requirement|Minimum|Recommended|
+|-----------|-------|-----------|
+|**Python**|3.10+|3.11+|
+|**FFmpeg**|Latest|Latest|
+|**Storage**|2GB free|10GB+|
+|**Memory**|512MB|2GB|
+|**Network**|Broadband|High-speed|
 
 ## 📈 Project Status
 
@@ -631,9 +640,11 @@ Check out the roadmap for upcoming features and enhancements:
 🔄 **[Contributing Guidelines](docs/development.md)** - Workflow and best practices
 
 **Quick Setup Options:**
+
 - **Conda** (recommended for contributors)
-- **UV** (fastest for developers) 
+- **UV** (fastest for developers)
 - **pip/venv** (universal)
+
 
 **Includes:** Testing commands, workflows, code standards, and pull request process.
 
@@ -645,8 +656,8 @@ If you find HomeTube useful, consider supporting the project to help with develo
 
 <div align="center">
 <a href="https://buymeacoffee.com/egalitarianmonkey" target="_blank">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-orange.png" 
-       alt="Buy Me A Coffee" 
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-orange.png"
+       alt="Buy Me A Coffee"
        height="35" />
 </a>
 </div>

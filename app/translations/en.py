@@ -338,6 +338,7 @@ Update your file cookies or try using **browser cookies** instead of file cookie
     "playlist_downloading_video": "📥 Downloading {current}/{total}: {title}",
     "playlist_video_completed": "✅ Video {current}/{total} completed: {title}",
     "playlist_video_failed": "❌ Video {current}/{total} failed: {title}",
+    "playlist_video_failure_reason": "↳ Reason: {reason}",
     "playlist_position_note": "↳ Playlist position {current}/{total}",
     "playlist_video_skipped": "⏭️ Video {current}/{total} skipped (already exists): {title}",
     "playlist_download_complete": "🎉 Playlist downloaded! {completed}/{total} videos",
