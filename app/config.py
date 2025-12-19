@@ -77,6 +77,9 @@ _DEFAULTS = {
     "YTDLP_CUSTOM_ARGS": "",
     "CUTTING_MODE": "keyframes",  # keyframes or precise
     "BROWSER_SELECT": "chrome",  # Default browser for cookie extraction
+    # === Playlist Options ===
+    "PLAYLIST_VIDEOS_TITLES_PATTERN": "",  # Pattern for playlist video titles (empty = uses default: {idx} - {pretty(title)}.{ext})
+    "PLAYLIST_KEEP_OLD_VIDEOS": "false",  # Keep videos removed from playlist (archive instead of delete)
     # === System ===
     "DEBUG": "false",
     # === Jellyfin Integration ===
@@ -139,6 +142,10 @@ class Settings:
     CUTTING_MODE: str
     BROWSER_SELECT: str
     DEBUG: bool
+
+    # Playlist Options
+    PLAYLIST_VIDEOS_TITLES_PATTERN: str
+    PLAYLIST_KEEP_OLD_VIDEOS: bool
 
     # Integrations
     JELLYFIN_BASE_URL: str
@@ -215,6 +222,8 @@ def get_settings() -> Settings:
         CUTTING_MODE=config["CUTTING_MODE"],
         BROWSER_SELECT=config["BROWSER_SELECT"],
         DEBUG=_to_bool(config["DEBUG"], False),
+        PLAYLIST_VIDEOS_TITLES_PATTERN=config["PLAYLIST_VIDEOS_TITLES_PATTERN"].strip(),
+        PLAYLIST_KEEP_OLD_VIDEOS=_to_bool(config["PLAYLIST_KEEP_OLD_VIDEOS"], False),
         JELLYFIN_BASE_URL=config["JELLYFIN_BASE_URL"].strip(),
         JELLYFIN_API_KEY=config["JELLYFIN_API_KEY"].strip(),
     )

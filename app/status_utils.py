@@ -18,7 +18,7 @@ def create_initial_status(
     video_id: str,
     title: str,
     content_type: str,
-    tmp_video_dir: Path,
+    tmp_url_workspace: Path,
 ) -> Dict:
     """
     Create initial status.json file for a video.
@@ -28,7 +28,7 @@ def create_initial_status(
         video_id: Unique video identifier
         title: Video title
         content_type: "video" or "playlist"
-        tmp_video_dir: Path to the unique video temporary directory
+        tmp_url_workspace: Path to the URL's temporary workspace directory
 
     Returns:
         Dict with initial status data
@@ -38,12 +38,12 @@ def create_initial_status(
         "id": video_id,
         "title": title,
         "type": content_type,
-        "selected_formats": [],  # Will be populated during download
+        "downloaded_formats": {},  # Dict with format_id as keys
         "last_updated": datetime.now(timezone.utc).isoformat(),
     }
 
     # Save to file
-    status_path = tmp_video_dir / "status.json"
+    status_path = tmp_url_workspace / "status.json"
     try:
         with open(status_path, "w", encoding="utf-8") as f:
             json.dump(status_data, f, indent=2, ensure_ascii=False)
@@ -54,17 +54,17 @@ def create_initial_status(
     return status_data
 
 
-def load_status(tmp_video_dir: Path) -> Optional[Dict]:
+def load_status(tmp_url_workspace: Path) -> Optional[Dict]:
     """
-    Load status.json from the video directory.
+    Load status.json from the URL workspace directory.
 
     Args:
-        tmp_video_dir: Path to the unique video temporary directory
+        tmp_url_workspace: Path to the URL's temporary workspace directory
 
     Returns:
         Dict with status data or None if not found
     """
-    status_path = tmp_video_dir / "status.json"
+    status_path = tmp_url_workspace / "status.json"
     if not status_path.exists():
         return None
 
@@ -76,18 +76,18 @@ def load_status(tmp_video_dir: Path) -> Optional[Dict]:
         return None
 
 
-def save_status(tmp_video_dir: Path, status_data: Dict) -> bool:
+def save_status(tmp_url_workspace: Path, status_data: Dict) -> bool:
     """
     Save status data to status.json.
 
     Args:
-        tmp_video_dir: Path to the unique video temporary directory
+        tmp_url_workspace: Path to the URL's temporary workspace directory
         status_data: Status data to save
 
     Returns:
         bool: True if saved successfully, False otherwise
     """
-    status_path = tmp_video_dir / "status.json"
+    status_path = tmp_url_workspace / "status.json"
 
     # Update last_updated timestamp
     status_data["last_updated"] = datetime.now(timezone.utc).isoformat()
@@ -102,7 +102,7 @@ def save_status(tmp_video_dir: Path, status_data: Dict) -> bool:
 
 
 def add_selected_format(
-    tmp_video_dir: Path,
+    tmp_url_workspace: Path,
     video_format: str,
     subtitles: List[str],
     filesize_approx: int,
@@ -111,7 +111,7 @@ def add_selected_format(
     Add a selected format to status.json when starting download.
 
     Args:
-        tmp_video_dir: Path to the unique video temporary directory
+        tmp_url_workspace: Path to the URL's temporary workspace directory
         video_format: Format ID (e.g., "399+251")
         subtitles: List of subtitle files (e.g., ["subtitles.en.srt"])
         filesize_approx: Approximate file size in bytes
@@ -119,40 +119,36 @@ def add_selected_format(
     Returns:
         bool: True if added successfully, False otherwise
     """
-    status_data = load_status(tmp_video_dir)
+    status_data = load_status(tmp_url_workspace)
     if not status_data:
         safe_push_log("⚠️ Status file not found, cannot add format")
         return False
 
-    # Create format entry
+    # Ensure downloaded_formats is a dict (migration from old list format)
+    if isinstance(status_data.get("downloaded_formats"), list):
+        status_data["downloaded_formats"] = {}
+        safe_push_log("📊 Migrated downloaded_formats from list to dict")
+
+    # Create format entry (without redundant video_format key)
     format_entry = {
-        "video_format": video_format,
         "subtitles": subtitles,
         "filesize_approx": filesize_approx,
         "status": "downloading",
     }
 
-    # Check if format already exists (update instead of duplicate)
-    existing_index = None
-    for i, fmt in enumerate(status_data.get("selected_formats", [])):
-        if fmt.get("video_format") == video_format:
-            existing_index = i
-            break
+    # Check if format already exists BEFORE adding it
+    action = "Updated" if video_format in status_data["downloaded_formats"] else "Added"
 
-    if existing_index is not None:
-        # Update existing entry
-        status_data["selected_formats"][existing_index] = format_entry
-        safe_push_log(f"📊 Updated format {video_format} status to 'downloading'")
-    else:
-        # Add new entry
-        status_data["selected_formats"].append(format_entry)
-        safe_push_log(f"📊 Added format {video_format} with status 'downloading'")
+    # Add or update format entry using format_id as key
+    status_data["downloaded_formats"][video_format] = format_entry
 
-    return save_status(tmp_video_dir, status_data)
+    safe_push_log(f"📊 {action} format {video_format} with status 'downloading'")
+
+    return save_status(tmp_url_workspace, status_data)
 
 
 def update_format_status(
-    tmp_video_dir: Path,
+    tmp_url_workspace: Path,
     video_format: str,
     final_file: Path,
 ) -> bool:
@@ -163,24 +159,25 @@ def update_format_status(
     - tolerance = max(100KB, expected_size * 1%)
 
     Args:
-        tmp_video_dir: Path to the unique video temporary directory
+        tmp_url_workspace: Path to the URL's temporary workspace directory
         video_format: Format ID to update
         final_file: Path to the final downloaded file
 
     Returns:
         bool: True if updated successfully, False otherwise
     """
-    status_data = load_status(tmp_video_dir)
+    status_data = load_status(tmp_url_workspace)
     if not status_data:
         safe_push_log("⚠️ Status file not found, cannot update format status")
         return False
 
-    # Find the format entry
-    format_entry = None
-    for fmt in status_data.get("selected_formats", []):
-        if fmt.get("video_format") == video_format:
-            format_entry = fmt
-            break
+    # Ensure downloaded_formats is a dict
+    if isinstance(status_data.get("downloaded_formats"), list):
+        status_data["downloaded_formats"] = {}
+
+    # Get format entry directly by key
+    downloaded_formats = status_data.get("downloaded_formats", {})
+    format_entry = downloaded_formats.get(video_format)
 
     if not format_entry:
         safe_push_log(f"⚠️ Format {video_format} not found in status")
@@ -193,7 +190,7 @@ def update_format_status(
         safe_push_log(
             f"❌ Format {video_format} marked as 'incomplete' - file not found"
         )
-        return save_status(tmp_video_dir, status_data)
+        return save_status(tmp_url_workspace, status_data)
 
     actual_size = final_file.stat().st_size
     expected_size = format_entry.get("filesize_approx", 0)
@@ -224,48 +221,56 @@ def update_format_status(
             f"diff: {size_diff / (1024*1024):.2f}MiB exceeds tolerance)"
         )
 
-    return save_status(tmp_video_dir, status_data)
+    return save_status(tmp_url_workspace, status_data)
 
 
-def get_format_status(tmp_video_dir: Path, video_format: str) -> Optional[str]:
+def get_format_status(tmp_url_workspace: Path, video_format: str) -> Optional[str]:
     """
     Get the status of a specific format.
 
     Args:
-        tmp_video_dir: Path to the unique video temporary directory
+        tmp_url_workspace: Path to the URL's temporary workspace directory
         video_format: Format ID to check
 
     Returns:
         str: "downloading", "completed", "incomplete", or None if not found
     """
-    status_data = load_status(tmp_video_dir)
+    status_data = load_status(tmp_url_workspace)
     if not status_data:
         return None
 
-    for fmt in status_data.get("selected_formats", []):
-        if fmt.get("video_format") == video_format:
-            return fmt.get("status")
+    # Handle both old list format and new dict format
+    downloaded_formats = status_data.get("downloaded_formats", {})
 
-    return None
+    if isinstance(downloaded_formats, dict):
+        # New dict format - direct key access
+        format_entry = downloaded_formats.get(video_format)
+        return format_entry.get("status") if format_entry else None
+    else:
+        # Old list format - backward compatibility
+        for fmt in downloaded_formats:
+            if fmt.get("video_format") == video_format:
+                return fmt.get("status")
+        return None
 
 
-def is_format_completed(tmp_video_dir: Path, video_format: str) -> bool:
+def is_format_completed(tmp_url_workspace: Path, video_format: str) -> bool:
     """
     Check if a format download is completed.
 
     Args:
-        tmp_video_dir: Path to the unique video temporary directory
+        tmp_url_workspace: Path to the URL's temporary workspace directory
         video_format: Format ID to check
 
     Returns:
         bool: True if completed, False otherwise
     """
-    status = get_format_status(tmp_video_dir, video_format)
+    status = get_format_status(tmp_url_workspace, video_format)
     return status == "completed"
 
 
 def mark_format_error(
-    tmp_video_dir: Path,
+    tmp_url_workspace: Path,
     video_format: str,
     error_message: str = "Download failed",
 ) -> bool:
@@ -273,23 +278,24 @@ def mark_format_error(
     Mark a format as failed/error in status.json.
 
     Args:
-        tmp_video_dir: Path to the unique video temporary directory
+        tmp_url_workspace: Path to the URL's temporary workspace directory
         video_format: Format ID to mark as error
         error_message: Error description
 
     Returns:
         bool: True if updated successfully, False otherwise
     """
-    status_data = load_status(tmp_video_dir)
+    status_data = load_status(tmp_url_workspace)
     if not status_data:
         return False
 
-    # Find the format entry
-    format_entry = None
-    for fmt in status_data.get("selected_formats", []):
-        if fmt.get("video_format") == video_format:
-            format_entry = fmt
-            break
+    # Ensure downloaded_formats is a dict
+    if isinstance(status_data.get("downloaded_formats"), list):
+        status_data["downloaded_formats"] = {}
+
+    # Get format entry directly by key
+    downloaded_formats = status_data.get("downloaded_formats", {})
+    format_entry = downloaded_formats.get(video_format)
 
     if not format_entry:
         return False
@@ -299,30 +305,166 @@ def mark_format_error(
     format_entry["error"] = error_message
     safe_push_log(f"❌ Format {video_format} marked as 'error': {error_message}")
 
-    return save_status(tmp_video_dir, status_data)
+    return save_status(tmp_url_workspace, status_data)
 
 
-def get_first_completed_format(tmp_video_dir: Path) -> Optional[str]:
+def get_first_completed_format(tmp_url_workspace: Path) -> Optional[str]:
     """
     Get the format ID of the first completed download.
 
     Args:
-        tmp_video_dir: Path to the unique video temporary directory
+        tmp_url_workspace: Path to the URL's temporary workspace directory
 
     Returns:
         str: Format ID of first completed download, or None if no completed downloads
     """
-    status_data = load_status(tmp_video_dir)
+    status_data = load_status(tmp_url_workspace)
     if not status_data:
         return None
 
-    for fmt in status_data.get("selected_formats", []):
-        if fmt.get("status") == "completed":
-            format_id = fmt.get("video_format")
-            safe_push_log(
-                f"✅ Found completed format in status: {format_id} "
-                f"(size: {fmt.get('actual_filesize', 0) / (1024*1024):.2f}MiB)"
-            )
-            return format_id
+    downloaded_formats = status_data.get("downloaded_formats", {})
+
+    # Handle both dict and list formats
+    if isinstance(downloaded_formats, dict):
+        # New dict format - iterate over items
+        for format_id, format_entry in downloaded_formats.items():
+            if format_entry.get("status") == "completed":
+                safe_push_log(
+                    f"✅ Found completed format in status: {format_id} "
+                    f"(size: {format_entry.get('actual_filesize', 0) / (1024*1024):.2f}MiB)"
+                )
+                return format_id
+    else:
+        # Old list format - backward compatibility
+        for fmt in downloaded_formats:
+            if fmt.get("status") == "completed":
+                format_id = fmt.get("video_format")
+                safe_push_log(
+                    f"✅ Found completed format in status: {format_id} "
+                    f"(size: {fmt.get('actual_filesize', 0) / (1024*1024):.2f}MiB)"
+                )
+                return format_id
 
     return None
+
+
+def add_download_attempt(
+    tmp_url_workspace: Path,
+    custom_title: str,
+    video_location: str,
+    requested_format_id: Optional[str] = None,
+) -> bool:
+    """
+    Record a download attempt in status.json.
+
+    Each time the user clicks the Download button, this function records:
+    - custom_title: The filename/title entered by the user
+    - video_location: The subfolder/category selected
+    - requested_format_id: The format ID that the user wants to download (if specified)
+    - date: ISO timestamp of the download attempt
+
+    New attempts are added at the beginning of the list (index 0) for easy access.
+
+    Args:
+        tmp_url_workspace: Path to the URL's temporary workspace directory
+        custom_title: User-provided filename/title
+        video_location: Destination subfolder path
+        requested_format_id: Optional format ID requested by user (e.g., from Choose Quality Available)
+
+    Returns:
+        bool: True if recorded successfully, False otherwise
+    """
+    status_data = load_status(tmp_url_workspace)
+    if not status_data:
+        safe_push_log("⚠️ Status file not found, cannot record download attempt")
+        return False
+
+    # Create attempt entry
+    attempt_entry = {
+        "custom_title": custom_title,
+        "video_location": video_location,
+        "date": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Add requested format if specified
+    if requested_format_id:
+        attempt_entry["requested_format_id"] = requested_format_id
+
+    # Initialize download_attempts list if it doesn't exist
+    if "download_attempts" not in status_data:
+        status_data["download_attempts"] = []
+
+    # Insert at the beginning (position 0) so most recent is first
+    status_data["download_attempts"].insert(0, attempt_entry)
+
+    safe_push_log(
+        f"📊 Recorded download attempt: title='{custom_title}', "
+        f"location='{video_location}'"
+    )
+
+    return save_status(tmp_url_workspace, status_data)
+
+
+def get_last_download_attempt(tmp_url_workspace: Path) -> Optional[Dict]:
+    """
+    Get the most recent download attempt from status.json.
+
+    Returns the first entry in download_attempts list (newest first).
+
+    Args:
+        tmp_url_workspace: Path to the URL's temporary workspace directory
+
+    Returns:
+        Dict with keys 'custom_title', 'video_location', 'date' or None if no attempts
+    """
+    status_data = load_status(tmp_url_workspace)
+    if not status_data:
+        return None
+
+    attempts = status_data.get("download_attempts", [])
+    if not attempts:
+        return None
+
+    # Return the first entry (most recent)
+    return attempts[0]
+
+
+def get_profiles_cached(
+    tmp_url_workspace: Path,
+    optimal_format_profiles: List[Dict],
+) -> List[Dict]:
+    """
+    Get the list of optimal profiles that are cached (status = "completed").
+
+    Args:
+        tmp_url_workspace: Path to the URL's temporary workspace directory
+        optimal_format_profiles: List of optimal profile dictionaries with format_id
+
+    Returns:
+        List of cached profiles (subset of optimal_format_profiles)
+    """
+    if not tmp_url_workspace or not optimal_format_profiles:
+        return []
+
+    status_data = load_status(tmp_url_workspace)
+    if not status_data:
+        return []
+
+    downloaded_formats = status_data.get("downloaded_formats", {})
+
+    # Ensure it's a dict (migration from old format)
+    if not isinstance(downloaded_formats, dict):
+        return []
+
+    # Filter profiles that have status "completed" in downloaded_formats
+    cached_profiles = []
+    for profile in optimal_format_profiles:
+        format_id = profile.get("format_id", "")
+        if not format_id:
+            continue
+
+        format_entry = downloaded_formats.get(format_id)
+        if format_entry and format_entry.get("status") == "completed":
+            cached_profiles.append(profile)
+
+    return cached_profiles

@@ -155,3 +155,23 @@ class TestGetUniqueFolderName:
             assert len(result) > 0
             # Should only contain safe characters
             assert all(char.isalnum() or char in "-_" for char in result)
+
+    def test_youtube_playlist_url(self):
+        """Test YouTube playlist URL"""
+        url = "https://www.youtube.com/playlist?list=PLGbut4pdSxUOiO5bOUryKgE9jtVUlgFz4"
+        result = get_unique_video_folder_name_from_url(url)
+        assert result == "youtube-playlist-PLGbut4pdSxUOiO5bOUryKgE9jtVUlgFz4"
+
+    def test_youtube_playlist_url_with_extra_params(self):
+        """Test YouTube playlist URL with extra parameters"""
+        url = "https://www.youtube.com/playlist?list=PLtest123&index=5"
+        result = get_unique_video_folder_name_from_url(url)
+        assert result == "youtube-playlist-PLtest123"
+
+    def test_youtube_video_with_list_param_uses_video_id(self):
+        """Test that video URL with list parameter still uses video ID, not playlist"""
+        # When watching a video from a playlist, the video ID should be used
+        url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLtest123"
+        result = get_unique_video_folder_name_from_url(url)
+        # Video URLs should use the video ID even if they have a list param
+        assert result == "youtube-dQw4w9WgXcQ"

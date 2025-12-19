@@ -29,7 +29,12 @@ class TestTranslations:
         try:
             from app.translations import en, fr
 
-            essential_keys = ["page_title", "download_button", "video_url", "options"]
+            essential_keys = [
+                "page_title",
+                "download_button",
+                "video_or_playlist_url",
+                "options",
+            ]
 
             for key in essential_keys:
                 assert key in en.TRANSLATIONS, f"Missing key in English: {key}"

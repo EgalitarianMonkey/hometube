@@ -3,7 +3,7 @@ TRANSLATIONS = {
     # === PAGE & INTERFACE ===
     "page_title": "HomeTube",
     "page_header": "🎬 &nbsp; HomeTube",
-    "video_url": "URL de la vidéo",
+    "video_or_playlist_url": "Vidéo ou playlist URL",
     "video_name": "Nom de la vidéo",
     "video_name_help": "Nom de la vidéo (sans extension). Le nom de la vidéo d'origine sera utilisé si non renseigné.",
     "destination_folder": "Destination",
@@ -11,7 +11,7 @@ TRANSLATIONS = {
     "subtitles_help": "Codes langue yt-dlp (ex: en, fr, es).",
     "options": "Options",
     "other_options": "Autres options",
-    "download_button": "Télécharger",
+    "download_button": "🎬 &nbsp; Télécharger",
     "download_button_help": "Lance le téléchargement avec les paramètres sélectionnés",
     "cancel_button": "❌ Annuler",
     "cancel_button_help": "Arrêter le téléchargement et nettoyer les fichiers temporaires",
@@ -323,6 +323,90 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
     "update_local_instruction": "`pip install -U yt-dlp`",
     "update_git_title": "🖥️ &nbsp; Pour installation Git",
     "update_git_instruction": "`git pull origin main && pip install -e .`",
+    # === PLAYLIST SUPPORT ===
+    "playlist_name": "Nom de la playlist",
+    "playlist_name_help": "Nom du dossier de destination pour les vidéos de la playlist",
+    "playlist_ratio": "{downloaded}/{total} vidéos déjà téléchargées",
+    "playlist_all_downloaded": "✅ Toutes les vidéos sont déjà téléchargées !",
+    "playlist_to_download": "{count} vidéo(s) à télécharger",
+    "playlist_checking_destination": "🔍 Vérification des vidéos existantes...",
+    "playlist_videos_found": "📋 {count} vidéos dans la playlist",
+    "playlist_download_button": "📥 &nbsp; Télécharger la playlist",
+    "playlist_download_help": "Télécharge toutes les vidéos manquantes de la playlist",
+    "playlist_downloading_video": "📥 Téléchargement {current}/{total}: {title}",
+    "playlist_video_completed": "✅ Vidéo {current}/{total} terminée: {title}",
+    "playlist_video_failed": "❌ Échec vidéo {current}/{total}: {title}",
+    "playlist_position_note": "↳ Position dans la playlist {current}/{total}",
+    "playlist_video_skipped": "⏭️ Vidéo {current}/{total} ignorée (déjà existante): {title}",
+    "playlist_download_complete": "🎉 Playlist téléchargée ! {completed}/{total} vidéos",
+    "playlist_copying_to_dest": "📁 Copie des vidéos vers la destination...",
+    "playlist_copy_complete": "✅ {copied} vidéo(s) copiée(s) vers {folder}",
+    "playlist_expanding_info": "🔄 Chargement des informations détaillées de la playlist...",
+    "playlist_entry_title": "Titre",
+    "playlist_entry_duration": "Durée",
+    "playlist_entry_status": "Statut",
+    "playlist_status_pending": "⏳ En attente",
+    "playlist_status_downloading": "📥 Téléchargement...",
+    "playlist_status_completed": "✅ Terminé",
+    "playlist_status_failed": "❌ Échec",
+    "playlist_status_skipped": "⏭️ Ignoré",
+    "playlist_status_exists": "📁 Existe déjà",
+    "playlist_title_pattern": "Pattern des titres vidéo",
+    "playlist_title_pattern_help": """Pattern pour nommer les vidéos téléchargées. Placeholders supportés :
+• `{idx}` - Index avec zéros (01, 02... ou 001, 002... selon le total)
+• `{i}` ou `{i:04d}` - Index vidéo avec format personnalisé (base 1)
+• `{title}` - Titre original de la vidéo
+• `{pretty(title)}` - Titre embelli (Majuscules, conserve les accents)
+• `{slug(title)}` - Titre slugifié (minuscules-tirets, sans accents)
+• `{channel}` - Nom de la chaîne/créateur
+• `{pretty(channel)}` - Nom de chaîne embelli
+• `{slug(channel)}` - Nom de chaîne slugifié
+• `{id}` - ID de la vidéo
+• `{ext}` - Extension du fichier (mkv, mp4...)
+
+Exemples :
+• `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`
+• `{pretty(title)} - {channel}.{ext}` → `Ma Vidéo - Nom Créateur.mkv`
+• `{idx}` - Index avec padding intelligent (01, 02... ou 001, 002... selon le total)
+• `{i}` ou `{i:04d}` - Index de la vidéo avec format personnalisé (commence à 1)
+• `{title}` - Titre original de la vidéo
+• `{pretty(title)}` - Titre formaté (Title Case avec espaces, garde les accents)
+• `{slug(title)}` - Titre slugifié (minuscules-tirets, sans accents)
+• `{id}` - ID de la vidéo
+• `{ext}` - Extension du fichier (mkv, mp4...)
+
+Exemple : `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`""",
+    # Synchronisation des playlists
+    "playlist_sync_title": "Synchronisation de la Playlist",
+    "playlist_sync_recent": "✅ Playlist synchronisée récemment",
+    "playlist_sync_needed": "⚠️ La playlist doit être synchronisée avant le téléchargement",
+    "playlist_plan_sync": "🔍 Planifier la Sync",
+    "playlist_plan_sync_help": "Prévisualiser les changements sans les appliquer (dry-run)",
+    "playlist_refreshing": "🔄 Récupération des dernières données de la playlist depuis YouTube...",
+    "playlist_refresh_failed": "⚠️ Impossible de récupérer les dernières données. Utilisation de la version en cache.",
+    "playlist_computing_sync": "Calcul du plan de synchronisation...",
+    "playlist_sync_plan": "Plan de Synchronisation",
+    "playlist_sync_details": "Voir les changements détaillés",
+    "playlist_apply_sync": "✅ Appliquer les Changements",
+    "playlist_apply_sync_help": "Appliquer les changements de synchronisation",
+    "playlist_applying_sync": "Application de la synchronisation...",
+    "playlist_sync_success": "✅ Synchronisation terminée avec succès !",
+    "playlist_sync_failed": "❌ La synchronisation a échoué. Consultez les logs pour plus de détails.",
+    "playlist_sync_no_changes": "✅ La playlist est déjà synchronisée. Aucun changement nécessaire.",
+    "playlist_sync_required": "⚠️ Veuillez d'abord synchroniser la playlist (la sync doit dater de moins de 2 heures)",
+    "playlist_keep_old_videos": "Garder les vidéos supprimées de la playlist",
+    "playlist_keep_old_videos_help": "Archiver les vidéos supprimées au lieu de les supprimer",
+    "playlist_sync_up_to_date": "✅ La playlist est à jour. Prêt à télécharger les nouvelles vidéos.",
+    "playlist_changes_pending": "📋 {count} changement(s) en attente",
+    "playlist_changes_summary": "**Changements en attente :**",
+    "playlist_changes_rename": "✏️ {count} vidéo(s) à renommer",
+    "playlist_changes_download": "📥 {count} vidéo(s) à télécharger",
+    "playlist_changes_relocate": "📁 {count} vidéo(s) à déplacer",
+    "playlist_changes_archive": "📦 {count} vidéo(s) à archiver",
+    "playlist_changes_delete": "🗑️ {count} vidéo(s) à supprimer",
+    "playlist_apply_changes": "✅ Appliquer les Changements",
+    "playlist_apply_changes_help": "Appliquer tous les changements de synchronisation en attente",
+    "playlist_already_up_to_date": "✅ La playlist est déjà à jour !",
 }
 
 # Accès direct aux valeurs de traduction (pour la compatibilité ascendante)

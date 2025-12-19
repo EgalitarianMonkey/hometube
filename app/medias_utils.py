@@ -100,6 +100,18 @@ def analyze_audio_formats(
     # Use Opus if available, otherwise use all audio formats
     candidate_formats = opus_formats if opus_formats else audio_only_formats
 
+    # STEP 2.5: EXCLUDE DRC (Dynamic Range Compression) formats before finding best
+    # DRC formats have lower quality and should not be used
+    candidate_formats = [
+        fmt
+        for fmt in candidate_formats
+        if "drc" not in fmt.get("format_id", "").lower()
+        and "drc" not in fmt.get("format_note", "").lower()
+    ]
+
+    if not candidate_formats:
+        return None, [], False
+
     # STEP 3: Find the format with the highest bitrate
     best_format = max(candidate_formats, key=lambda x: x.get("abr", 0))
 
@@ -144,6 +156,9 @@ def analyze_audio_formats(
             for lang in languages_secondaries.split(",")
             if lang.strip()
         ]
+
+    # Check if user specified any language preferences
+    has_language_preferences = bool(language_primary or secondary_langs)
 
     # Build ordered list based on preferences
     ordered_audios = []
@@ -195,15 +210,17 @@ def analyze_audio_formats(
                     seen_languages.add(normalize_lang(fmt_lang))
                     break
 
-    # 4. Add remaining languages not yet included
-    for fmt in best_group:
-        fmt_lang = fmt.get("language", "")
-        fmt_normalized = normalize_lang(fmt_lang)
-        if fmt_normalized and fmt_normalized not in seen_languages:
-            ordered_audios.append(fmt)
-            seen_languages.add(fmt_normalized)
+    # 4. Add remaining languages ONLY if no language preferences were specified
+    if not has_language_preferences:
+        for fmt in best_group:
+            fmt_lang = fmt.get("language", "")
+            fmt_normalized = normalize_lang(fmt_lang)
+            if fmt_normalized and fmt_normalized not in seen_languages:
+                ordered_audios.append(fmt)
+                seen_languages.add(fmt_normalized)
 
-    # If no preferences matched, return all in original order
+    # If no preferences matched and no audio tracks selected, return all in original order
+    # This handles edge cases where user preferences don't match any available languages
     if not ordered_audios:
         ordered_audios = sorted(best_group, key=lambda x: x.get("format_id", ""))
 
@@ -342,7 +359,7 @@ def get_profiles_with_formats_id_to_download(
 
                 # Enrich with additional fields for application use
                 vcodec = format_info.get("vcodec", "unknown")
-                height = format_info.get("height", 0)
+                height = format_info.get("height") or 0  # Handle None from yt-dlp
                 format_id = format_info.get("format_id", "")
 
                 # Determine codec label
@@ -544,15 +561,15 @@ def get_available_formats(url_info: Dict) -> List[Dict]:
         format_info = {
             "format_id": fmt.get("format_id", ""),
             "ext": fmt.get("ext", "unknown"),
-            "resolution": f"{fmt.get('width', '?')}x{fmt.get('height', '?')}",
-            "height": fmt.get("height", 0),
+            "resolution": f"{fmt.get('width') or '?'}x{fmt.get('height') or '?'}",
+            "height": fmt.get("height") or 0,  # Handle None from yt-dlp
             "fps": fmt.get("fps"),
             "vcodec": fmt.get("vcodec", "unknown"),
             "acodec": fmt.get("acodec", "none"),
             "filesize": fmt.get("filesize"),
-            "tbr": fmt.get("tbr", 0),  # Total bitrate
-            "vbr": fmt.get("vbr", 0),  # Video bitrate
-            "abr": fmt.get("abr", 0),  # Audio bitrate
+            "tbr": fmt.get("tbr") or 0,  # Total bitrate
+            "vbr": fmt.get("vbr") or 0,  # Video bitrate
+            "abr": fmt.get("abr") or 0,  # Audio bitrate
         }
 
         # Create a human-readable description
@@ -566,13 +583,15 @@ def get_available_formats(url_info: Dict) -> List[Dict]:
         if format_info["acodec"] != "none":
             description_parts.append(f"+ {format_info['acodec']}")
 
-        if format_info["filesize"] and format_info["filesize"] > 0:
-            size_mb = format_info["filesize"] / (1024 * 1024)
+        # Handle filesize (can be None)
+        filesize = format_info.get("filesize")
+        if filesize and filesize > 0:
+            size_mb = filesize / (1024 * 1024)
             if size_mb > 1024:
                 description_parts.append(f"~{size_mb/1024:.1f}GB")
             else:
                 description_parts.append(f"~{size_mb:.0f}MB")
-        elif format_info["tbr"] > 0:
+        elif format_info["tbr"] and format_info["tbr"] > 0:
             description_parts.append(f"{format_info['tbr']:.0f}kbps")
 
         format_info["description"] = " ".join(description_parts)
@@ -580,7 +599,7 @@ def get_available_formats(url_info: Dict) -> List[Dict]:
 
     # Sort by quality (height descending, then fps descending, then bitrate descending)
     video_formats.sort(
-        key=lambda x: (x["height"], x.get("fps", 0), x["tbr"]), reverse=True
+        key=lambda x: (x["height"], x.get("fps") or 0, x["tbr"]), reverse=True
     )
 
     return video_formats
@@ -785,17 +804,99 @@ def get_video_title(url: str, cookies_part: List[str] = None) -> str:
         return "video"
 
 
+def get_video_duration_from_file(video_path: Path) -> Optional[int]:
+    """
+    Get video duration in seconds from file using ffprobe.
+
+    Args:
+        video_path: Path to the video file
+
+    Returns:
+        Duration in seconds (int) or None if unavailable
+    """
+    try:
+        import subprocess
+        import json
+
+        cmd = [
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            str(video_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        data = json.loads(result.stdout)
+        duration_str = data.get("format", {}).get("duration")
+        if duration_str:
+            return int(float(duration_str))
+        return None
+    except Exception:
+        return None
+
+
+def get_source_from_url(url: str) -> str:
+    """
+    Extract platform source from URL (e.g., "youtube", "tiktok", "vimeo").
+
+    Args:
+        url: Video URL
+
+    Returns:
+        Platform name (e.g., "youtube") or "unknown"
+    """
+    if not url:
+        return "unknown"
+
+    url_lower = url.lower()
+    if "youtube.com" in url_lower or "youtu.be" in url_lower:
+        return "youtube"
+    elif (
+        "tiktok.com" in url_lower
+        or "vm.tiktok.com" in url_lower
+        or "vt.tiktok.com" in url_lower
+    ):
+        return "tiktok"
+    elif "vimeo.com" in url_lower:
+        return "vimeo"
+    elif "dailymotion.com" in url_lower:
+        return "dailymotion"
+    elif "instagram.com" in url_lower:
+        return "instagram"
+    elif "facebook.com" in url_lower:
+        return "facebook"
+    elif "twitch.tv" in url_lower:
+        return "twitch"
+    else:
+        return "unknown"
+
+
 def customize_video_metadata(
-    video_path: Path, user_title: str, original_title: str = None
+    video_path: Path,
+    user_title: str,
+    original_title: str = None,
+    video_id: str = None,
+    source: str = None,
+    playlist_id: str = None,
+    webpage_url: str = None,
+    duration: int = None,
+    uploader: str = None,
 ) -> bool:
     """
-    Customize video metadata using FFmpeg, replacing title with user-provided name
-    and preserving original title in album field
+    Customize video metadata using FFmpeg, adding comprehensive metadata fields.
 
     Args:
         video_path: Path to the video file
         user_title: Title provided by the user (from filename input)
         original_title: Original video title from yt-dlp (optional)
+        video_id: Video ID to embed in metadata (optional)
+        source: Platform source (e.g., "youtube", "tiktok") (optional)
+        playlist_id: Playlist ID if video is from a playlist (optional)
+        webpage_url: Full URL of the video webpage (optional)
+        duration: Video duration in seconds (optional, will be read from file if not provided)
+        uploader: Channel/uploader name (optional)
 
     Returns:
         bool: True if successful, False otherwise
@@ -807,8 +908,19 @@ def customize_video_metadata(
 
         safe_push_log("📝 Customizing video metadata...")
 
+        # Get duration from file if not provided
+        if duration is None:
+            duration = get_video_duration_from_file(video_path)
+            if duration:
+                safe_push_log(f"📊 Video duration detected: {duration}s")
+
         # Create temporary output file
         temp_output = video_path.with_suffix(f".temp{video_path.suffix}")
+
+        # Build the display title: "Title - Channel" format
+        display_title = user_title
+        if uploader:
+            display_title = f"{user_title} - {uploader}"
 
         # Build FFmpeg command
         cmd_metadata = [
@@ -818,13 +930,39 @@ def customize_video_metadata(
             str(video_path),
             "-c",
             "copy",  # Copy streams without re-encoding (fast)
+            "-map_metadata",
+            "0",  # Preserve existing metadata from yt-dlp
             "-metadata",
-            f"title={user_title}",  # Use user-provided title
+            f"title={display_title}",  # Title with channel name
         ]
 
         # Add original title as album if available
         if original_title and original_title != user_title:
             cmd_metadata.extend(["-metadata", f"album={original_title}"])
+
+        # Add uploader/channel as artist (standard metadata field)
+        if uploader:
+            cmd_metadata.extend(["-metadata", f"artist={uploader}"])
+
+        # Add video ID - use standard COMMENT tag for better compatibility
+        if video_id:
+            cmd_metadata.extend(["-metadata", f"VIDEO_ID={video_id}"])
+
+        # Add source platform
+        if source:
+            cmd_metadata.extend(["-metadata", f"SOURCE={source}"])
+
+        # Add playlist ID if available
+        if playlist_id:
+            cmd_metadata.extend(["-metadata", f"PLAYLIST_ID={playlist_id}"])
+
+        # Add webpage URL (PURL is recognized by MKV)
+        if webpage_url:
+            cmd_metadata.extend(["-metadata", f"PURL={webpage_url}"])
+
+        # Add duration in seconds
+        if duration:
+            cmd_metadata.extend(["-metadata", f"DURATION_SECONDS={duration}"])
 
         # Add output path
         cmd_metadata.append(str(temp_output))
@@ -839,6 +977,19 @@ def customize_video_metadata(
             video_path.unlink()  # Remove original
             temp_output.rename(video_path)  # Rename temp to original
             safe_push_log(f"✅ Metadata customized - Title: {user_title}")
+            metadata_added = []
+            if video_id:
+                metadata_added.append(f"Video ID: {video_id}")
+            if source:
+                metadata_added.append(f"Source: {source}")
+            if playlist_id:
+                metadata_added.append(f"Playlist ID: {playlist_id}")
+            if webpage_url:
+                metadata_added.append(f"URL: {webpage_url}")
+            if duration:
+                metadata_added.append(f"Duration: {duration}s")
+            if metadata_added:
+                safe_push_log(f"✅ Added metadata: {', '.join(metadata_added)}")
             return True
         else:
             error_msg = result.stderr.strip()

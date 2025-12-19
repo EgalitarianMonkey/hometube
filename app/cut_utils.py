@@ -282,12 +282,13 @@ def build_cut_command(
         cmd_cut.extend(["-i", str(srt_file)])
 
     # Video and audio mappings
+    # Map first video stream and ALL audio streams
     cmd_cut.extend(
         [
             "-map",
-            "0:v:0",
+            "0:v:0",  # First video stream
             "-map",
-            "0:a?",
+            "0:a?",  # ALL audio streams (optional - won't fail if no audio exists)
         ]
     )
 

@@ -3,15 +3,15 @@ TRANSLATIONS = {
     # === PAGE & INTERFACE ===
     "page_title": "HomeTube",
     "page_header": "🎬 &nbsp; HomeTube",
-    "video_url": "Video URL",
+    "video_or_playlist_url": "Video or Playlist URL",
     "video_name": "Video name",
     "video_name_help": "Name of the output video file (without extension). If left empty, the default video title will be used.",
     "destination_folder": "Destination folder",
     "subtitles_to_embed": "Subtitles to embed",
-    "subtitles_help": "The subtitles list is specified from the SUBTITLES_CHOICES variable in the .env file",
+    "subtitles_help": "Subtitle languages are automatically selected based on LANGUAGE_PRIMARY (if LANGUAGE_PRIMARY_INCLUDE_SUBTITLES=true) and LANGUAGES_SECONDARIES configuration in .env file",
     "options": "Options",
     "other_options": "Other options",
-    "download_button": "Download",
+    "download_button": "🎬 &nbsp; Download",
     "download_button_help": "Start download with selected parameters",
     "cancel_button": "❌ Cancel",
     "cancel_button_help": "Stop download and clean temporary files",
@@ -325,6 +325,81 @@ Update your file cookies or try using **browser cookies** instead of file cookie
     "update_local_instruction": "`pip install -U yt-dlp`",
     "update_git_title": "🖥️ &nbsp; For Git installation",
     "update_git_instruction": "`git pull origin main && pip install -e .`",
+    # === PLAYLIST SUPPORT ===
+    "playlist_name": "Playlist name",
+    "playlist_name_help": "Destination folder name for the playlist videos",
+    "playlist_ratio": "{downloaded}/{total} videos already downloaded",
+    "playlist_all_downloaded": "✅ All videos are already downloaded!",
+    "playlist_to_download": "{count} video(s) to download",
+    "playlist_checking_destination": "🔍 Checking existing videos...",
+    "playlist_videos_found": "📋 {count} videos in playlist",
+    "playlist_download_button": "📥 &nbsp; Download Playlist",
+    "playlist_download_help": "Downloads all missing videos from the playlist",
+    "playlist_downloading_video": "📥 Downloading {current}/{total}: {title}",
+    "playlist_video_completed": "✅ Video {current}/{total} completed: {title}",
+    "playlist_video_failed": "❌ Video {current}/{total} failed: {title}",
+    "playlist_position_note": "↳ Playlist position {current}/{total}",
+    "playlist_video_skipped": "⏭️ Video {current}/{total} skipped (already exists): {title}",
+    "playlist_download_complete": "🎉 Playlist downloaded! {completed}/{total} videos",
+    "playlist_copying_to_dest": "📁 Copying videos to destination...",
+    "playlist_copy_complete": "✅ {copied} video(s) copied to {folder}",
+    "playlist_expanding_info": "🔄 Loading detailed playlist information...",
+    "playlist_entry_title": "Title",
+    "playlist_entry_duration": "Duration",
+    "playlist_entry_status": "Status",
+    "playlist_status_pending": "⏳ Pending",
+    "playlist_status_downloading": "📥 Downloading...",
+    "playlist_status_completed": "✅ Completed",
+    "playlist_status_failed": "❌ Failed",
+    "playlist_status_skipped": "⏭️ Skipped",
+    "playlist_status_exists": "📁 Already exists",
+    "playlist_title_pattern": "Video titles pattern",
+    "playlist_title_pattern_help": """Pattern for naming downloaded videos. Supported placeholders:
+• `{idx}` - Smart zero-padded index (01, 02... or 001, 002... based on total)
+• `{i}` or `{i:04d}` - Video index with custom format (1-based)
+• `{title}` - Original video title
+• `{pretty(title)}` - Prettified title (Title Case with spaces, keeps accents)
+• `{slug(title)}` - Slugified title (lowercase-kebab-case, no accents)
+• `{channel}` - Channel/uploader name
+• `{pretty(channel)}` - Prettified channel name
+• `{slug(channel)}` - Slugified channel name
+• `{id}` - Video ID
+• `{ext}` - File extension (mkv, mp4...)
+
+Examples:
+• `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`
+• `{pretty(title)} - {channel}.{ext}` → `My Video - Creator Name.mkv`""",
+    # Playlist Synchronization
+    "playlist_sync_title": "Playlist Synchronization",
+    "playlist_sync_recent": "✅ Playlist synchronized recently",
+    "playlist_sync_needed": "⚠️ Playlist needs synchronization before downloading",
+    "playlist_plan_sync": "🔍 Plan Playlist Sync",
+    "playlist_plan_sync_help": "Preview changes without applying them (dry-run)",
+    "playlist_refreshing": "🔄 Fetching latest playlist data from YouTube...",
+    "playlist_refresh_failed": "⚠️ Could not fetch latest playlist data. Using cached version.",
+    "playlist_computing_sync": "Computing synchronization plan...",
+    "playlist_sync_plan": "Synchronization Plan",
+    "playlist_sync_details": "View detailed changes",
+    "playlist_apply_sync": "✅ Apply Playlist Changes",
+    "playlist_apply_sync_help": "Apply the synchronization changes",
+    "playlist_applying_sync": "Applying synchronization...",
+    "playlist_sync_success": "✅ Synchronization completed successfully!",
+    "playlist_sync_failed": "❌ Synchronization failed. Check logs for details.",
+    "playlist_sync_no_changes": "✅ Playlist is already synchronized. No changes needed.",
+    "playlist_sync_required": "⚠️ Please synchronize the playlist first (sync must be less than 2 hours old)",
+    "playlist_keep_old_videos": "Keep videos removed from playlist",
+    "playlist_keep_old_videos_help": "Archive removed videos instead of deleting them",
+    "playlist_sync_up_to_date": "✅ Playlist is up to date. Ready to download new videos.",
+    "playlist_changes_pending": "📋 {count} change(s) pending",
+    "playlist_changes_summary": "**Pending changes:**",
+    "playlist_changes_rename": "✏️ {count} video(s) to rename",
+    "playlist_changes_download": "📥 {count} video(s) to download",
+    "playlist_changes_relocate": "📁 {count} video(s) to relocate",
+    "playlist_changes_archive": "📦 {count} video(s) to archive",
+    "playlist_changes_delete": "🗑️ {count} video(s) to delete",
+    "playlist_apply_changes": "✅ Apply Changes",
+    "playlist_apply_changes_help": "Apply all pending synchronization changes",
+    "playlist_already_up_to_date": "✅ Playlist is already up to date!",
 }
 
 # Direct access to translation values (for backward compatibility)

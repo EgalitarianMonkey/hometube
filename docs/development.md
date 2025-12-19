@@ -368,6 +368,14 @@ make lint
 
 #### Update Version (if needed)
 
+We need to update the version in three places: `__init__.py`, `pyproject.toml`, and regenerate the lock and requirements files.
+
+**With make:**
+
+```shell
+make version-update 2.0.0         
+```
+
 **In `__init__.py`:**
 
 ```python

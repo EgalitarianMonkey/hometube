@@ -44,6 +44,7 @@ try:
         is_url_info_complet,
         sanitize_url,
         build_url_info,
+        video_id_from_url,
     )
     from . import tmp_files
     from .subtitles_utils import (
@@ -83,7 +84,31 @@ try:
         update_format_status,
         mark_format_error,
         get_first_completed_format,
+        add_download_attempt,
+        get_last_download_attempt,
     )
+    from .playlist_utils import (
+        save_playlist_status,
+        is_playlist_info,
+        get_playlist_entries,
+        check_existing_videos_in_destination,
+        get_download_progress_percent,
+        create_playlist_workspace,
+        create_video_workspace_in_playlist,
+        create_playlist_status,
+        load_playlist_status,
+        update_video_status_in_playlist,
+        mark_video_as_skipped,
+        add_playlist_download_attempt,
+        get_last_playlist_download_attempt,
+    )
+    from .playlist_sync import (
+        sync_playlist,
+        apply_sync_plan,
+        format_sync_plan_details,
+        refresh_playlist_url_info,
+    )
+    from .text_utils import render_title, DEFAULT_PLAYLIST_TITLE_PATTERN
 except ImportError:
     # Fallback for direct execution from app directory
     from translations import t, configure_language
@@ -118,6 +143,7 @@ except ImportError:
         is_url_info_complet,
         sanitize_url,
         build_url_info,
+        video_id_from_url,
     )
     import tmp_files
     from subtitles_utils import (
@@ -157,7 +183,33 @@ except ImportError:
         update_format_status,
         mark_format_error,
         get_first_completed_format,
+        add_download_attempt,
+        get_last_download_attempt,
+        is_format_completed,
+        get_profiles_cached,
     )
+    from playlist_utils import (
+        save_playlist_status,
+        is_playlist_info,
+        get_playlist_entries,
+        check_existing_videos_in_destination,
+        get_download_progress_percent,
+        create_playlist_workspace,
+        create_video_workspace_in_playlist,
+        create_playlist_status,
+        load_playlist_status,
+        update_video_status_in_playlist,
+        mark_video_as_skipped,
+        add_playlist_download_attempt,
+        get_last_playlist_download_attempt,
+    )
+    from playlist_sync import (
+        sync_playlist,
+        apply_sync_plan,
+        format_sync_plan_details,
+        refresh_playlist_url_info,
+    )
+    from text_utils import render_title, DEFAULT_PLAYLIST_TITLE_PATTERN
 
 # Configuration import (must be after translations for configure_language)
 from app.config import (
@@ -183,9 +235,6 @@ VIDEOS_FOLDER, TMP_DOWNLOAD_FOLDER = ensure_folders_exist()
 YOUTUBE_COOKIES_FILE_PATH = settings.YOUTUBE_COOKIES_FILE_PATH
 COOKIES_FROM_BROWSER = settings.COOKIES_FROM_BROWSER
 IN_CONTAINER = settings.IN_CONTAINER
-
-# Get default subtitle languages based on audio preferences
-SUBTITLES_CHOICES = get_default_subtitle_languages()
 
 # Print configuration summary in development mode
 if __name__ == "__main__" or settings.DEBUG:
@@ -247,127 +296,84 @@ AUTH_ERROR_PATTERNS = [
 # === VIDEO FORMAT EXTRACTION AND ANALYSIS ===
 
 
-def _process_quality_strategy(quality_strategy: str, url: str) -> None:
+def _display_strategy_content(quality_strategy: str) -> None:
     """
-    Process the selected quality strategy and update session state with optimal profiles.
-
-    Args:
-        quality_strategy: Selected strategy ("auto_best", "best_no_fallback", etc.)
-        url: Video URL to analyze
-    """
-    if not url or not url.strip():
-        return
-
-    try:
-        # Get tmp directory from session state (set during url_analysis)
-        tmp_video_dir = st.session_state.get("tmp_video_dir")
-        if not tmp_video_dir:
-            # Reset profiles to empty to avoid showing stale data
-            st.session_state.optimal_format_profiles = []
-            st.session_state.chosen_format_profiles = []
-            return
-
-        # Check if we already have a cached download - skip format probing if so
-        existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
-        if existing_video_tracks:
-            safe_push_log(f"✅ Found cached video: {existing_video_tracks[0].name}")
-            safe_push_log("⚡ Skipping format probing - will reuse cached file")
-            # Set minimal session state to allow download flow to continue
-            st.session_state.optimal_format_profiles = []
-            st.session_state.chosen_format_profiles = []
-            return
-
-        # Get url_info from session state (already loaded by url_analysis)
-        url_info = st.session_state.get("url_info")
-        if not url_info:
-            # Reset profiles to empty to avoid showing stale data
-            st.session_state.optimal_format_profiles = []
-            st.session_state.chosen_format_profiles = []
-            return
-
-        # Get JSON path from session state
-        json_path_str = st.session_state.get("url_info_path")
-        if not json_path_str:
-            # Reset profiles to empty to avoid showing stale data
-            st.session_state.optimal_format_profiles = []
-            st.session_state.chosen_format_profiles = []
-            return
-
-        json_path = Path(json_path_str)
-
-        # Get optimal profiles using new strategy
-        if quality_strategy in ["auto_best", "best_no_fallback", "choose_profile"]:
-            # Load url_info to analyze audio tracks
-            language_primary = settings.LANGUAGE_PRIMARY or "en"
-            # Convert list to comma-separated string
-            languages_secondaries = (
-                ",".join(settings.LANGUAGES_SECONDARIES)
-                if settings.LANGUAGES_SECONDARIES
-                else ""
-            )
-            vo_first = settings.VO_FIRST
-
-            # Analyze audio formats
-            vo_lang, audio_formats, multiple_langs = analyze_audio_formats(
-                url_info,
-                language_primary=language_primary,
-                languages_secondaries=languages_secondaries,
-                vo_first=vo_first,
-            )
-
-            # Get optimal profiles
-            optimal_format_profiles = get_profiles_with_formats_id_to_download(
-                json_path, multiple_langs, audio_formats
-            )
-
-            st.session_state.optimal_format_profiles = optimal_format_profiles
-
-            # profiles_to_try = [{'format_id': '399+251', 'ext': 'webm', 'height': 1080, 'vcodec': 'av01.0.08M.08', 'protocol': 'https+https'}, {'format_id': '248+251', 'ext': 'webm', 'height': 1080, 'vcodec': 'vp9', 'protocol': 'https+https'}]
-
-            # Set chosen profiles based on strategy
-            if quality_strategy == "auto_best":
-                st.session_state.chosen_format_profiles = optimal_format_profiles
-            elif quality_strategy == "best_no_fallback":
-                # Only the first (best) profile
-                st.session_state.chosen_format_profiles = (
-                    optimal_format_profiles[:1] if optimal_format_profiles else []
-                )
-            # For choose_profile, chosen_format_profiles will be set by user selection
-
-        elif quality_strategy == "choose_available":
-            # Load all available formats for selection
-            available_formats = get_available_formats(url_info)
-            st.session_state.available_formats_list = available_formats
-
-    except Exception as e:
-        safe_push_log(f"❌ Error processing quality strategy: {str(e)[:100]}...")
-
-
-def _display_strategy_content(quality_strategy: str, url: str) -> None:
-    """
-    Display content specific to the selected quality strategy.
+    Display content specific to the selected quality strategy and update chosen profiles.
+    Uses pre-computed profiles from session state (set during url_analysis).
 
     Args:
         quality_strategy: Selected strategy
-        url: Video URL
     """
     st.markdown("---")
+
+    # Get pre-computed profiles from session state (computed in url_analysis)
+    optimal_format_profiles = st.session_state.get("optimal_format_profiles", [])
+    available_formats = st.session_state.get("available_formats_list", [])
+
+    # Get tmp workspace for checking individual format status
+    tmp_url_workspace = st.session_state.get("tmp_url_workspace")
+
+    # Get cached profiles once for efficient lookups (O(1) instead of O(n) per check)
+    cached_profiles = []
+    cached_format_ids = set()
+    if tmp_url_workspace:
+        cached_profiles = get_profiles_cached(
+            tmp_url_workspace, optimal_format_profiles
+        )
+        cached_format_ids = {p.get("format_id", "") for p in cached_profiles}
+
+    # Helper function to check if a specific profile is cached and completed
+    def is_profile_cached(profile: Dict) -> bool:
+        """Check if a specific profile/format is downloaded and completed."""
+        format_id = profile.get("format_id", "")
+        return format_id in cached_format_ids
+
+    # Check if ANY video is cached (for general message)
+    has_any_cached_video = len(cached_profiles) > 0
+    if has_any_cached_video:
+        safe_push_log("📦 Found cached video file(s)")
+        st.success(
+            f"✅ {len(cached_profiles)} profile(s) already downloaded and available"
+        )
+
+    safe_push_log(f"🎨 Displaying UI for strategy: {quality_strategy}")
 
     if quality_strategy == "auto_best":
         st.info(t("quality_auto_best_desc"))
 
-        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
-        if optimal_profiles:
-            st.success(t("quality_profiles_generated", count=len(optimal_profiles)))
+        # Filter profiles: only include non-cached profiles for download
+        profiles_to_download = [
+            p for p in optimal_format_profiles if not is_profile_cached(p)
+        ]
+
+        if profiles_to_download:
+            st.session_state.chosen_format_profiles = profiles_to_download
+        else:
+            # All profiles are cached
+            st.session_state.chosen_format_profiles = []
+
+        if optimal_format_profiles:
+            cached_count = len(optimal_format_profiles) - len(profiles_to_download)
+            count_msg = t(
+                "quality_profiles_generated", count=len(optimal_format_profiles)
+            )
+            if cached_count > 0:
+                count_msg += f" ({cached_count} already cached)"
+            st.success(count_msg)
 
             with st.expander(t("quality_profiles_list_title"), expanded=True):
-                for i, profile in enumerate(optimal_profiles, 1):
+                for i, profile in enumerate(optimal_format_profiles, 1):
                     height = profile.get("height", "?")
                     vcodec = profile.get("vcodec", "unknown")
                     ext = profile.get("ext", "unknown")
                     format_id = profile.get("format_id", "unknown")
 
-                    st.markdown(f"**{i}. {height}p ({vcodec}) - {ext.upper()}**")
+                    # Check if THIS specific profile is cached
+                    is_cached = is_profile_cached(profile)
+                    cache_indicator = " 📦 (cached)" if is_cached else ""
+                    st.markdown(
+                        f"**{i}. {height}p ({vcodec}) - {ext.upper()}{cache_indicator}**"
+                    )
                     st.code(f"Format ID: {format_id}", language="text")
         else:
             st.warning(t("quality_no_profiles_warning"))
@@ -375,23 +381,32 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
     elif quality_strategy == "best_no_fallback":
         st.warning(t("quality_best_no_fallback_desc"))
 
-        # Show quality downgrade setting
-        st.checkbox(
-            t("quality_refuse_downgrade"),
-            value=not settings.QUALITY_DOWNGRADE,
-            help=t("quality_refuse_downgrade_help"),
-            key="refuse_quality_downgrade_best",
-        )
+        if optimal_format_profiles:
+            best_profile = optimal_format_profiles[0]
+            is_best_cached = is_profile_cached(best_profile)
 
-        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
-        if optimal_profiles:
-            best_profile = optimal_profiles[0]
+            # Only download if not cached
+            if is_best_cached:
+                st.session_state.chosen_format_profiles = []
+            else:
+                st.session_state.chosen_format_profiles = [best_profile]
+
+            # Show quality downgrade setting (only if not cached)
+            if not is_best_cached:
+                st.checkbox(
+                    t("quality_refuse_downgrade"),
+                    value=not settings.QUALITY_DOWNGRADE,
+                    help=t("quality_refuse_downgrade_help"),
+                    key="refuse_quality_downgrade_best",
+                )
+
             height = best_profile.get("height", "?")
             vcodec = best_profile.get("vcodec", "unknown")
             ext = best_profile.get("ext", "unknown")
             format_id = best_profile.get("format_id", "unknown")
 
-            profile_str = f"{height}p ({vcodec}) - {ext.upper()}"
+            cache_indicator = " 📦 (cached)" if is_best_cached else ""
+            profile_str = f"{height}p ({vcodec}) - {ext.upper()}{cache_indicator}"
             st.success(t("quality_selected_profile", profile=profile_str))
             st.code(f"Format ID: {format_id}", language="text")
         else:
@@ -400,16 +415,19 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
     elif quality_strategy == "choose_profile":
         st.info(t("quality_choose_profile_desc"))
 
-        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
-        if optimal_profiles:
+        if optimal_format_profiles:
+            # Build profile options with individual cache indicators
             profile_options = []
-            for i, profile in enumerate(optimal_profiles):
+            for i, profile in enumerate(optimal_format_profiles):
                 height = profile.get("height", "?")
                 vcodec = profile.get("vcodec", "unknown")
                 ext = profile.get("ext", "unknown")
-                label = f"{height}p ({vcodec}) - {ext.upper()}"
+                is_cached = is_profile_cached(profile)
+                cache_indicator = " 📦 (cached)" if is_cached else ""
+                label = f"{height}p ({vcodec}) - {ext.upper()}{cache_indicator}"
                 profile_options.append(label)
 
+            # Show selectbox even if profiles are cached (user may want to re-download)
             selected_index = st.selectbox(
                 t("quality_select_profile_prompt"),
                 options=range(len(profile_options)),
@@ -419,16 +437,24 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
 
             # Update chosen profiles based on selection
             if selected_index is not None:
-                st.session_state.chosen_format_profiles = [
-                    optimal_profiles[selected_index]
-                ]
+                selected_profile = optimal_format_profiles[selected_index]
+                is_selected_cached = is_profile_cached(selected_profile)
+
+                if is_selected_cached:
+                    st.session_state.chosen_format_profiles = []
+                else:
+                    st.session_state.chosen_format_profiles = [selected_profile]
 
                 # Show selected profile details
-                selected_profile = optimal_profiles[selected_index]
                 format_id = selected_profile.get("format_id", "unknown")
-                st.success(
-                    t("quality_selected", profile=profile_options[selected_index])
-                )
+                if is_selected_cached:
+                    st.info(
+                        f"📦 Selected profile is already cached: {profile_options[selected_index]}"
+                    )
+                else:
+                    st.success(
+                        t("quality_selected", profile=profile_options[selected_index])
+                    )
                 st.code(f"Format ID: {format_id}", language="text")
         else:
             st.warning(t("quality_no_profiles_selection"))
@@ -437,14 +463,21 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
         st.info(t("quality_choose_available_desc"))
         st.warning(t("quality_choose_available_warning"))
 
-        available_formats = st.session_state.get("available_formats_list", [])
+        safe_push_log(f"📊 Available formats count: {len(available_formats)}")
+
         if available_formats:
+            # Always show selectbox - user may want to download a different format
             format_options = [t("quality_format_auto_option")]
             for fmt in available_formats:
                 format_options.append(f"{fmt['description']} - {fmt['format_id']}")
 
+            # Add cache indicator to prompt if ANY video is cached
+            prompt = t("quality_select_format_prompt")
+            if has_any_cached_video:
+                prompt += " (📦 some formats cached - will re-download if different format selected)"
+
             selected_format = st.selectbox(
-                t("quality_select_format_prompt"),
+                prompt,
                 options=format_options,
                 key="selected_available_format",
             )
@@ -452,119 +485,42 @@ def _display_strategy_content(quality_strategy: str, url: str) -> None:
             if selected_format != t("quality_format_auto_option"):
                 # Extract format_id from selection
                 format_id = selected_format.split(" - ")[-1]
-                st.success(t("quality_selected_format", format=selected_format))
 
-                # Create a profile-like dict for consistency
-                for fmt in available_formats:
-                    if fmt["format_id"] == format_id:
-                        chosen_profile = {
-                            "format_id": format_id,
-                            "height": fmt["height"],
-                            "vcodec": fmt["vcodec"],
-                            "ext": fmt["ext"],
-                            "label": f"Manual: {fmt['description']}",
-                        }
-                        st.session_state.chosen_format_profiles = [chosen_profile]
-                        break
-            else:
-                # Fallback to auto mode
-                st.session_state.chosen_format_profiles = st.session_state.get(
-                    "optimal_format_profiles", []
+                # Check if this specific format is cached
+                is_format_cached = tmp_url_workspace and is_format_completed(
+                    tmp_url_workspace, format_id
                 )
+
+                if is_format_cached:
+                    st.info(f"📦 Selected format is already cached: {selected_format}")
+                    st.session_state.chosen_format_profiles = []
+                else:
+                    st.success(t("quality_selected_format", format=selected_format))
+                    # Create a profile-like dict for consistency
+                    for fmt in available_formats:
+                        if fmt["format_id"] == format_id:
+                            chosen_profile = {
+                                "format_id": format_id,
+                                "height": fmt["height"],
+                                "vcodec": fmt["vcodec"],
+                                "ext": fmt["ext"],
+                                "label": f"Manual: {fmt['description']}",
+                            }
+                            st.session_state.chosen_format_profiles = [chosen_profile]
+                            break
+            else:
+                # Fallback to auto mode: use non-cached optimal profiles
+                if has_any_cached_video:
+                    profiles_to_download = [
+                        p for p in optimal_format_profiles if not is_profile_cached(p)
+                    ]
+                    st.session_state.chosen_format_profiles = profiles_to_download
+                else:
+                    st.session_state.chosen_format_profiles = st.session_state.get(
+                        "optimal_format_profiles", []
+                    )
         else:
             st.warning(t("quality_no_formats_selection"))
-
-
-def _get_optimal_profiles_from_json(url: str) -> List[Dict]:
-    """
-    Get optimal download profiles using get_profiles_with_formats_id_to_download().
-
-    This is a simple wrapper that calls get_profiles_with_formats_id_to_download() which now
-    returns complete profiles with all necessary fields (label, name, container, etc.).
-
-    Args:
-        url: Video URL to get profiles for
-
-    Returns:
-        List of complete profile dicts ready for download, or empty list if error
-    """
-    try:
-        # Get tmp directory and url_info from session state (set during url_analysis)
-        tmp_video_dir = st.session_state.get("tmp_video_dir")
-        url_info = st.session_state.get("url_info")
-        json_path_str = st.session_state.get("url_info_path")
-
-        if not tmp_video_dir or not url_info or not json_path_str:
-            safe_push_log("⚠️ Video info not initialized. Analyze URL first.")
-            return []
-
-        json_path = Path(json_path_str)
-        if not json_path.exists():
-            safe_push_log("⚠️ url_info.json not found, cannot use profile strategy")
-            return []
-
-        # Get language preferences from settings
-        language_primary = settings.LANGUAGE_PRIMARY or "en"
-        # Convert list to comma-separated string
-        languages_secondaries = (
-            ",".join(settings.LANGUAGES_SECONDARIES)
-            if settings.LANGUAGES_SECONDARIES
-            else ""
-        )
-        vo_first = settings.VO_FIRST
-
-        # Analyze audio formats
-        safe_push_log("🎵 Analyzing audio tracks...")
-        vo_lang, audio_formats, multiple_langs = analyze_audio_formats(
-            url_info,
-            language_primary=language_primary,
-            languages_secondaries=languages_secondaries,
-            vo_first=vo_first,
-        )
-
-        safe_push_log(f"   VO language: {vo_lang or 'unknown'}")
-        safe_push_log(f"   Audio tracks: {len(audio_formats)}")
-        safe_push_log(f"   Multi-language: {'Yes' if multiple_langs else 'No'}")
-
-        # Get optimal profiles - now returns complete profiles with all fields
-        safe_push_log("🎯 Selecting optimal video formats (AV1/VP9 priority)...")
-        optimal_profiles = get_profiles_with_formats_id_to_download(
-            str(json_path), multiple_langs, audio_formats
-        )
-
-        if not optimal_profiles:
-            safe_push_log("❌ No optimal profiles returned")
-            return []
-
-        log_title(f"✅ Found {len(optimal_profiles)} optimal profile(s)")
-
-        # Log profile details
-        for idx, profile in enumerate(optimal_profiles, 1):
-            safe_push_log("")
-            safe_push_log(f"📦 Profile {idx}: {profile.get('label', 'Unknown')}")
-            safe_push_log(f"   🆔 Format ID: {profile.get('format_id', '')}")
-            safe_push_log(f"   🎬 Video Codec: {profile.get('vcodec', 'unknown')}")
-            safe_push_log(f"   📐 Resolution: {profile.get('height', 0)}p")
-            safe_push_log(f"   📦 Extension: {profile.get('ext', 'unknown')}")
-            safe_push_log(
-                f"   📁 Output Container: {profile.get('container', 'mkv').upper()}"
-            )
-            safe_push_log(f"   🌐 Protocol: {profile.get('protocol', 'https')}")
-
-        log_title(
-            f"🎯 Will try {len(optimal_profiles)} profile(s) in order (best codec first)"
-        )
-        return optimal_profiles
-
-    except FileNotFoundError:
-        safe_push_log("⚠️ url_info.json not found for profile strategy")
-        return []
-    except Exception as e:
-        safe_push_log(f"⚠️ Error in profile strategy: {e}")
-        import traceback
-
-        safe_push_log(f"   Traceback: {traceback.format_exc()}")
-        return []
 
 
 def smart_download_with_profiles(
@@ -627,20 +583,15 @@ def smart_download_with_profiles(
     chosen_profiles = st.session_state.get("chosen_format_profiles", [])
     quality_strategy = st.session_state.get("download_quality_strategy", "auto_best")
 
-    if chosen_profiles:
-        profiles_to_try = chosen_profiles
-        safe_push_log(
-            f"✅ Using {len(profiles_to_try)} profiles from {quality_strategy} strategy"
-        )
-    else:
-        # Fallback to old method if no strategy profiles available
-        safe_push_log("⚠️ No strategy profiles found, using fallback method")
-        profiles_to_try = _get_optimal_profiles_from_json(url)
-
-    if not profiles_to_try:
+    if not chosen_profiles:
         error_msg = "No profiles available for download. Please select a quality strategy first."
         safe_push_log(f"❌ {error_msg}")
         return 1, error_msg
+
+    profiles_to_try = chosen_profiles
+    safe_push_log(
+        f"✅ Using {len(profiles_to_try)} profiles from {quality_strategy} strategy"
+    )
 
     # Update download mode and refuse_quality_downgrade based on strategy
     if quality_strategy == "auto_best":
@@ -979,7 +930,7 @@ def _execute_profile_downloads(
         format_id = profile.get("format_id", "unknown")
         filesize_approx = profile.get("filesize_approx", 0)
         add_selected_format(
-            tmp_video_dir=tmp_video_dir,
+            tmp_url_workspace=tmp_video_dir,
             video_format=format_id,
             subtitles=[f"subtitles.{lang}.srt" for lang in subs_selected],
             filesize_approx=filesize_approx,
@@ -1025,7 +976,7 @@ def _execute_profile_downloads(
         # Mark format as error in status.json
         format_id = profile.get("format_id", "unknown")
         mark_format_error(
-            tmp_video_dir=tmp_video_dir,
+            tmp_url_workspace=tmp_video_dir,
             video_format=format_id,
             error_message="Download failed - all clients exhausted",
         )
@@ -1105,7 +1056,7 @@ if "download_cancelled" not in st.session_state:
 def init_url_workspace(
     clean_url: str,
     json_output_path: Path,
-    video_tmp_dir: Path,
+    tmp_url_workspace: Path,
 ) -> Optional[Dict]:
     """
     Initialize workspace for a new URL by fetching video info and creating status files.
@@ -1120,7 +1071,7 @@ def init_url_workspace(
     Args:
         clean_url: Sanitized video URL
         json_output_path: Path where url_info.json will be saved
-        video_tmp_dir: Temporary directory for this video
+        tmp_url_workspace: Temporary workspace directory for this URL (video or playlist)
 
     Returns:
         Dict with video/playlist information or error dict
@@ -1154,10 +1105,532 @@ def init_url_workspace(
             video_id=video_id,
             title=title,
             content_type=content_type,
-            tmp_video_dir=video_tmp_dir,
+            tmp_url_workspace=tmp_url_workspace,
         )
 
     return info
+
+
+def compute_optimal_profiles(url_info: Dict, json_path: Path) -> None:
+    """
+    Compute optimal format profiles for a VIDEO (not playlist).
+    This function is called once after URL analysis to pre-calculate all profiles.
+
+    For playlists, this function does nothing as profiles are computed per video.
+
+    Args:
+        url_info: Video information from yt-dlp
+        json_path: Path to url_info.json file
+    """
+    # Only compute profiles for videos, not playlists
+    is_playlist = url_info.get("_type") == "playlist"
+    if is_playlist:
+        safe_push_log(
+            "ℹ️ Playlist detected - skipping profile computation (done per video)"
+        )
+        st.session_state.optimal_format_profiles = []
+        st.session_state.available_formats_list = []
+        return
+
+    try:
+        safe_push_log("🎯 Computing optimal format profiles...")
+
+        # Get language preferences from settings
+        language_primary = settings.LANGUAGE_PRIMARY or "en"
+        languages_secondaries = (
+            ",".join(settings.LANGUAGES_SECONDARIES)
+            if settings.LANGUAGES_SECONDARIES
+            else ""
+        )
+        vo_first = settings.VO_FIRST
+
+        # Analyze audio formats
+        safe_push_log("🎵 Analyzing audio tracks...")
+        vo_lang, audio_formats, multiple_langs = analyze_audio_formats(
+            url_info,
+            language_primary=language_primary,
+            languages_secondaries=languages_secondaries,
+            vo_first=vo_first,
+        )
+
+        safe_push_log(f"   VO language: {vo_lang or 'unknown'}")
+        safe_push_log(f"   Audio tracks: {len(audio_formats)}")
+        safe_push_log(f"   Multi-language: {'Yes' if multiple_langs else 'No'}")
+
+        # Get optimal profiles - returns complete profiles with all fields
+        safe_push_log("🎯 Selecting optimal video formats (AV1/VP9 priority)...")
+        optimal_profiles = get_profiles_with_formats_id_to_download(
+            str(json_path), multiple_langs, audio_formats
+        )
+
+        if not optimal_profiles:
+            safe_push_log("❌ No optimal profiles found")
+            st.session_state.optimal_format_profiles = []
+        else:
+            safe_push_log(f"✅ Found {len(optimal_profiles)} optimal profile(s)")
+
+            # Log profile details
+            for idx, profile in enumerate(optimal_profiles, 1):
+                safe_push_log(f"📦 Profile {idx}: {profile.get('label', 'Unknown')}")
+                safe_push_log(f"   🆔 Format ID: {profile.get('format_id', '')}")
+                safe_push_log(f"   🎬 Video Codec: {profile.get('vcodec', 'unknown')}")
+                safe_push_log(f"   📐 Resolution: {profile.get('height', 0)}p")
+
+            st.session_state.optimal_format_profiles = optimal_profiles
+
+        # Also store available formats for "choose_available" strategy
+        available_formats = get_available_formats(url_info)
+        st.session_state.available_formats_list = available_formats
+
+        safe_push_log("✅ Profile computation complete")
+
+    except Exception as e:
+        safe_push_log(f"⚠️ Error computing profiles: {str(e)}")
+        st.session_state.optimal_format_profiles = []
+        st.session_state.available_formats_list = []
+
+
+# === REUSABLE VIDEO DOWNLOAD FUNCTIONS ===
+# These functions encapsulate the video download workflow so it can be reused
+# for both single videos and videos within playlists
+
+
+def initialize_video_workspace(
+    video_url: str,
+    video_id: str,
+    video_title: str,
+    video_workspace: Path,
+) -> Tuple[Optional[Dict], bool]:
+    """
+    Initialize a video workspace with url_info.json and status.json.
+
+    This function:
+    1. Checks if url_info.json exists, loads it if available
+    2. Fetches url_info.json if it doesn't exist
+    3. Creates status.json if it doesn't exist
+    4. Computes optimal profiles for the video
+
+    Args:
+        video_url: Full URL of the video
+        video_id: Video ID
+        video_title: Video title
+        video_workspace: Path to video workspace directory
+
+    Returns:
+        Tuple[Optional[Dict], bool]: (url_info dict or None, success bool)
+    """
+    video_url_info_path = video_workspace / "url_info.json"
+    video_status_path = video_workspace / "status.json"
+
+    # Check if url_info.json already exists
+    video_url_info = None
+    if video_url_info_path.exists():
+        try:
+            import json
+
+            with open(video_url_info_path, "r", encoding="utf-8") as f:
+                video_url_info = json.load(f)
+            safe_push_log(f"📋 Using existing url_info.json for {video_title}")
+        except Exception as e:
+            safe_push_log(f"⚠️ Could not load existing url_info.json: {e}")
+
+    # If url_info.json doesn't exist, fetch it
+    if not video_url_info:
+        safe_push_log(f"📋 Fetching url_info.json for {video_title}...")
+        cookies_params = build_cookies_params_from_config()
+
+        video_url_info = build_url_info(
+            clean_url=video_url,
+            json_output_path=video_url_info_path,
+            cookies_params=cookies_params,
+            youtube_cookies_file_path=YOUTUBE_COOKIES_FILE_PATH,
+            cookies_from_browser=COOKIES_FROM_BROWSER,
+            youtube_clients=YOUTUBE_CLIENT_FALLBACKS,
+        )
+
+    if video_url_info and "error" not in video_url_info:
+        # Create status.json if it doesn't exist
+        if not video_status_path.exists():
+            create_initial_status(
+                url=video_url,
+                video_id=video_id,
+                title=video_title,
+                content_type="video",
+                tmp_url_workspace=video_workspace,
+            )
+            safe_push_log(f"📊 Created status.json for {video_title}")
+
+        # Compute optimal profiles for this video
+        compute_optimal_profiles(video_url_info, video_url_info_path)
+
+        # Copy to chosen_format_profiles for smart_download_with_profiles()
+        optimal_profiles = st.session_state.get("optimal_format_profiles", [])
+        if optimal_profiles:
+            st.session_state["chosen_format_profiles"] = optimal_profiles
+            st.session_state["download_quality_strategy"] = "auto_best"
+
+        return video_url_info, True
+    else:
+        return None, False
+
+
+def check_existing_video_file(
+    video_workspace: Path,
+    requested_format_id: Optional[str] = None,
+) -> Tuple[Optional[Path], Optional[str]]:
+    """
+    Check if a video file already exists in the workspace.
+
+    This function implements the same logic as single videos:
+    1. Checks status.json for completed format
+    2. Finds the corresponding file
+    3. Falls back to any video file if no status.json entry
+
+    Args:
+        video_workspace: Path to video workspace directory
+        requested_format_id: Optional format ID requested by user
+
+    Returns:
+        Tuple[Optional[Path], Optional[str]]: (existing_file_path or None, completed_format_id or None)
+    """
+    existing_generic_file = None
+    completed_format_id = get_first_completed_format(video_workspace)
+
+    if completed_format_id:
+        # Check if user requested a different format than what's completed
+        if requested_format_id and requested_format_id != completed_format_id:
+            safe_push_log(f"🔄 User requested different format: {requested_format_id}")
+            safe_push_log(f"   Current cached format: {completed_format_id}")
+            safe_push_log("   Will re-download with new format")
+            return None, None
+
+        # We have a completed format in status.json - find the corresponding file
+        log_title("✅ Found completed download in status")
+        safe_push_log(f"  🎯 Format ID: {completed_format_id}")
+
+        # Try to find the video file with this format ID
+        existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
+        for track in existing_video_tracks:
+            track_format_id = tmp_files.extract_format_id_from_filename(track.name)
+            if track_format_id and track_format_id in completed_format_id:
+                existing_generic_file = track
+                safe_push_log(f"  📦 Found file: {existing_generic_file.name}")
+                safe_push_log(
+                    f"  📊 Size: {existing_generic_file.stat().st_size / (1024*1024):.2f}MiB"
+                )
+                safe_push_log("  🔄 Skipping download, reusing completed file")
+                safe_push_log("")
+                return existing_generic_file, completed_format_id
+
+        if not existing_generic_file:
+            safe_push_log(
+                "  ⚠️ Status shows completed but file not found, will re-download"
+            )
+    else:
+        # Fallback: check for any generic video file (backward compatibility)
+        existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
+        existing_generic_file = (
+            existing_video_tracks[0] if existing_video_tracks else None
+        )
+
+        if existing_generic_file:
+            log_title("✅ Found cached download (legacy detection)")
+            safe_push_log(f"  📦 Existing file: {existing_generic_file.name}")
+            safe_push_log("  🔄 Skipping download, reusing cached file")
+            safe_push_log(
+                "  ℹ️  Note: No status.json entry for this file, consider updating"
+            )
+            safe_push_log("")
+
+    return existing_generic_file, completed_format_id
+
+
+def download_single_video(
+    video_url: str,
+    video_id: str,
+    video_title: str,
+    video_workspace: Path,
+    base_output: str,
+    embed_chapters: bool,
+    embed_subs: bool,
+    force_mp4: bool,
+    ytdlp_custom_args: str,
+    do_cut: bool,
+    subs_selected: List[str],
+    sb_choice: str,
+    requested_format_id: Optional[str] = None,
+    progress_placeholder=None,
+    status_placeholder=None,
+    info_placeholder=None,
+) -> Tuple[int, Optional[Path], Optional[str]]:
+    """
+    Download a single video using the full workflow.
+
+    This function:
+    1. Initializes the video workspace
+    2. Checks for existing files
+    3. Downloads if needed or reuses existing file
+    4. Returns the final file path
+
+    Args:
+        video_url: Full URL of the video
+        video_id: Video ID
+        video_title: Video title
+        video_workspace: Path to video workspace directory
+        base_output: Base output filename (without extension)
+        embed_chapters: Whether to embed chapters
+        embed_subs: Whether to embed subtitles
+        force_mp4: Whether to force MP4 container
+        ytdlp_custom_args: Custom yt-dlp arguments
+        do_cut: Whether to cut sections
+        subs_selected: List of subtitle languages
+        sb_choice: SponsorBlock choice
+        requested_format_id: Optional format ID requested by user
+        progress_placeholder: Streamlit progress placeholder
+        status_placeholder: Streamlit status placeholder
+        info_placeholder: Streamlit info placeholder
+
+    Returns:
+        Tuple[int, Optional[Path], Optional[str]]: (return_code, final_file_path, error_message)
+        return_code: 0 = success, -1 = cancelled, >0 = error
+    """
+    # Initialize workspace
+    video_url_info, success = initialize_video_workspace(
+        video_url, video_id, video_title, video_workspace
+    )
+
+    if not success:
+        error_msg = (
+            video_url_info.get("error", "Unknown error")
+            if video_url_info
+            else "Failed to fetch video info"
+        )
+        return 1, None, error_msg
+
+    # Check for existing file
+    existing_file, completed_format_id = check_existing_video_file(
+        video_workspace, requested_format_id
+    )
+
+    if existing_file:
+        safe_push_log("⚡ Skipping download - using cached file")
+
+        # Update status to completed if not already
+        if completed_format_id:
+            update_format_status(
+                tmp_url_workspace=video_workspace,
+                video_format=completed_format_id,
+                final_file=existing_file,
+            )
+
+        return 0, existing_file, None
+    else:
+        safe_push_log(f"📥 Downloading {video_title} with full workflow...")
+        ret_dl, error_msg = smart_download_with_profiles(
+            base_output=base_output,
+            tmp_video_dir=video_workspace,
+            embed_chapters=embed_chapters,
+            embed_subs=embed_subs,
+            force_mp4=force_mp4,
+            ytdlp_custom_args=ytdlp_custom_args,
+            url=video_url,
+            download_mode="auto",
+            target_profile=None,
+            refuse_quality_downgrade=False,
+            do_cut=do_cut,
+            subs_selected=subs_selected,
+            sb_choice=sb_choice,
+            progress_placeholder=progress_placeholder,
+            status_placeholder=status_placeholder,
+            info_placeholder=info_placeholder,
+        )
+
+        if ret_dl == 0:
+            # Find the final file
+            final_file = find_final_video_file(video_workspace, base_output)
+
+            # Organize files: rename to generic name and create final.{ext} (same as single videos)
+            if final_file and final_file.exists():
+                final_file = organize_downloaded_video_file(
+                    video_workspace=video_workspace,
+                    downloaded_file=final_file,
+                    base_output=base_output,
+                    subs_selected=subs_selected,
+                )
+
+            return ret_dl, final_file, None
+        else:
+            return ret_dl, None, error_msg
+
+
+def find_final_video_file(
+    video_workspace: Path,
+    base_output: str,
+) -> Optional[Path]:
+    """
+    Find the final video file after download.
+
+    This function searches for the downloaded file in multiple ways:
+    1. By base output name (what yt-dlp created)
+    2. By generic name (final.{ext})
+    3. Any video file in the workspace (fallback)
+
+    Args:
+        video_workspace: Path to video workspace directory
+        base_output: Base output filename (without extension)
+
+    Returns:
+        Optional[Path]: Path to final file or None if not found
+    """
+    final_tmp = None
+
+    # First, try to find the file by the base output name (what yt-dlp created)
+    base_output_sanitized = sanitize_filename(base_output)
+    for ext in [".mkv", ".mp4", ".webm"]:
+        potential_file = video_workspace / f"{base_output_sanitized}{ext}"
+        if potential_file.exists():
+            final_tmp = potential_file
+            safe_push_log(f"✅ Found downloaded file: {potential_file.name}")
+            break
+
+    # Check for final.{ext} (generic name)
+    if not final_tmp:
+        for ext in [".mkv", ".mp4", ".webm"]:
+            final_path = tmp_files.get_final_path(video_workspace, ext.lstrip("."))
+            if final_path.exists():
+                final_tmp = final_path
+                safe_push_log(f"✅ Found final file: {final_path.name}")
+                break
+
+    # Fallback: find any video file in the workspace
+    if not final_tmp:
+        existing_video_tracks = tmp_files.find_video_tracks(video_workspace)
+        if existing_video_tracks:
+            final_tmp = existing_video_tracks[0]
+            safe_push_log(f"✅ Found video file: {final_tmp.name}")
+
+    return final_tmp
+
+
+def organize_downloaded_video_file(
+    video_workspace: Path,
+    downloaded_file: Path,
+    base_output: str,
+    subs_selected: List[str] = None,
+) -> Path:
+    """
+    Organize downloaded video file: rename to generic name and create final.{ext}.
+
+    This function implements the same logic as single videos:
+    1. Renames downloaded file to video-{FORMAT_ID}.{ext}
+    2. Renames subtitle files to generic names
+    3. Copies video to final.{ext} for consistency
+
+    Args:
+        video_workspace: Path to video workspace directory
+        downloaded_file: Path to the downloaded video file
+        base_output: Base output filename (without extension)
+        subs_selected: List of subtitle languages (optional)
+
+    Returns:
+        Path: Path to final.{ext} file
+    """
+    import shutil
+
+    # Get format_id from session (stored during download)
+    format_id = st.session_state.get("downloaded_format_id", "unknown")
+    safe_push_log(f"  🔍 Format ID from session: {format_id}")
+
+    # Rename to generic filename with format ID: video-{FORMAT_ID}.{ext}
+    generic_name = tmp_files.get_video_track_path(
+        video_workspace, format_id, downloaded_file.suffix.lstrip(".")
+    )
+    safe_push_log(f"  🔍 Target generic name: {generic_name.name}")
+
+    # Rename video file if needed
+    if downloaded_file != generic_name:
+        try:
+            if generic_name.exists():
+                if should_remove_tmp_files():
+                    generic_name.unlink()
+                    safe_push_log(f"  🗑️ Removed existing: {generic_name.name}")
+                else:
+                    safe_push_log(
+                        f"  ⚠️ Generic file already exists: {generic_name.name}"
+                    )
+
+            safe_push_log(
+                f"  🔄 Renaming: {downloaded_file.name} → {generic_name.name}"
+            )
+            downloaded_file.rename(generic_name)
+            safe_push_log(
+                f"  ✅ Video renamed: {downloaded_file.name} → {generic_name.name}"
+            )
+
+            # Verify the file exists after rename
+            if generic_name.exists():
+                size_mb = generic_name.stat().st_size / (1024 * 1024)
+                safe_push_log(
+                    f"  ✅ Verified: {generic_name.name} exists ({size_mb:.1f} MiB)"
+                )
+            else:
+                safe_push_log(
+                    f"  ❌ ERROR: {generic_name.name} doesn't exist after rename!"
+                )
+                return downloaded_file  # Return original if rename failed
+
+            final_tmp = generic_name
+        except Exception as e:
+            safe_push_log(f"  ⚠️ Could not rename video: {str(e)}")
+            final_tmp = downloaded_file
+    else:
+        final_tmp = downloaded_file
+
+    # Rename subtitle files to generic names
+    if subs_selected:
+        for lang in subs_selected:
+            # Look for subtitle files with the original name
+            for ext in [".srt", ".vtt"]:
+                original_sub = video_workspace / f"{base_output}.{lang}{ext}"
+                if original_sub.exists():
+                    generic_sub = tmp_files.get_subtitle_path(
+                        video_workspace, lang, is_cut=False
+                    )
+                    try:
+                        if generic_sub.exists():
+                            generic_sub.unlink()
+                        original_sub.rename(generic_sub)
+                        safe_push_log(
+                            f"  ✅ Subtitle renamed: {original_sub.name} → {generic_sub.name}"
+                        )
+                    except Exception as e:
+                        safe_push_log(f"  ⚠️ Could not rename subtitle: {str(e)}")
+
+    # Copy to final.{ext} for consistency (keep original for cache reuse)
+    final_path = tmp_files.get_final_path(video_workspace, final_tmp.suffix.lstrip("."))
+
+    if final_tmp != final_path:
+        try:
+            # Remove existing final file if it exists
+            if final_path.exists():
+                if should_remove_tmp_files():
+                    final_path.unlink()
+                    safe_push_log("🗑️ Removed existing final file")
+                else:
+                    safe_push_log("🔍 Debug mode: Overwriting existing final file")
+
+            # Copy (not rename!) to final name, keeping original for cache
+            shutil.copy2(str(final_tmp), str(final_path))
+            safe_push_log(f"📦 Copied: {final_tmp.name} → {final_path.name}")
+            safe_push_log(f"💾 Kept original {final_tmp.name} for cache reuse")
+            return final_path
+        except Exception as e:
+            safe_push_log(f"⚠️ Could not copy to final, using original: {str(e)}")
+            return final_tmp
+    else:
+        # Already has final name
+        safe_push_log(f"✓ File already has final name: {final_tmp.name}")
+        return final_tmp
 
 
 def url_analysis(url: str) -> Optional[Dict]:
@@ -1167,10 +1640,11 @@ def url_analysis(url: str) -> Optional[Dict]:
 
     This function:
     1. Sanitizes URL and creates unique tmp folder
-    2. Sets all session state variables (tmp_video_dir, unique_folder_name, etc.)
+    2. Sets all session state variables (tmp_url_workspace, unique_folder_name, etc.)
     3. Checks if url_info.json exists with good integrity
     4. If exists: loads it and returns
     5. If not: fetches from yt-dlp via init_url_workspace()
+    6. For VIDEOS only: computes optimal format profiles
 
     Args:
         url: Video or playlist URL to analyze
@@ -1182,42 +1656,105 @@ def url_analysis(url: str) -> Optional[Dict]:
         return None
 
     try:
-        # Sanitize URL and create unique folder for this video
+        # Sanitize URL and create unique folder for this URL (video or playlist)
         clean_url = sanitize_url(url)
         unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
-        video_tmp_dir = TMP_DOWNLOAD_FOLDER / unique_folder_name
+        tmp_url_workspace = TMP_DOWNLOAD_FOLDER / unique_folder_name
 
         # Check if NEW_DOWNLOAD_WITHOUT_TMP_FILES is enabled (UI override or config default)
         clean_tmp_before_download = st.session_state.get(
             "new_download_without_tmp_files", settings.NEW_DOWNLOAD_WITHOUT_TMP_FILES
         )
-        if clean_tmp_before_download and video_tmp_dir.exists():
-            safe_push_log(f"🗑️ Removing tmp files for fresh download: {video_tmp_dir}")
+        if clean_tmp_before_download and tmp_url_workspace.exists():
+            safe_push_log(
+                f"🗑️ Removing tmp files for fresh download: {tmp_url_workspace}"
+            )
             import shutil
 
-            shutil.rmtree(video_tmp_dir)
+            shutil.rmtree(tmp_url_workspace)
 
-        ensure_dir(video_tmp_dir)
+        ensure_dir(tmp_url_workspace)
 
         # ALWAYS store in session state for reuse across the application
-        st.session_state["tmp_video_dir"] = video_tmp_dir
+        st.session_state["tmp_url_workspace"] = tmp_url_workspace
         st.session_state["unique_folder_name"] = unique_folder_name
         st.session_state["current_video_url"] = clean_url
 
-        # Prepare output path for JSON file in the unique video folder
-        json_output_path = video_tmp_dir / "url_info.json"
+        # Reset folder initialization flag for new URL
+        st.session_state["default_folder_initialized"] = False
+        # Reset selected destination folder when URL changes (allows re-initialization from status preferences)
+        if "selected_destination_folder" in st.session_state:
+            del st.session_state["selected_destination_folder"]
+        # Reset sync plan when URL changes
+        if "playlist_sync_plan" in st.session_state:
+            st.session_state["playlist_sync_plan"] = None
+
+        # Prepare output path for JSON file in the unique URL workspace folder
+        json_output_path = tmp_url_workspace / "url_info.json"
 
         # === CHECK IF URL_INFO.JSON ALREADY EXISTS WITH GOOD INTEGRITY ===
         url_info_is_complet, existing_info = is_url_info_complet(json_output_path)
 
         if url_info_is_complet and existing_info:
-            # Store in session state and return immediately (no download needed)
-            st.session_state["url_info"] = existing_info
-            st.session_state["url_info_path"] = str(json_output_path)
-            return existing_info
+            # Check if this is an existing playlist that needs fresh data
+            # (playlist with previous downloads should always get fresh url_info)
+            should_refresh_playlist = False
+
+            if is_playlist_info(existing_info):
+                playlist_id = existing_info.get("id", "")
+                if playlist_id:
+                    # Check if this playlist has been downloaded before (custom_title set)
+                    playlist_workspace = create_playlist_workspace(
+                        TMP_DOWNLOAD_FOLDER, playlist_id
+                    )
+                    existing_status = load_playlist_status(playlist_workspace)
+                    if (
+                        existing_status
+                        and existing_status.get("custom_title") is not None
+                    ):
+                        # This is an existing playlist - always refresh to get latest state
+                        should_refresh_playlist = True
+                        safe_push_log(
+                            "🔄 Existing playlist detected - refreshing url_info.json"
+                        )
+
+            if should_refresh_playlist:
+                # Refresh playlist data from YouTube
+                fresh_info = refresh_playlist_url_info(
+                    playlist_workspace=tmp_url_workspace,
+                    playlist_url=clean_url,
+                )
+                if fresh_info:
+                    st.session_state["url_info"] = fresh_info
+                    st.session_state["url_info_path"] = str(json_output_path)
+                    # No need to compute optimal profiles for playlists
+                    return fresh_info
+                else:
+                    # Fallback to cached data if refresh fails
+                    safe_push_log(
+                        "⚠️ Could not refresh playlist data, using cached version"
+                    )
+                    st.session_state["url_info"] = existing_info
+                    st.session_state["url_info_path"] = str(json_output_path)
+                    return existing_info
+            else:
+                # Store in session state and return immediately (no download needed)
+                st.session_state["url_info"] = existing_info
+                st.session_state["url_info_path"] = str(json_output_path)
+
+                # Compute optimal profiles for videos (not playlists) - SINGLE SOURCE OF TRUTH
+                compute_optimal_profiles(existing_info, json_output_path)
+
+                return existing_info
         else:
             # Initialize workspace and fetch video info
-            return init_url_workspace(clean_url, json_output_path, video_tmp_dir)
+            info = init_url_workspace(clean_url, json_output_path, tmp_url_workspace)
+
+            # Compute optimal profiles for videos (not playlists) - SINGLE SOURCE OF TRUTH
+            if info and "error" not in info:
+                compute_optimal_profiles(info, json_output_path)
+
+            return info
 
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}
@@ -1266,6 +1803,7 @@ def display_url_info(url_info: Dict) -> None:
         # ===== PLAYLIST INFORMATION =====
         title = url_info.get("title", "Unknown Playlist")
         uploader = url_info.get("uploader", url_info.get("channel", ""))
+        playlist_id = url_info.get("id", "")
 
         # Get playlist count
         entries_count = url_info.get("playlist_count") or len(
@@ -1291,6 +1829,16 @@ def display_url_info(url_info: Dict) -> None:
         # Render card
         st.html(render_media_card(title, info_items))
 
+        # Store playlist info in session state
+        st.session_state["is_playlist"] = True
+        st.session_state["playlist_title"] = title
+        st.session_state["playlist_id"] = playlist_id
+        st.session_state["playlist_entries"] = get_playlist_entries(url_info)
+        st.session_state["playlist_total_count"] = entries_count
+        st.session_state["playlist_channel"] = (
+            uploader  # Store channel for title pattern
+        )
+
     elif url_info.get("_type") == "video" or "duration" in url_info:
         # ===== SINGLE VIDEO INFORMATION =====
         title = url_info.get("title", "Unknown Video")
@@ -1312,6 +1860,9 @@ def display_url_info(url_info: Dict) -> None:
 
         # Render card
         st.html(render_media_card(title, info_items))
+
+        # Mark as not a playlist
+        st.session_state["is_playlist"] = False
 
     else:
         # Unknown format - not a video or playlist
@@ -1342,15 +1893,31 @@ def get_url_info_path() -> Optional[Path]:
     return None
 
 
-def get_tmp_video_dir() -> Optional[Path]:
+def get_tmp_url_workspace() -> Optional[Path]:
     """
-    Get the unique temporary directory from session state.
+    Get the unique URL workspace directory from session state.
     This directory is created during url_analysis() and stored in session.
+    It contains all temporary files for the analyzed URL (video or playlist).
 
     Returns:
-        Path to the unique temporary directory or None if not initialized
+        Path to the URL workspace directory or None if not initialized
     """
-    return st.session_state.get("tmp_video_dir")
+    return st.session_state.get("tmp_url_workspace")
+
+
+def get_tmp_video_dir() -> Optional[Path]:
+    """
+    Get the temporary video directory from session state.
+
+    For single videos: returns the URL workspace directory (same as get_tmp_url_workspace())
+    For playlists: will return the specific video's subdirectory (future implementation)
+
+    Returns:
+        Path to the video temporary directory or None if not initialized
+    """
+    # For now, tmp_video_dir is the same as tmp_url_workspace (single video case)
+    # In the future, for playlists, this will return a subdirectory
+    return st.session_state.get("tmp_url_workspace")
 
 
 def build_cookies_params() -> List[str]:
@@ -1525,7 +2092,7 @@ def parse_generic_percentage(line: str) -> Optional[float]:
 
 # URL input for main form
 # url = st.text_input(
-#     t("video_url"),
+#     t("video_or_playlist_url"),
 #     value="",
 #     help="Enter the YouTube video URL",
 #     key="main_url",
@@ -1535,20 +2102,189 @@ st.markdown("\n")
 
 # === MAIN INPUTS (OUTSIDE FORM FOR DYNAMIC BEHAVIOR) ===
 url = st.text_input(
-    t("video_url"),
+    t("video_or_playlist_url"),
     value="",
     placeholder="https://www.youtube.com/watch?v=...",
     key="main_url",
 )
 
 # Analyze URL and display information
+url_info = None
 if url and url.strip():
-    with st.spinner(t("url_analysis_spinner")):
-        url_info = url_analysis(url)
-        if url_info:
-            display_url_info(url_info)
+    # Check if URL has changed or if it's the first analysis
+    current_url_in_session = st.session_state.get("current_video_url")
+    url_info_in_session = st.session_state.get("url_info")
 
-filename = st.text_input(t("video_name"), help=t("video_name_help"))
+    # Only run analysis if URL changed or no info in session
+    if current_url_in_session != url or not url_info_in_session:
+        with st.spinner(t("url_analysis_spinner")):
+            url_info = url_analysis(url)
+            if url_info:
+                display_url_info(url_info)
+                # IMPORTANT: If yt-dlp detected a playlist (even from a watch?v=...&list=... URL),
+                # we need to update tmp_url_workspace to use the playlist workspace
+                if is_playlist_info(url_info):
+                    playlist_id = url_info.get("id", "")
+                    if playlist_id:
+                        playlist_workspace = create_playlist_workspace(
+                            TMP_DOWNLOAD_FOLDER, playlist_id
+                        )
+                        st.session_state["tmp_url_workspace"] = playlist_workspace
+                        st.session_state["unique_folder_name"] = (
+                            f"youtube-playlist-{playlist_id}"
+                        )
+    else:
+        # Reuse existing url_info from session state
+        url_info = url_info_in_session
+        display_url_info(url_info)
+
+        # Ensure tmp_url_workspace is set correctly when reusing URL
+        # For playlists, always use the playlist workspace path
+        clean_url = sanitize_url(url)
+        is_playlist = is_playlist_info(url_info)
+        if is_playlist:
+            playlist_id = url_info.get("id", "")
+            if playlist_id:
+                playlist_workspace = create_playlist_workspace(
+                    TMP_DOWNLOAD_FOLDER, playlist_id
+                )
+                # Always update to ensure we use the correct playlist workspace
+                st.session_state["tmp_url_workspace"] = playlist_workspace
+                st.session_state["unique_folder_name"] = (
+                    f"youtube-playlist-{playlist_id}"
+                )
+        elif "tmp_url_workspace" not in st.session_state or not st.session_state.get(
+            "tmp_url_workspace"
+        ):
+            # Only reconstruct for videos if not already set
+            unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
+            tmp_url_workspace = TMP_DOWNLOAD_FOLDER / unique_folder_name
+            st.session_state["tmp_url_workspace"] = tmp_url_workspace
+            st.session_state["unique_folder_name"] = unique_folder_name
+
+        # Compute optimal profiles for videos (not playlists) when reusing URL
+        # This ensures the quality selection UI displays correct profiles
+        url_info_path = st.session_state.get("url_info_path")
+        if url_info and "error" not in url_info and url_info_path:
+            json_output_path = Path(url_info_path)
+            if json_output_path.exists():
+                compute_optimal_profiles(url_info, json_output_path)
+
+# Try to get last download attempt to pre-fill fields
+default_filename = None  # Use None to distinguish "not set" from "empty string"
+default_folder = None
+last_attempt = None  # Initialize to avoid NameError
+
+tmp_url_workspace = st.session_state.get("tmp_url_workspace")
+# Check if it's a playlist - prioritize url_info from current analysis
+is_playlist_mode = False
+url_info_check = url_info if url_info else st.session_state.get("url_info", {})
+if url_info_check:
+    is_playlist_mode = is_playlist_info(url_info_check)
+    # Update session state for consistency
+    if is_playlist_mode:
+        st.session_state["is_playlist"] = True
+elif st.session_state.get("is_playlist", False):
+    # Fallback to session state if url_info not available
+    is_playlist_mode = True
+
+# For playlists, ensure we have the correct workspace even if tmp_url_workspace is not set
+if is_playlist_mode and not tmp_url_workspace:
+    # Try to construct workspace from playlist_id or URL
+    playlist_id = st.session_state.get("playlist_id")
+    if playlist_id:
+        tmp_url_workspace = create_playlist_workspace(TMP_DOWNLOAD_FOLDER, playlist_id)
+    elif url and url.strip():
+        # Fallback: construct from URL
+        clean_url = sanitize_url(url)
+        unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
+        tmp_url_workspace = TMP_DOWNLOAD_FOLDER / unique_folder_name
+    # Update session state with the workspace we found/created
+    if tmp_url_workspace:
+        st.session_state["tmp_url_workspace"] = tmp_url_workspace
+
+if tmp_url_workspace:
+    if is_playlist_mode:
+        # For playlists, use playlist-specific function
+        last_attempt = get_last_playlist_download_attempt(tmp_url_workspace)
+        if last_attempt:
+            # Use custom_title even if it's an empty string (user might have cleared it)
+            default_filename = last_attempt.get("custom_title")
+            playlist_location = last_attempt.get("playlist_location")
+            # Only set default_folder if playlist_location is not None and not empty
+            if playlist_location:
+                default_folder = playlist_location
+            # Pre-fill title_pattern if available
+            if "title_pattern" in last_attempt:
+                st.session_state["playlist_title_pattern"] = last_attempt[
+                    "title_pattern"
+                ]
+    else:
+        # For single videos, use regular function
+        last_attempt = get_last_download_attempt(tmp_url_workspace)
+        if last_attempt:
+            default_filename = last_attempt.get("custom_title")
+            video_location = last_attempt.get("video_location")
+            # Only set default_folder if video_location is not None and not empty
+            if video_location:
+                default_folder = video_location
+
+# === PLAYLIST PROGRESS DISPLAY ===
+# Show download ratio for playlists
+# Use the is_playlist_mode already determined above (don't re-check)
+# is_playlist_mode is already set from lines 2081-2090
+playlist_already_downloaded = []
+playlist_to_download = []
+
+if is_playlist_mode:
+    playlist_entries = st.session_state.get("playlist_entries", [])
+    playlist_total = st.session_state.get("playlist_total_count", 0)
+    playlist_title = st.session_state.get("playlist_title", "Playlist")
+
+    # Default filename to playlist title if not set from last attempt
+    # Use None check to distinguish "not set" from "empty string"
+    if default_filename is None:
+        default_filename = playlist_title
+    # If default_filename is empty string from last_attempt, keep it (user might have cleared it)
+    # Ensure default_filename is a string for st.text_input
+    if default_filename is None:
+        default_filename = ""
+
+    # Show playlist progress section
+    # st.markdown(f"### {t('playlist_progress_title')}")
+
+    # Check if destination folder is selected to compute progress
+    # We'll compute the ratio based on the selected destination folder
+    # For now, show the total count
+    st.info(t("playlist_videos_found", count=playlist_total))
+
+    # Display input for playlist name (instead of video name)
+    filename = st.text_input(
+        t("playlist_name"), value=default_filename or "", help=t("playlist_name_help")
+    )
+
+    # Display input for video titles pattern (playlist only)
+    # Get default from session state (pre-filled from last attempt), config, or built-in default
+    default_pattern = st.session_state.get(
+        "playlist_title_pattern",
+        settings.PLAYLIST_VIDEOS_TITLES_PATTERN or DEFAULT_PLAYLIST_TITLE_PATTERN,
+    )
+    playlist_title_pattern = st.text_input(
+        t("playlist_title_pattern"),
+        value=default_pattern,
+        help=t("playlist_title_pattern_help"),
+        key="playlist_title_pattern_input",
+    )
+    # Store in session state for use in download logic
+    st.session_state["playlist_title_pattern"] = playlist_title_pattern
+else:
+    # Regular video mode
+    # Ensure default_filename is a string for st.text_input
+    if default_filename is None:
+        default_filename = ""
+    filename = st.text_input(
+        t("video_name"), value=default_filename or "", help=t("video_name_help")
+    )
 
 # === FOLDER SELECTION ===
 # Handle cancel action - reset to root folder
@@ -1563,16 +2299,57 @@ if "folder_selection_reset" in st.session_state:
 if "folder_selectbox_key" not in st.session_state:
     st.session_state.folder_selectbox_key = 0
 
+# Initialize default folder from last attempt (only once per URL)
+if "default_folder_initialized" not in st.session_state:
+    st.session_state.default_folder_initialized = False
+
+# Reset initialization flag if URL changed (checked by comparing current URL with stored one)
+# This ensures we re-initialize when a new URL is entered
+current_url_in_state = st.session_state.get("current_video_url")
+if url and url.strip() and current_url_in_state != url:
+    st.session_state.default_folder_initialized = False
+
+# Set prefilled_folder if we have a valid default_folder and haven't initialized yet
+if (
+    tmp_url_workspace
+    and default_folder is not None
+    and default_folder != ""  # Also check for empty string
+    and not st.session_state.default_folder_initialized
+):
+    st.session_state.prefilled_folder = default_folder
+    st.session_state.default_folder_initialized = True
+
 # Reload folder list if a new folder was just created to include it in the options
 existing_subdirs = list_subdirs_recursive(
     VIDEOS_FOLDER, max_depth=2
 )  # Allow 2 levels deep
 folder_options = ["/"] + existing_subdirs + [t("create_new_folder")]
 
+# Determine default folder index
+# Priority: 1. Previously selected folder (persisted), 2. Prefilled from status preferences, 3. Root folder
+folder_index = 0  # Default to root
+
+# Check if we have a previously selected folder for this URL
+selected_folder_key = "selected_destination_folder"
+if selected_folder_key in st.session_state:
+    # Use the previously selected folder
+    selected_folder = st.session_state[selected_folder_key]
+    if selected_folder in folder_options:
+        folder_index = folder_options.index(selected_folder)
+elif "prefilled_folder" in st.session_state:
+    # Use the prefilled folder from status preferences (first time initialization)
+    prefilled = st.session_state.prefilled_folder
+    if prefilled in folder_options:
+        folder_index = folder_options.index(prefilled)
+        # Store as selected folder so it persists across reruns
+        st.session_state[selected_folder_key] = prefilled
+    # Clear the prefilled value after using it
+    del st.session_state.prefilled_folder
+
 video_subfolder = st.selectbox(
     t("destination_folder"),
     options=folder_options,
-    index=0,  # Always default to root folder when reset
+    index=folder_index,
     format_func=lambda x: (
         "📁 Root folder (/)"
         if x == "/"
@@ -1581,6 +2358,10 @@ video_subfolder = st.selectbox(
     # Dynamic key for reset
     key=f"folder_selectbox_{st.session_state.folder_selectbox_key}",
 )
+
+# Persist the selected folder for future reruns
+if video_subfolder != t("create_new_folder"):
+    st.session_state[selected_folder_key] = video_subfolder
 
 # Handle new folder creation
 if video_subfolder == t("create_new_folder"):
@@ -1676,14 +2457,308 @@ if video_subfolder == t("create_new_folder"):
 if "new_folder_created" in st.session_state:
     video_subfolder = st.session_state.new_folder_created
     del st.session_state.new_folder_created
-    st.rerun()
+
+# === FILE/PLAYLIST EXISTENCE CHECK ===
+# Check what already exists in destination
+if (
+    filename
+    and filename.strip()
+    and video_subfolder
+    and video_subfolder != t("create_new_folder")
+):
+    # Determine destination directory
+    if video_subfolder == "/":
+        check_dest_dir = VIDEOS_FOLDER
+    else:
+        check_dest_dir = VIDEOS_FOLDER / video_subfolder
+
+    if is_playlist_mode:
+        # === PLAYLIST PROGRESS CALCULATION ===
+        # Check which videos from the playlist already exist in destination
+        playlist_entries = st.session_state.get("playlist_entries", [])
+
+        if playlist_entries:
+            # For playlists, destination is a subfolder with the playlist name
+            playlist_dest_dir = check_dest_dir / sanitize_filename(filename)
+
+            # Get the title pattern for existence checking
+            check_title_pattern = st.session_state.get(
+                "playlist_title_pattern", DEFAULT_PLAYLIST_TITLE_PATTERN
+            )
+
+            playlist_already_downloaded, playlist_to_download, total = (
+                check_existing_videos_in_destination(
+                    playlist_dest_dir,
+                    playlist_entries,
+                    playlist_workspace=tmp_url_workspace,
+                    title_pattern=check_title_pattern,
+                )
+            )
+
+            # Store in session state for download logic
+            st.session_state["playlist_already_downloaded"] = (
+                playlist_already_downloaded
+            )
+            st.session_state["playlist_to_download"] = playlist_to_download
+
+            # Calculate progress metrics
+            progress_percent = get_download_progress_percent(
+                playlist_already_downloaded, playlist_to_download
+            )
+
+            # === PLAYLIST SYNCHRONIZATION (AUTOMATIC FOR EXISTING PLAYLISTS) ===
+            # Check if this playlist has been downloaded before (status.json with custom_title set)
+            playlist_id_for_sync = st.session_state.get("playlist_id", "")
+            playlist_workspace_for_sync = None
+            existing_status_for_sync = None
+            has_previous_downloads = False
+            sync_plan = None
+
+            if playlist_id_for_sync:
+                playlist_workspace_for_sync = create_playlist_workspace(
+                    TMP_DOWNLOAD_FOLDER, playlist_id_for_sync
+                )
+                existing_status_for_sync = load_playlist_status(
+                    playlist_workspace_for_sync
+                )
+                # Only consider it as "existing" if custom_title has been set
+                if existing_status_for_sync:
+                    has_previous_downloads = (
+                        existing_status_for_sync.get("custom_title") is not None
+                    )
+
+            # For existing playlists, calculate sync plan automatically
+            if existing_status_for_sync and has_previous_downloads:
+                # Get saved preferences from status.json
+                saved_location = existing_status_for_sync.get("playlist_location", "/")
+                saved_pattern = existing_status_for_sync.get(
+                    "title_pattern",
+                    settings.PLAYLIST_VIDEOS_TITLES_PATTERN
+                    or DEFAULT_PLAYLIST_TITLE_PATTERN,
+                )
+
+                # Get current UI values
+                current_location = "/"
+                if (
+                    video_subfolder
+                    and video_subfolder != "/"
+                    and video_subfolder != t("create_new_folder")
+                ):
+                    current_location = video_subfolder
+
+                current_pattern = st.session_state.get(
+                    "playlist_title_pattern",
+                    settings.PLAYLIST_VIDEOS_TITLES_PATTERN
+                    or DEFAULT_PLAYLIST_TITLE_PATTERN,
+                )
+
+                # Compute sync plan automatically
+                new_url_info = st.session_state.get("url_info", {})
+                keep_old_videos_val = settings.PLAYLIST_KEEP_OLD_VIDEOS
+
+                sync_plan = sync_playlist(
+                    playlist_workspace=playlist_workspace_for_sync,
+                    dest_dir=playlist_dest_dir,
+                    new_url_info=new_url_info,
+                    new_location=current_location,
+                    new_pattern=current_pattern,
+                    dry_run=True,
+                    keep_old_videos=keep_old_videos_val,
+                )
+
+                # Store sync plan in session state
+                st.session_state["playlist_sync_plan"] = sync_plan
+                st.session_state["playlist_sync_dest"] = playlist_dest_dir
+                st.session_state["playlist_sync_location"] = current_location
+                st.session_state["playlist_sync_pattern"] = current_pattern
+                st.session_state["playlist_workspace_for_sync"] = (
+                    playlist_workspace_for_sync
+                )
+
+            # === DISPLAY STATUS AND CHANGES ===
+            if sync_plan and sync_plan.has_non_download_changes:
+                # Show what changes are pending (excluding download-only)
+                changes_lines = []
+
+                if sync_plan.videos_to_rename:
+                    changes_lines.append(
+                        t(
+                            "playlist_changes_rename",
+                            count=len(sync_plan.videos_to_rename),
+                        )
+                    )
+                if sync_plan.videos_to_download:
+                    changes_lines.append(
+                        t(
+                            "playlist_changes_download",
+                            count=len(sync_plan.videos_to_download),
+                        )
+                    )
+                if sync_plan.videos_to_relocate:
+                    changes_lines.append(
+                        t(
+                            "playlist_changes_relocate",
+                            count=len(sync_plan.videos_to_relocate),
+                        )
+                    )
+                if sync_plan.videos_to_archive:
+                    changes_lines.append(
+                        t(
+                            "playlist_changes_archive",
+                            count=len(sync_plan.videos_to_archive),
+                        )
+                    )
+                if sync_plan.videos_to_delete:
+                    changes_lines.append(
+                        t(
+                            "playlist_changes_delete",
+                            count=len(sync_plan.videos_to_delete),
+                        )
+                    )
+
+                # Show progress bar
+                st.progress(
+                    progress_percent / 100.0,
+                    text=t(
+                        "playlist_ratio",
+                        downloaded=len(playlist_already_downloaded),
+                        total=total,
+                    ),
+                )
+
+                # Show changes summary
+                st.warning(
+                    t("playlist_changes_summary") + "\n\n" + "\n\n".join(changes_lines)
+                )
+
+                # Show details in expander
+                with st.expander(
+                    t("playlist_sync_details", fallback="View detailed changes")
+                ):
+                    playlist_channel = st.session_state.get("playlist_channel", "")
+                    st.markdown(
+                        format_sync_plan_details(sync_plan, channel=playlist_channel)
+                    )
+
+                # Keep old videos option
+                keep_old_videos_checkbox = st.checkbox(
+                    t("playlist_keep_old_videos"),
+                    value=settings.PLAYLIST_KEEP_OLD_VIDEOS,
+                    help=t("playlist_keep_old_videos_help"),
+                    key="playlist_keep_old_videos_checkbox",
+                )
+                st.session_state["playlist_keep_old_videos"] = keep_old_videos_checkbox
+
+                # Apply button
+                apply_changes_clicked = st.button(
+                    t("playlist_apply_changes", fallback="✅ Apply Changes"),
+                    help=t(
+                        "playlist_apply_changes_help",
+                        fallback="Apply all pending synchronization changes",
+                    ),
+                    type="primary",
+                    key="apply_sync_btn",
+                )
+
+                if apply_changes_clicked:
+                    with st.spinner(
+                        t(
+                            "playlist_applying_sync",
+                            fallback="Applying synchronization...",
+                        )
+                    ):
+                        # Get keep_old_videos preference from checkbox
+                        keep_old_videos_pref = st.session_state.get(
+                            "playlist_keep_old_videos",
+                            settings.PLAYLIST_KEEP_OLD_VIDEOS,
+                        )
+
+                        success = apply_sync_plan(
+                            plan=sync_plan,
+                            playlist_workspace=playlist_workspace_for_sync,
+                            dest_dir=playlist_dest_dir,
+                            new_location=current_location,
+                            new_pattern=current_pattern,
+                            new_url_info=new_url_info,
+                            keep_old_videos=keep_old_videos_pref,
+                        )
+
+                        if success:
+                            st.success(
+                                t(
+                                    "playlist_sync_success",
+                                    fallback="✅ Synchronization completed successfully!",
+                                )
+                            )
+                            # Clear sync plan and reload
+                            st.session_state["playlist_sync_plan"] = None
+                            st.rerun()
+                        else:
+                            st.error(
+                                t(
+                                    "playlist_sync_failed",
+                                    fallback="❌ Synchronization failed. Check logs for details.",
+                                )
+                            )
+            elif len(playlist_to_download) == 0:
+                # No changes and nothing to download - fully up to date
+                st.success(
+                    t(
+                        "playlist_already_up_to_date",
+                        fallback="✅ Playlist is already up to date!",
+                    )
+                )
+            else:
+                # Show progress bar and download count
+                st.progress(
+                    progress_percent / 100.0,
+                    text=t(
+                        "playlist_ratio",
+                        downloaded=len(playlist_already_downloaded),
+                        total=total,
+                    ),
+                )
+
+                # Show count of videos to download
+                st.info(t("playlist_to_download", count=len(playlist_to_download)))
+
+    else:
+        # === SINGLE VIDEO FILE EXISTENCE WARNING ===
+        # Check for existing files with all common video extensions
+        existing_files = []
+        for ext in [".mkv", ".mp4", ".webm", ".avi", ".mov"]:
+            potential_file = check_dest_dir / f"{filename}{ext}"
+            if potential_file.exists():
+                existing_files.append(potential_file)
+
+        if existing_files:
+            # File already exists - show warning
+            existing_file = existing_files[0]
+            file_size_mb = existing_file.stat().st_size / (1024 * 1024)
+
+            if settings.ALLOW_OVERWRITE_EXISTING_VIDEO:
+                st.warning(
+                    f"⚠️ **File already exists:** `{existing_file.name}`\n\n"
+                    f"📊 Size: {file_size_mb:.2f} MiB\n\n"
+                    f"🔄 **Overwrite mode enabled** (ALLOW_OVERWRITE_EXISTING_VIDEO=true)\n\n"
+                    f"The existing file will be replaced if you proceed with the download."
+                )
+            else:
+                st.error(
+                    f"❌ **File already exists:** `{existing_file.name}`\n\n"
+                    f"📊 Size: {file_size_mb:.2f} MiB\n\n"
+                    f"🛡️ **Protection active:** ALLOW_OVERWRITE_EXISTING_VIDEO=false\n\n"
+                    f"Download will be skipped to protect the existing file.\n\n"
+                    f"💡 To allow overwrites, set `ALLOW_OVERWRITE_EXISTING_VIDEO=true` in your `.env` file."
+                )
 
 # subtitles multiselect from env
 # Default subtitles are determined by audio language preferences (LANGUAGE_PRIMARY, LANGUAGES_SECONDARIES)
+default_subtitle_languages = get_default_subtitle_languages()
 subs_selected = st.multiselect(
     t("subtitles_to_embed"),
-    options=SUBTITLES_CHOICES,
-    default=SUBTITLES_CHOICES,  # Pre-select subtitles based on audio preferences
+    options=default_subtitle_languages,
+    default=default_subtitle_languages,  # Pre-select subtitles based on audio preferences
     help=t("subtitles_help"),
 )
 
@@ -1984,13 +3059,8 @@ with st.expander(f"{t('quality_title')}", expanded=False):
         horizontal=False,
     )
 
-    # Process strategy selection and update profiles
-    if url and url.strip():
-        clean_url = sanitize_url(url)
-        _process_quality_strategy(quality_strategy, clean_url)
-
-    # Display strategy-specific content
-    _display_strategy_content(quality_strategy, url)
+    # Display strategy-specific content (also sets chosen_format_profiles)
+    _display_strategy_content(quality_strategy)
 
     # Store final configuration in session state for download
     st.session_state["download_quality_strategy"] = quality_strategy
@@ -2254,14 +3324,65 @@ st.markdown("\n")
 st.markdown("\n")
 
 # Create a centered, prominent download button
+# Use different label for playlists vs single videos
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    submitted = st.button(
-        f"🎬 &nbsp; {t('download_button')}",
-        type="primary",
-        use_container_width=True,
-        help=t("download_button_help"),
-    )
+    if is_playlist_mode:
+        # Check if playlist has pending sync changes or is up to date
+        playlist_to_download_list = st.session_state.get("playlist_to_download", [])
+        sync_plan_for_btn = st.session_state.get("playlist_sync_plan")
+
+        # Determine button state based on sync plan
+        # Only consider non-download changes as blocking
+        has_pending_sync_changes = (
+            sync_plan_for_btn is not None and sync_plan_for_btn.has_non_download_changes
+        )
+        playlist_is_up_to_date = (
+            len(playlist_to_download_list) == 0 and not has_pending_sync_changes
+        )
+
+        if playlist_is_up_to_date:
+            # Playlist is completely up to date - button disabled (message already shown above)
+            submitted = st.button(
+                f"{t('playlist_download_button')}",
+                type="secondary",
+                use_container_width=True,
+                help=t(
+                    "playlist_already_up_to_date",
+                    fallback="All videos are already downloaded.",
+                ),
+                disabled=True,
+            )
+        elif has_pending_sync_changes:
+            # Has changes to apply first - show warning
+            st.warning(
+                t(
+                    "playlist_sync_required",
+                    fallback="⚠️ Please apply pending changes first",
+                )
+            )
+            submitted = st.button(
+                f"{t('playlist_download_button')}",
+                type="secondary",
+                use_container_width=True,
+                help=t("playlist_sync_required"),
+                disabled=True,
+            )
+        else:
+            # Ready to download
+            submitted = st.button(
+                f"{t('playlist_download_button')}",
+                type="primary",
+                use_container_width=True,
+                help=t("playlist_download_help"),
+            )
+    else:
+        submitted = st.button(
+            f"{t('download_button')}",
+            type="primary",
+            use_container_width=True,
+            help=t("download_button_help"),
+        )
 
 st.markdown("\n")
 
@@ -2767,6 +3888,288 @@ if submitted:
 
     push_log(f"📁 Destination folder: {dest_dir}")
 
+    # === PLAYLIST DOWNLOAD MODE ===
+    if is_playlist_mode:
+        playlist_name = filename or st.session_state.get("playlist_title", "Playlist")
+        playlist_id = st.session_state.get("playlist_id", "unknown")
+        playlist_to_download = st.session_state.get("playlist_to_download", [])
+        playlist_entries = st.session_state.get("playlist_entries", [])
+
+        if not playlist_to_download:
+            st.success(t("playlist_all_downloaded"))
+            st.session_state.download_finished = True
+            st.stop()
+
+        total_videos = len(playlist_entries)
+        videos_to_dl = len(playlist_to_download)
+
+        log_title(f"📋 PLAYLIST DOWNLOAD: {playlist_name}")
+        push_log(f"📊 {videos_to_dl} videos to download out of {total_videos}")
+        push_log("")
+
+        # Create playlist workspace
+        playlist_workspace = create_playlist_workspace(TMP_DOWNLOAD_FOLDER, playlist_id)
+        push_log(f"🔧 Playlist workspace: {playlist_workspace}")
+
+        # Create playlist destination folder
+        playlist_dest = dest_dir / sanitize_filename(playlist_name)
+        ensure_dir(playlist_dest)
+        push_log(f"📁 Playlist destination: {playlist_dest}")
+
+        # Ensure url_info.json exists in playlist workspace
+        url_info = st.session_state.get("url_info", {})
+        url_info_path = st.session_state.get("url_info_path")
+        playlist_url_info_path = playlist_workspace / "url_info.json"
+
+        if url_info_path and Path(url_info_path).exists():
+            # Copy url_info.json to playlist workspace if it doesn't exist
+            if not playlist_url_info_path.exists():
+                import shutil
+
+                shutil.copy2(url_info_path, playlist_url_info_path)
+                push_log("📋 Copied url_info.json to playlist workspace")
+        elif url_info and "error" not in url_info:
+            # Save url_info.json if we have it but no file exists
+            import json
+
+            with open(playlist_url_info_path, "w", encoding="utf-8") as f:
+                json.dump(url_info, f, indent=2, ensure_ascii=False)
+            push_log("📋 Saved url_info.json to playlist workspace")
+
+        # Create or load playlist status
+        existing_status = load_playlist_status(playlist_workspace)
+        if not existing_status:
+            create_playlist_status(
+                playlist_workspace=playlist_workspace,
+                url=url,
+                playlist_id=playlist_id,
+                playlist_title=playlist_name,
+                entries=playlist_entries,
+            )
+        else:
+            # Update existing status with any new entries that might be missing
+            videos_status = existing_status.get("videos", {})
+            for entry in playlist_entries:
+                video_id = entry.get("id", "")
+                if video_id and video_id not in videos_status:
+                    # Add missing video entry
+                    videos_status[video_id] = {
+                        "title": entry.get("title", "Unknown"),
+                        "url": entry.get("url", ""),
+                        "status": "pending",
+                        "downloaded_at": None,
+                        "error": None,
+                    }
+            # Save updated status
+            save_playlist_status(playlist_workspace, existing_status)
+
+        # Record download attempt
+        # Get title_pattern from session state (set in UI)
+        title_pattern = st.session_state.get(
+            "playlist_title_pattern", DEFAULT_PLAYLIST_TITLE_PATTERN
+        )
+        add_playlist_download_attempt(
+            playlist_workspace=playlist_workspace,
+            custom_title=playlist_name,
+            playlist_location=video_subfolder,
+            title_pattern=title_pattern,
+        )
+
+        # Mark already downloaded videos as skipped
+        playlist_already_downloaded = st.session_state.get(
+            "playlist_already_downloaded", []
+        )
+        for entry in playlist_already_downloaded:
+            video_id = entry.get("id", "")
+            if video_id:
+                mark_video_as_skipped(playlist_workspace, video_id)
+
+        # Download each video in the playlist
+        initial_completed_count = len(playlist_already_downloaded)
+        completed_count = initial_completed_count
+        failed_count = 0
+
+        # Get the title pattern from session state
+        title_pattern = st.session_state.get(
+            "playlist_title_pattern", DEFAULT_PLAYLIST_TITLE_PATTERN
+        )
+
+        for idx, entry in enumerate(playlist_to_download, 1):
+            video_id = entry.get("id", "")
+            video_title = entry.get("title", f"Video {idx}")
+            video_url = entry.get("url", "")
+            # Get playlist index (1-based position in original playlist)
+            playlist_index = entry.get("playlist_index", idx)
+
+            if not video_url and video_id:
+                video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+            downloads_total = max(videos_to_dl, 1)
+            session_current = idx
+            playlist_position = playlist_index or (initial_completed_count + idx)
+            playlist_note = ""
+            if total_videos:
+                playlist_note = t(
+                    "playlist_position_note",
+                    current=playlist_position,
+                    total=total_videos,
+                )
+
+            push_log("")
+            download_message = t(
+                "playlist_downloading_video",
+                current=session_current,
+                total=videos_to_dl,
+                title=video_title,
+            )
+            log_title(download_message)
+            if playlist_note:
+                push_log(playlist_note)
+
+            # Update status
+            update_video_status_in_playlist(playlist_workspace, video_id, "downloading")
+            status_message = download_message
+            if playlist_note:
+                status_message = f"{download_message}\n{playlist_note}"
+            status_placeholder.info(status_message)
+
+            # Update progress
+            raw_progress = (session_current - 1) / downloads_total
+            progress_percent = min(max(raw_progress, 0.0), 1.0)
+            progress_text = f"{session_current}/{videos_to_dl}"
+            if total_videos and playlist_position:
+                progress_text += f" | {playlist_position}/{total_videos}"
+            progress_placeholder.progress(progress_percent, text=progress_text)
+
+            # Create video workspace within playlist
+            video_workspace = create_video_workspace_in_playlist(
+                playlist_workspace, video_id
+            )
+
+            # Use the reusable video download function (same as single videos)
+            base_output = sanitize_filename(video_title)
+            do_cut_video = False  # No cutting for individual playlist videos
+            subs_selected_video = subs_selected  # Use playlist subtitle settings
+            force_mp4_video = False
+            ytdlp_custom_args_video = st.session_state.get("ytdlp_custom_args", "")
+
+            # Download the video using the reusable function
+            ret_dl, final_tmp, error_msg = download_single_video(
+                video_url=video_url,
+                video_id=video_id,
+                video_title=video_title,
+                video_workspace=video_workspace,
+                base_output=base_output,
+                embed_chapters=embed_chapters,
+                embed_subs=embed_subs,
+                force_mp4=force_mp4_video,
+                ytdlp_custom_args=ytdlp_custom_args_video,
+                do_cut=do_cut_video,
+                subs_selected=subs_selected_video,
+                sb_choice=sb_choice,
+                requested_format_id=None,  # Auto mode for playlists
+                progress_placeholder=progress_placeholder,
+                status_placeholder=status_placeholder,
+                info_placeholder=info_placeholder,
+            )
+
+            # Handle cancellation
+            if ret_dl == -1:
+                push_log("⚠️ Download cancelled by user")
+                st.session_state.download_finished = True
+                st.stop()
+
+            # Process result
+            if ret_dl == 0 and final_tmp and final_tmp.exists():
+                # Render the final filename using the pattern
+                ext = final_tmp.suffix.lstrip(".")  # Remove leading dot
+                playlist_channel = st.session_state.get("playlist_channel", "")
+                resolved_title = render_title(
+                    title_pattern,
+                    i=playlist_index,
+                    title=video_title,
+                    video_id=video_id,
+                    ext=ext,
+                    total=total_videos,
+                    channel=playlist_channel,
+                )
+
+                # Copy to playlist destination with rendered title
+                dest_file = playlist_dest / resolved_title
+                import shutil
+
+                shutil.copy2(str(final_tmp), str(dest_file))
+                push_log(f"✅ Copied to destination: {dest_file.name}")
+
+                # Update playlist status to mark video as completed
+                # Include pattern info for future reference
+                update_video_status_in_playlist(
+                    playlist_workspace,
+                    video_id,
+                    "completed",
+                    extra_data={
+                        "title_pattern": title_pattern,
+                        "resolved_title": resolved_title,
+                        "playlist_index": playlist_index,
+                    },
+                )
+                push_log(
+                    t(
+                        "playlist_video_completed",
+                        current=session_current,
+                        total=videos_to_dl,
+                        title=video_title,
+                    )
+                )
+                completed_count += 1
+            else:
+                # Download failed or file not found
+                error_msg_final = error_msg or "No file found after download"
+                update_video_status_in_playlist(
+                    playlist_workspace, video_id, "failed", error_msg_final
+                )
+                push_log(
+                    t(
+                        "playlist_video_failed",
+                        current=session_current,
+                        total=videos_to_dl,
+                        title=video_title,
+                    )
+                )
+                failed_count += 1
+
+        # Final summary
+        push_log("")
+        log_title("📊 PLAYLIST DOWNLOAD COMPLETE")
+        push_log(
+            t(
+                "playlist_download_complete",
+                completed=completed_count,
+                total=total_videos,
+            )
+        )
+        if failed_count > 0:
+            push_log(f"⚠️ {failed_count} video(s) failed")
+
+        # Final progress
+        progress_placeholder.progress(1.0, text=t("status_completed"))
+        status_placeholder.success(
+            t(
+                "playlist_copy_complete",
+                copied=completed_count - len(playlist_already_downloaded),
+                folder=playlist_name,
+            )
+        )
+
+        # Trigger media-server integrations
+        post_download_actions(safe_push_log, log_title)
+
+        st.toast(t("toast_download_completed"), icon="✅")
+        st.session_state.download_finished = True
+        st.stop()
+
+    # === SINGLE VIDEO DOWNLOAD MODE (existing logic continues below) ===
+
     # Check if video already exists in destination (safety check)
     if filename:
         # Check all common video extensions
@@ -2806,18 +4209,22 @@ if submitted:
     clean_url = sanitize_url(url)
 
     # Get unique temporary folder from session state (set during url_analysis)
-    # This ensures each video has its own isolated workspace
-    tmp_video_dir = st.session_state.get("tmp_video_dir")
+    # This ensures each URL (video/playlist) has its own isolated workspace
+    tmp_url_workspace = st.session_state.get("tmp_url_workspace")
     unique_folder_name = st.session_state.get("unique_folder_name", "unknown")
 
-    if not tmp_video_dir:
+    if not tmp_url_workspace:
         st.error("❌ Video workspace not initialized. Please re-enter the URL.")
         st.stop()
 
-    # All temporary files are written to the root of the unique video folder
+    # For now, tmp_video_dir points to the same location as tmp_url_workspace
+    # In the future, for playlists, each video will have its own subdirectory within tmp_url_workspace
+    tmp_video_dir = tmp_url_workspace
+
+    # All temporary files are written to the root of the unique URL workspace folder
     # The video_subfolder is only used when copying the final file to destination
-    push_log(f"🔧 Unique video workspace: {unique_folder_name}")
-    push_log(t("log_temp_download_folder", folder=tmp_video_dir))
+    push_log(f"🔧 Unique URL workspace: {unique_folder_name}")
+    push_log(t("log_temp_download_folder", folder=tmp_url_workspace))
 
     # Setup cookies for yt-dlp operations
     cookies_part = build_cookies_params()
@@ -2828,6 +4235,20 @@ if submitted:
 
     base_output = filename  # without extension
 
+    # Get requested format ID from chosen profiles (if user selected a specific format)
+    requested_format_id = None
+    chosen_format_profiles = st.session_state.get("chosen_format_profiles", [])
+    if chosen_format_profiles:
+        requested_format_id = chosen_format_profiles[0].get("format_id")
+
+    # Record this download attempt in status.json
+    add_download_attempt(
+        tmp_url_workspace=tmp_url_workspace,
+        custom_title=filename,
+        video_location=video_subfolder,
+        requested_format_id=requested_format_id,
+    )
+
     # Log download strategy
     push_log("")
     log_title("📥 Download Strategy")
@@ -2836,6 +4257,8 @@ if submitted:
     push_log("  3️⃣  Skip if generic files exist (resume support)")
     push_log("")
     push_log(f"📝 Target filename: {base_output}")
+    if requested_format_id:
+        push_log(f"🎯 Requested format: {requested_format_id}")
 
     # Check if a completed download already exists (status.json verification)
     # Priority: 1) Check status.json for completed format 2) Fallback to generic file search
@@ -2843,26 +4266,36 @@ if submitted:
     completed_format_id = get_first_completed_format(tmp_video_dir)
 
     if completed_format_id:
-        # We have a completed format in status.json - find the corresponding file
-        log_title("✅ Found completed download in status")
-        push_log(f"  🎯 Format ID: {completed_format_id}")
+        # Check if user requested a different format than what's completed
+        if requested_format_id and requested_format_id != completed_format_id:
+            push_log(f"🔄 User requested different format: {requested_format_id}")
+            push_log(f"   Current cached format: {completed_format_id}")
+            push_log("   Will re-download with new format")
+            completed_format_id = None  # Force re-download
+            existing_generic_file = None
+        else:
+            # We have a completed format in status.json - find the corresponding file
+            log_title("✅ Found completed download in status")
+            push_log(f"  🎯 Format ID: {completed_format_id}")
 
-        # Try to find the video file with this format ID
-        existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
-        for track in existing_video_tracks:
-            track_format_id = tmp_files.extract_format_id_from_filename(track.name)
-            if track_format_id and track_format_id in completed_format_id:
-                existing_generic_file = track
-                push_log(f"  📦 Found file: {existing_generic_file.name}")
+            # Try to find the video file with this format ID
+            existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
+            for track in existing_video_tracks:
+                track_format_id = tmp_files.extract_format_id_from_filename(track.name)
+                if track_format_id and track_format_id in completed_format_id:
+                    existing_generic_file = track
+                    push_log(f"  📦 Found file: {existing_generic_file.name}")
+                    push_log(
+                        f"  📊 Size: {existing_generic_file.stat().st_size / (1024*1024):.2f}MiB"
+                    )
+                    push_log("  🔄 Skipping download, reusing completed file")
+                    push_log("")
+                    break
+
+            if not existing_generic_file:
                 push_log(
-                    f"  📊 Size: {existing_generic_file.stat().st_size / (1024*1024):.2f}MiB"
+                    "  ⚠️ Status shows completed but file not found, will re-download"
                 )
-                push_log("  🔄 Skipping download, reusing completed file")
-                push_log("")
-                break
-
-        if not existing_generic_file:
-            push_log("  ⚠️ Status shows completed but file not found, will re-download")
     else:
         # Fallback: check for any generic video file (backward compatibility)
         existing_video_tracks = tmp_files.find_video_tracks(tmp_video_dir)
@@ -3384,8 +4817,51 @@ if submitted:
             # Get original title for preservation in album field
             original_title = get_video_title(clean_url, cookies_part)
 
-            # Apply custom metadata with user title
-            if not customize_video_metadata(final_source, filename, original_title):
+            # Extract video ID from URL
+            video_id = video_id_from_url(clean_url)
+
+            # Extract source platform from URL
+            from app.medias_utils import get_source_from_url
+
+            source = get_source_from_url(clean_url)
+
+            # Get playlist ID if in playlist mode
+            playlist_id = None
+            if is_playlist_mode:
+                playlist_id = st.session_state.get("playlist_id")
+
+            # Get uploader/channel name from url_info.json
+            uploader = None
+            try:
+                url_info_path = tmp_video_dir / "url_info.json"
+                if url_info_path.exists():
+                    from app.url_utils import load_url_info_from_file
+
+                    url_info_data = load_url_info_from_file(url_info_path)
+                    if url_info_data:
+                        uploader = url_info_data.get(
+                            "uploader", url_info_data.get("channel", "")
+                        )
+            except Exception as e:
+                push_log(f"⚠️ Could not get uploader from url_info: {e}")
+
+            # Log metadata information for debugging
+            push_log(
+                f"📝 Metadata to embed: video_id={video_id}, source={source}, playlist_id={playlist_id}, uploader={uploader}"
+            )
+
+            # Apply custom metadata with all available information
+            if not customize_video_metadata(
+                final_source,
+                filename,
+                original_title,
+                video_id,
+                source=source,
+                playlist_id=playlist_id,
+                webpage_url=clean_url,
+                duration=None,  # Will be read from file
+                uploader=uploader,
+            ):
                 push_log("⚠️ Metadata customization failed, using original metadata")
             else:
                 # Measure file size after metadata customization
@@ -3491,7 +4967,7 @@ if submitted:
         # Update status.json - verify file and mark as completed or incomplete
         format_id = st.session_state.get("downloaded_format_id", "unknown")
         update_format_status(
-            tmp_video_dir=tmp_video_dir,
+            tmp_url_workspace=tmp_video_dir,
             video_format=format_id,
             final_file=final_source,  # Verify the file in tmp (before copy)
         )

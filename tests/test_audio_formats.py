@@ -217,7 +217,9 @@ class TestMultiLanguageVideo:
 
         # Assertions
         assert vo_lang in ["en-US", "en"], f"VO should still be detected: {vo_lang}"
-        assert len(ordered_audios) >= 4, "Should have at least fr + en + es + de"
+        # With vo_first=False and en not in preferences, we get: fr, es, de (3 tracks)
+        # VO (en) is NOT included since it's not in language preferences
+        assert len(ordered_audios) == 3, "Should have fr + es + de (without en)"
         assert (
             multiple_langs is True
         ), "Multi-lang video should have multiple_langs=True"
