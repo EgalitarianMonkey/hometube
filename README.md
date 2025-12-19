@@ -30,7 +30,7 @@ Download, process, and organize ads-free best-quality videos at Home.
 <!-- ## 🎯 What is HomeTube? -->
 
 
-🎬 HomeTube is a simple web UI for downloading single videos from the internet with the highest quality available and moving them to specific local locations automatically managed and integrated by media server such as Plex or Jellyfin.
+🎬 HomeTube is a simple web UI for downloading single videos and playlists from the internet with the highest quality available and moving them to specific local locations automatically managed and integrated by media server such as Plex or Jellyfin.
 
 A simple friendly solution for easily integrating preferred videos from Youtube and others platforms to local media server:
 
@@ -41,12 +41,13 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 - **🚫 Ad-Free Content**: Block natively all videos' ads and sponsors
 - **🏆 Best Quality Control**: Advanced best videos quality download strategy or manual override
 - **🎬 Media Server Ready**: Download best quality videos with explicit name and location directly in your HomeLab media server structure and get automatic watch experience on Plex, Jellyfin, Emby or even on your PC
+- **📋 Intelligent Playlist Sync**: Download and synchronize playlists with resilient tracking - local library stays perfectly in sync with source
 - **📱 Network Access**: Web interface videos download accessible from any device on your network
 - **🎯 One-Click Downloads**: Paste URL → Get perfectly organized video
 - **🔐 Cookies Authentication**: Essential for reliable downloads - unlocks restricted content and prevents signature errors
 - **🎬 Advanced Processing**: Cut clips, embed subtitles, convert formats
 - **⚙️ Advanced Configurations**: Organized advanced options including any custom yt-dlp arguments (proxy, max-filesize, etc.)
-- **🎥 Video Sources**: **YouTube**, Reddit, Vimeo, Dailymotion, TikTok, Twitch, Facebook, Instagra, etc. [See complete list (1800+)](docs/supported-platforms.md)
+- **🎥 Video Sources**: **YouTube**, Reddit, Vimeo, Dailymotion, TikTok, Twitch, Facebook, Instagram, etc. [See complete list (1800+)](docs/supported-platforms.md)
 
 
 <!-- ## 🏠 **HomeLab Integration**
@@ -206,6 +207,48 @@ HomeTube uses **intelligent quality detection** that analyzes each video and aut
 - **💾 Storage Optimization**: Duplicate detection and space management
 
 [Learn more about download features](docs/usage.md#-basic-video-download).
+
+### 📋 Intelligent Playlist Management
+
+**Powerful playlist synchronization** with resilient tracking and perfect source fidelity:
+
+**🔄 Smart Synchronization:**
+- **📡 Source of Truth**: YouTube playlist is always the reference - local library stays perfectly synchronized
+- **🔄 Auto-Refresh**: Playlist metadata automatically refreshed on each load for accurate status
+- **📊 Instant Status**: See exactly which videos are downloaded, pending, or new at a glance
+- **🎯 Incremental Downloads**: Only download new videos - existing ones are preserved and tracked
+
+**📁 Resilient Video Tracking:**
+- **🆔 ID-Based Tracking**: Videos tracked by unique ID - survives title changes on YouTube
+- **📝 Pattern-Based Naming**: Flexible filename patterns with placeholders (`{idx}`, `{title}`, `{channel}`, etc.)
+- **🔄 Smart Rename Detection**: Finds renamed files in destination folder automatically
+- **📂 Index Preservation**: Maintains playlist order even when videos are reordered upstream
+
+**🛡️ Robust Change Detection:**
+- **➕ New Videos**: Automatically detected and queued for download
+- **🔢 Reordering**: Detect and apply index changes with smart renaming
+- **📂 Relocation**: Move entire playlist to new folder while preserving files
+- **📦 Archive Mode**: Removed videos can be archived instead of deleted
+- **🗑️ Clean Removal**: Optional deletion of videos removed from source playlist
+
+**🎨 Customizable Title Patterns:**
+
+```
+{idx} - {pretty(title)}.{ext}           → 01 - My Video Title.mkv
+{pretty(title)} - {channel}.{ext}       → My Video - Creator Name.mkv  
+{i:03d} - {slug(title)} [{id}].{ext}    → 001 - my-video-title [abc123].mkv
+```
+
+**Supported placeholders:**
+- `{idx}` - Smart zero-padded index (01, 02... or 001, 002... based on total)
+- `{title}` / `{pretty(title)}` / `{slug(title)}` - Video title variants
+- `{channel}` / `{pretty(channel)}` / `{slug(channel)}` - Channel name variants
+- `{id}` - Video ID • `{ext}` - File extension
+
+**📈 Progress Tracking:**
+- Real-time download progress with visual indicators
+- Detailed sync plan preview before applying changes
+- Full logging of all operations for transparency
 
 ### 🌐 Universal Platform Support
 

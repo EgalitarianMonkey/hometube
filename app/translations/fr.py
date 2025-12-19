@@ -352,6 +352,20 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
     "playlist_status_exists": "📁 Existe déjà",
     "playlist_title_pattern": "Pattern des titres vidéo",
     "playlist_title_pattern_help": """Pattern pour nommer les vidéos téléchargées. Placeholders supportés :
+• `{idx}` - Index avec zéros (01, 02... ou 001, 002... selon le total)
+• `{i}` ou `{i:04d}` - Index vidéo avec format personnalisé (base 1)
+• `{title}` - Titre original de la vidéo
+• `{pretty(title)}` - Titre embelli (Majuscules, conserve les accents)
+• `{slug(title)}` - Titre slugifié (minuscules-tirets, sans accents)
+• `{channel}` - Nom de la chaîne/créateur
+• `{pretty(channel)}` - Nom de chaîne embelli
+• `{slug(channel)}` - Nom de chaîne slugifié
+• `{id}` - ID de la vidéo
+• `{ext}` - Extension du fichier (mkv, mp4...)
+
+Exemples :
+• `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`
+• `{pretty(title)} - {channel}.{ext}` → `Ma Vidéo - Nom Créateur.mkv`
 • `{idx}` - Index avec padding intelligent (01, 02... ou 001, 002... selon le total)
 • `{i}` ou `{i:04d}` - Index de la vidéo avec format personnalisé (commence à 1)
 • `{title}` - Titre original de la vidéo

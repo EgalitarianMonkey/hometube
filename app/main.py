@@ -1716,7 +1716,10 @@ def url_analysis(url: str) -> Optional[Dict]:
                         TMP_DOWNLOAD_FOLDER, playlist_id
                     )
                     existing_status = load_playlist_status(playlist_workspace)
-                    if existing_status and existing_status.get("custom_title") is not None:
+                    if (
+                        existing_status
+                        and existing_status.get("custom_title") is not None
+                    ):
                         # This is an existing playlist - always refresh to get latest state
                         should_refresh_playlist = True
                         safe_push_log(
@@ -1840,6 +1843,7 @@ def display_url_info(url_info: Dict) -> None:
         st.session_state["playlist_id"] = playlist_id
         st.session_state["playlist_entries"] = get_playlist_entries(url_info)
         st.session_state["playlist_total_count"] = entries_count
+        st.session_state["playlist_channel"] = uploader  # Store channel for title pattern
 
     elif url_info.get("_type") == "video" or "duration" in url_info:
         # ===== SINGLE VIDEO INFORMATION =====
@@ -2535,7 +2539,8 @@ if (
                 saved_location = existing_status_for_sync.get("playlist_location", "/")
                 saved_pattern = existing_status_for_sync.get(
                     "title_pattern",
-                    settings.PLAYLIST_VIDEOS_TITLES_PATTERN or DEFAULT_PLAYLIST_TITLE_PATTERN
+                    settings.PLAYLIST_VIDEOS_TITLES_PATTERN
+                    or DEFAULT_PLAYLIST_TITLE_PATTERN,
                 )
 
                 # Get current UI values
@@ -2549,7 +2554,8 @@ if (
 
                 current_pattern = st.session_state.get(
                     "playlist_title_pattern",
-                    settings.PLAYLIST_VIDEOS_TITLES_PATTERN or DEFAULT_PLAYLIST_TITLE_PATTERN
+                    settings.PLAYLIST_VIDEOS_TITLES_PATTERN
+                    or DEFAULT_PLAYLIST_TITLE_PATTERN,
                 )
 
                 # Compute sync plan automatically
@@ -2571,32 +2577,49 @@ if (
                 st.session_state["playlist_sync_dest"] = playlist_dest_dir
                 st.session_state["playlist_sync_location"] = current_location
                 st.session_state["playlist_sync_pattern"] = current_pattern
-                st.session_state["playlist_workspace_for_sync"] = playlist_workspace_for_sync
+                st.session_state["playlist_workspace_for_sync"] = (
+                    playlist_workspace_for_sync
+                )
 
             # === DISPLAY STATUS AND CHANGES ===
             if sync_plan and sync_plan.has_changes:
                 # Show what changes are pending
                 changes_lines = []
-                
+
                 if sync_plan.videos_to_rename:
                     changes_lines.append(
-                        t("playlist_changes_rename", count=len(sync_plan.videos_to_rename))
+                        t(
+                            "playlist_changes_rename",
+                            count=len(sync_plan.videos_to_rename),
+                        )
                     )
                 if sync_plan.videos_to_download:
                     changes_lines.append(
-                        t("playlist_changes_download", count=len(sync_plan.videos_to_download))
+                        t(
+                            "playlist_changes_download",
+                            count=len(sync_plan.videos_to_download),
+                        )
                     )
                 if sync_plan.videos_to_relocate:
                     changes_lines.append(
-                        t("playlist_changes_relocate", count=len(sync_plan.videos_to_relocate))
+                        t(
+                            "playlist_changes_relocate",
+                            count=len(sync_plan.videos_to_relocate),
+                        )
                     )
                 if sync_plan.videos_to_archive:
                     changes_lines.append(
-                        t("playlist_changes_archive", count=len(sync_plan.videos_to_archive))
+                        t(
+                            "playlist_changes_archive",
+                            count=len(sync_plan.videos_to_archive),
+                        )
                     )
                 if sync_plan.videos_to_delete:
                     changes_lines.append(
-                        t("playlist_changes_delete", count=len(sync_plan.videos_to_delete))
+                        t(
+                            "playlist_changes_delete",
+                            count=len(sync_plan.videos_to_delete),
+                        )
                     )
 
                 # Show progress bar
@@ -2675,7 +2698,12 @@ if (
                             )
             elif len(playlist_to_download) == 0:
                 # No changes and nothing to download - fully up to date
-                st.success(t("playlist_already_up_to_date", fallback="✅ Playlist is already up to date!"))
+                st.success(
+                    t(
+                        "playlist_already_up_to_date",
+                        fallback="✅ Playlist is already up to date!",
+                    )
+                )
             else:
                 # Show progress bar and download count
                 st.progress(
@@ -3299,7 +3327,7 @@ with col2:
         # Check if playlist has pending sync changes or is up to date
         playlist_to_download_list = st.session_state.get("playlist_to_download", [])
         sync_plan_for_btn = st.session_state.get("playlist_sync_plan")
-        
+
         # Determine button state based on sync plan
         has_pending_sync_changes = (
             sync_plan_for_btn is not None and sync_plan_for_btn.has_changes
@@ -3314,7 +3342,10 @@ with col2:
                 f"{t('playlist_download_button')}",
                 type="secondary",
                 use_container_width=True,
-                help=t("playlist_already_up_to_date", fallback="All videos are already downloaded."),
+                help=t(
+                    "playlist_already_up_to_date",
+                    fallback="All videos are already downloaded.",
+                ),
                 disabled=True,
             )
         elif has_pending_sync_changes:
@@ -3322,7 +3353,7 @@ with col2:
             st.warning(
                 t(
                     "playlist_sync_required",
-                    fallback="⚠️ Please apply pending changes first"
+                    fallback="⚠️ Please apply pending changes first",
                 )
             )
             submitted = st.button(
@@ -4038,6 +4069,7 @@ if submitted:
             if ret_dl == 0 and final_tmp and final_tmp.exists():
                 # Render the final filename using the pattern
                 ext = final_tmp.suffix.lstrip(".")  # Remove leading dot
+                playlist_channel = st.session_state.get("playlist_channel", "")
                 resolved_title = render_title(
                     title_pattern,
                     i=playlist_index,
@@ -4045,6 +4077,7 @@ if submitted:
                     video_id=video_id,
                     ext=ext,
                     total=total_videos,
+                    channel=playlist_channel,
                 )
 
                 # Copy to playlist destination with rendered title
@@ -4783,6 +4816,18 @@ if submitted:
             if is_playlist_mode:
                 playlist_id = st.session_state.get("playlist_id")
 
+            # Get uploader/channel name from url_info.json
+            uploader = None
+            try:
+                url_info_path = tmp_video_dir / "url_info.json"
+                if url_info_path.exists():
+                    from app.url_utils import load_url_info_from_file
+                    url_info_data = load_url_info_from_file(url_info_path)
+                    if url_info_data:
+                        uploader = url_info_data.get("uploader", url_info_data.get("channel", ""))
+            except Exception as e:
+                push_log(f"⚠️ Could not get uploader from url_info: {e}")
+
             # Apply custom metadata with all available information
             if not customize_video_metadata(
                 final_source,
@@ -4793,6 +4838,7 @@ if submitted:
                 playlist_id=playlist_id,
                 webpage_url=clean_url,
                 duration=None,  # Will be read from file
+                uploader=uploader,
             ):
                 push_log("⚠️ Metadata customization failed, using original metadata")
             else:

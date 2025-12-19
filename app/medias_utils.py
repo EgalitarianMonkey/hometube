@@ -882,6 +882,7 @@ def customize_video_metadata(
     playlist_id: str = None,
     webpage_url: str = None,
     duration: int = None,
+    uploader: str = None,
 ) -> bool:
     """
     Customize video metadata using FFmpeg, adding comprehensive metadata fields.
@@ -895,6 +896,7 @@ def customize_video_metadata(
         playlist_id: Playlist ID if video is from a playlist (optional)
         webpage_url: Full URL of the video webpage (optional)
         duration: Video duration in seconds (optional, will be read from file if not provided)
+        uploader: Channel/uploader name (optional)
 
     Returns:
         bool: True if successful, False otherwise
@@ -915,6 +917,11 @@ def customize_video_metadata(
         # Create temporary output file
         temp_output = video_path.with_suffix(f".temp{video_path.suffix}")
 
+        # Build the display title: "Title - Channel" format
+        display_title = user_title
+        if uploader:
+            display_title = f"{user_title} - {uploader}"
+
         # Build FFmpeg command
         cmd_metadata = [
             "ffmpeg",
@@ -924,32 +931,37 @@ def customize_video_metadata(
             "-c",
             "copy",  # Copy streams without re-encoding (fast)
             "-metadata",
-            f"title={user_title}",  # Use user-provided title
+            f"title={display_title}",  # Title with channel name
         ]
 
         # Add original title as album if available
         if original_title and original_title != user_title:
             cmd_metadata.extend(["-metadata", f"album={original_title}"])
 
-        # Add video ID in comment field (standard metadata field for video IDs)
+        # Add uploader/channel as artist (standard metadata field)
+        if uploader:
+            cmd_metadata.extend(["-metadata", f"artist={uploader}"])
+
+        # Add video ID as dedicated VIDEO_ID tag (visible in ffprobe)
+        # Note: We use VIDEO_ID instead of comment to avoid overwriting yt-dlp's comment
         if video_id:
-            cmd_metadata.extend(["-metadata", f"comment={video_id}"])
+            cmd_metadata.extend(["-metadata", f"VIDEO_ID={video_id}"])
 
         # Add source platform
         if source:
-            cmd_metadata.extend(["-metadata", f"source={source}"])
+            cmd_metadata.extend(["-metadata", f"SOURCE={source}"])
 
         # Add playlist ID if available
         if playlist_id:
-            cmd_metadata.extend(["-metadata", f"playlist_id={playlist_id}"])
+            cmd_metadata.extend(["-metadata", f"PLAYLIST_ID={playlist_id}"])
 
-        # Add webpage URL
+        # Add webpage URL (PURL is recognized by MKV)
         if webpage_url:
             cmd_metadata.extend(["-metadata", f"purl={webpage_url}"])
 
-        # Add duration
+        # Add duration in seconds
         if duration:
-            cmd_metadata.extend(["-metadata", f"duration={duration}"])
+            cmd_metadata.extend(["-metadata", f"DURATION_SECONDS={duration}"])
 
         # Add output path
         cmd_metadata.append(str(temp_output))

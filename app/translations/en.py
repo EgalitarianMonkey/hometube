@@ -359,10 +359,15 @@ Update your file cookies or try using **browser cookies** instead of file cookie
 • `{title}` - Original video title
 • `{pretty(title)}` - Prettified title (Title Case with spaces, keeps accents)
 • `{slug(title)}` - Slugified title (lowercase-kebab-case, no accents)
+• `{channel}` - Channel/uploader name
+• `{pretty(channel)}` - Prettified channel name
+• `{slug(channel)}` - Slugified channel name
 • `{id}` - Video ID
 • `{ext}` - File extension (mkv, mp4...)
 
-Example: `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`""",
+Examples:
+• `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`
+• `{pretty(title)} - {channel}.{ext}` → `My Video - Creator Name.mkv`""",
     # Playlist Synchronization
     "playlist_sync_title": "Playlist Synchronization",
     "playlist_sync_recent": "✅ Playlist synchronized recently",

@@ -176,6 +176,7 @@ def render_title(
     video_id: str,
     ext: str,
     total: Optional[int] = None,
+    channel: Optional[str] = None,
 ) -> str:
     """
     Render a video title from a pattern with placeholders.
@@ -188,6 +189,9 @@ def render_title(
     - {pretty(title)}: Prettified video title (Title Case with spaces)
     - {id}: Video ID
     - {ext}: File extension (without dot)
+    - {channel}: Channel/uploader name
+    - {pretty(channel)}: Prettified channel name
+    - {slug(channel)}: Slugified channel name
 
     Args:
         pattern: Pattern string with placeholders
@@ -196,6 +200,7 @@ def render_title(
         video_id: Video ID (required, used for safe fallback)
         ext: File extension without dot (e.g., "mkv", "mp4")
         total: Total number of videos in playlist (for {idx} placeholder, optional)
+        channel: Channel/uploader name (optional)
 
     Returns:
         str: Rendered filename
@@ -205,6 +210,8 @@ def render_title(
         '01 - Je Regarde Vos Vidéos.mkv'
         >>> render_title("{i:04d} - {slug(title)} [{id}].{ext}", i=1, title="Hello World!", video_id="abc123", ext="mkv")
         '0001 - hello-world [abc123].mkv'
+        >>> render_title("{pretty(title)} - {channel}.{ext}", i=1, title="Test", video_id="abc", ext="mkv", channel="My Channel")
+        'Test - My Channel.mkv'
     """
     # Ensure safe defaults
     safe_title = title if title else "Untitled"
@@ -212,6 +219,7 @@ def render_title(
     safe_ext = ext if ext else "mkv"
     safe_i = i if i >= 0 else 0
     safe_total = total if total and total > 0 else max(safe_i, 1)
+    safe_channel = channel if channel else ""
 
     try:
         # Step 1: Replace custom placeholders that need special processing
@@ -232,6 +240,20 @@ def render_title(
                 "{pretty(title)}", prettified_title
             )
 
+        # Replace {slug(channel)}
+        if "{slug(channel)}" in processed_pattern:
+            slugified_channel = slug(safe_channel) if safe_channel else ""
+            processed_pattern = processed_pattern.replace(
+                "{slug(channel)}", slugified_channel
+            )
+
+        # Replace {pretty(channel)}
+        if "{pretty(channel)}" in processed_pattern:
+            prettified_channel = pretty(safe_channel) if safe_channel else ""
+            processed_pattern = processed_pattern.replace(
+                "{pretty(channel)}", prettified_channel
+            )
+
         # Replace {idx} with smart zero-padded index
         if "{idx}" in processed_pattern:
             idx_str = idx(safe_i, safe_total)
@@ -243,6 +265,7 @@ def render_title(
             title=safe_title,
             id=safe_id,
             ext=safe_ext,
+            channel=safe_channel,
         )
 
         return result

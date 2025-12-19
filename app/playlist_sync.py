@@ -347,6 +347,7 @@ def sync_playlist(
 
     playlist_id = new_url_info.get("id", "unknown")
     playlist_title = new_url_info.get("title", "Unknown Playlist")
+    playlist_channel = new_url_info.get("uploader", new_url_info.get("channel", ""))
 
     # IMPORTANT: Determine the EXISTING destination directory from status.json
     # This is where videos were previously downloaded, not the new destination
@@ -520,6 +521,7 @@ def sync_playlist(
                 video_id=video_id,
                 ext=old_path.suffix.lstrip("."),
                 total=total_videos,
+                channel=playlist_channel,
             )
             expected_path = dest_dir / expected_filename
 
@@ -573,6 +575,7 @@ def sync_playlist(
                         video_id=video_id,
                         ext=old_path.suffix.lstrip("."),
                         total=total_videos,
+                        channel=playlist_channel,
                     )
                     expected_path = dest_dir / expected_filename
 
@@ -856,6 +859,7 @@ def apply_sync_plan(
                             video_id=action.video_id,
                             ext=action.old_path.suffix.lstrip("."),
                             total=total_videos,
+                            channel=playlist_channel,
                         )
                     else:
                         # Fallback to old name if we can't compute new name
@@ -974,6 +978,7 @@ def apply_sync_plan(
                         video_id=action.video_id,
                         ext=action.old_path.suffix.lstrip("."),
                         total=len(new_entries),
+                        channel=playlist_channel,
                     )
                     videos[action.video_id]["resolved_title"] = new_filename
 
@@ -1068,31 +1073,45 @@ def format_sync_plan_details(plan: PlaylistSyncPlan) -> str:
     lines = []
 
     if plan.videos_to_rename:
-        lines.append("\n✏️ **Videos to rename:**")
+        lines.append("#### ✏️ Videos to rename:")
         for action in plan.videos_to_rename:
-            lines.append(f"   • {action.title}")
-            lines.append(f"     {action.details}")
+            lines.append(f"- **{action.title}**")
+            if action.details:
+                lines.append(f"  - {action.details}")
+        lines.append("")
 
     if plan.videos_to_download:
-        lines.append("\n📥 **Videos to download:**")
+        lines.append("#### 📥 Videos to download:")
         for action in plan.videos_to_download:
-            lines.append(f"   • [{action.new_index}] {action.title}")
+            lines.append(f"- `[{action.new_index}]` {action.title}")
+        lines.append("")
+
+    if plan.videos_to_relocate:
+        lines.append("#### 📁 Videos to relocate:")
+        for action in plan.videos_to_relocate:
+            lines.append(f"- {action.title}")
+            if action.details:
+                lines.append(f"  - {action.details}")
+        lines.append("")
 
     if plan.videos_to_archive:
-        lines.append("\n📦 **Videos to archive:**")
+        lines.append("#### 📦 Videos to archive:")
         for action in plan.videos_to_archive:
-            lines.append(f"   • {action.title}")
+            lines.append(f"- {action.title}")
+        lines.append("")
 
     if plan.videos_to_delete:
-        lines.append("\n🗑️ **Videos to delete:**")
+        lines.append("#### 🗑️ Videos to delete:")
         for action in plan.videos_to_delete:
-            lines.append(f"   • {action.title}")
+            lines.append(f"- {action.title}")
+        lines.append("")
 
     if plan.videos_already_synced:
-        lines.append("\n✅ **Already synced:**")
+        lines.append("#### ✅ Already synced:")
         for action in plan.videos_already_synced[:5]:  # Show first 5 only
-            lines.append(f"   • {action.title}")
+            lines.append(f"- {action.title}")
         if len(plan.videos_already_synced) > 5:
-            lines.append(f"   ... and {len(plan.videos_already_synced) - 5} more")
+            lines.append(f"- *... and {len(plan.videos_already_synced) - 5} more*")
+        lines.append("")
 
     return "\n".join(lines)
