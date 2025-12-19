@@ -930,6 +930,7 @@ def customize_video_metadata(
             str(video_path),
             "-c",
             "copy",  # Copy streams without re-encoding (fast)
+            "-map_metadata", "0",  # Preserve existing metadata from yt-dlp
             "-metadata",
             f"title={display_title}",  # Title with channel name
         ]
@@ -942,8 +943,7 @@ def customize_video_metadata(
         if uploader:
             cmd_metadata.extend(["-metadata", f"artist={uploader}"])
 
-        # Add video ID as dedicated VIDEO_ID tag (visible in ffprobe)
-        # Note: We use VIDEO_ID instead of comment to avoid overwriting yt-dlp's comment
+        # Add video ID - use standard COMMENT tag for better compatibility
         if video_id:
             cmd_metadata.extend(["-metadata", f"VIDEO_ID={video_id}"])
 
@@ -957,7 +957,7 @@ def customize_video_metadata(
 
         # Add webpage URL (PURL is recognized by MKV)
         if webpage_url:
-            cmd_metadata.extend(["-metadata", f"purl={webpage_url}"])
+            cmd_metadata.extend(["-metadata", f"PURL={webpage_url}"])
 
         # Add duration in seconds
         if duration:

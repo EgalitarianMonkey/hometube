@@ -1843,7 +1843,9 @@ def display_url_info(url_info: Dict) -> None:
         st.session_state["playlist_id"] = playlist_id
         st.session_state["playlist_entries"] = get_playlist_entries(url_info)
         st.session_state["playlist_total_count"] = entries_count
-        st.session_state["playlist_channel"] = uploader  # Store channel for title pattern
+        st.session_state["playlist_channel"] = (
+            uploader  # Store channel for title pattern
+        )
 
     elif url_info.get("_type") == "video" or "duration" in url_info:
         # ===== SINGLE VIDEO INFORMATION =====
@@ -2582,8 +2584,8 @@ if (
                 )
 
             # === DISPLAY STATUS AND CHANGES ===
-            if sync_plan and sync_plan.has_changes:
-                # Show what changes are pending
+            if sync_plan and sync_plan.has_non_download_changes:
+                # Show what changes are pending (excluding download-only)
                 changes_lines = []
 
                 if sync_plan.videos_to_rename:
@@ -2641,7 +2643,8 @@ if (
                 with st.expander(
                     t("playlist_sync_details", fallback="View detailed changes")
                 ):
-                    st.markdown(format_sync_plan_details(sync_plan))
+                    playlist_channel = st.session_state.get("playlist_channel", "")
+                    st.markdown(format_sync_plan_details(sync_plan, channel=playlist_channel))
 
                 # Keep old videos option
                 keep_old_videos_checkbox = st.checkbox(
@@ -2670,6 +2673,11 @@ if (
                             fallback="Applying synchronization...",
                         )
                     ):
+                        # Get keep_old_videos preference from checkbox
+                        keep_old_videos_pref = st.session_state.get(
+                            "playlist_keep_old_videos", settings.PLAYLIST_KEEP_OLD_VIDEOS
+                        )
+                        
                         success = apply_sync_plan(
                             plan=sync_plan,
                             playlist_workspace=playlist_workspace_for_sync,
@@ -2677,6 +2685,7 @@ if (
                             new_location=current_location,
                             new_pattern=current_pattern,
                             new_url_info=new_url_info,
+                            keep_old_videos=keep_old_videos_pref,
                         )
 
                         if success:
@@ -3329,8 +3338,9 @@ with col2:
         sync_plan_for_btn = st.session_state.get("playlist_sync_plan")
 
         # Determine button state based on sync plan
+        # Only consider non-download changes as blocking
         has_pending_sync_changes = (
-            sync_plan_for_btn is not None and sync_plan_for_btn.has_changes
+            sync_plan_for_btn is not None and sync_plan_for_btn.has_non_download_changes
         )
         playlist_is_up_to_date = (
             len(playlist_to_download_list) == 0 and not has_pending_sync_changes
@@ -4822,11 +4832,17 @@ if submitted:
                 url_info_path = tmp_video_dir / "url_info.json"
                 if url_info_path.exists():
                     from app.url_utils import load_url_info_from_file
+
                     url_info_data = load_url_info_from_file(url_info_path)
                     if url_info_data:
-                        uploader = url_info_data.get("uploader", url_info_data.get("channel", ""))
+                        uploader = url_info_data.get(
+                            "uploader", url_info_data.get("channel", "")
+                        )
             except Exception as e:
                 push_log(f"⚠️ Could not get uploader from url_info: {e}")
+
+            # Log metadata information for debugging
+            push_log(f"📝 Metadata to embed: video_id={video_id}, source={source}, playlist_id={playlist_id}, uploader={uploader}")
 
             # Apply custom metadata with all available information
             if not customize_video_metadata(

@@ -78,6 +78,18 @@ class PlaylistSyncPlan:
     def has_changes(self) -> bool:
         return self.total_actions > 0 or self.location_changed or self.pattern_changed
 
+    @property
+    def has_non_download_changes(self) -> bool:
+        """Check if there are changes other than just downloading new videos."""
+        return (
+            len(self.videos_to_rename) > 0
+            or len(self.videos_to_archive) > 0
+            or len(self.videos_to_delete) > 0
+            or len(self.videos_to_relocate) > 0
+            or self.location_changed
+            or self.pattern_changed
+        )
+
 
 # === METADATA EXTRACTION ===
 
@@ -726,6 +738,7 @@ def apply_sync_plan(
     new_location: str,
     new_pattern: str,
     new_url_info: Dict,
+    keep_old_videos: Optional[bool] = None,
 ) -> bool:
     """
     Apply a synchronization plan to the filesystem and status.json.
@@ -737,6 +750,8 @@ def apply_sync_plan(
         new_location: New location (may be same as current)
         new_pattern: New title pattern
         new_url_info: New url_info.json data
+        keep_old_videos: If True, archive deleted videos; if False, delete them.
+                        If None, uses default from settings.
 
     Returns:
         True if all actions completed successfully
@@ -748,6 +763,34 @@ def apply_sync_plan(
     )
 
     settings = get_settings()
+    
+    # Use setting default if not specified
+    if keep_old_videos is None:
+        keep_old_videos = settings.PLAYLIST_KEEP_OLD_VIDEOS
+    
+    # If keep_old_videos is True, convert delete actions to archive actions
+    if keep_old_videos and plan.videos_to_delete:
+        safe_push_log(f"📦 Converting {len(plan.videos_to_delete)} delete actions to archive (keep_old_videos=True)")
+        for delete_action in plan.videos_to_delete:
+            # Create archive action from delete action
+            archive_dir = dest_dir / "Archives"
+            if delete_action.old_path:
+                clean_title = sanitize_filename(delete_action.title)
+                new_filename = f"{clean_title}{delete_action.old_path.suffix}"
+                new_path = archive_dir / new_filename
+                
+                archive_action = SyncAction(
+                    action_type="archive",
+                    video_id=delete_action.video_id,
+                    title=delete_action.title,
+                    details=f"Move to Archives/ (removed from playlist)",
+                    old_path=delete_action.old_path,
+                    new_path=new_path,
+                )
+                plan.videos_to_archive.append(archive_action)
+        
+        # Clear delete actions since they're now archive actions
+        plan.videos_to_delete = []
     success = True
 
     safe_push_log("🔄 Applying playlist synchronization plan...")
@@ -1066,16 +1109,30 @@ def format_sync_plan_summary(plan: PlaylistSyncPlan) -> str:
     return "\n".join(lines)
 
 
-def format_sync_plan_details(plan: PlaylistSyncPlan) -> str:
+def format_sync_plan_details(plan: PlaylistSyncPlan, channel: Optional[str] = None) -> str:
     """
     Format detailed list of all sync actions.
+
+    Args:
+        plan: Sync plan to format
+        channel: Optional channel/uploader name to display with titles
     """
     lines = []
+
+    def format_title(title: str, index: Optional[int] = None, include_channel: bool = True) -> str:
+        """Helper to format title with optional index and channel."""
+        parts = []
+        if index is not None:
+            parts.append(f"`[{index:02d}]`")
+        parts.append(title)
+        if include_channel and channel:
+            parts.append(f"**({channel})**")
+        return " ".join(parts)
 
     if plan.videos_to_rename:
         lines.append("#### ✏️ Videos to rename:")
         for action in plan.videos_to_rename:
-            lines.append(f"- **{action.title}**")
+            lines.append(f"- {format_title(action.title, action.new_index)}")
             if action.details:
                 lines.append(f"  - {action.details}")
         lines.append("")
@@ -1083,13 +1140,13 @@ def format_sync_plan_details(plan: PlaylistSyncPlan) -> str:
     if plan.videos_to_download:
         lines.append("#### 📥 Videos to download:")
         for action in plan.videos_to_download:
-            lines.append(f"- `[{action.new_index}]` {action.title}")
+            lines.append(f"- {format_title(action.title, action.new_index)}")
         lines.append("")
 
     if plan.videos_to_relocate:
         lines.append("#### 📁 Videos to relocate:")
         for action in plan.videos_to_relocate:
-            lines.append(f"- {action.title}")
+            lines.append(f"- {format_title(action.title, action.new_index)}")
             if action.details:
                 lines.append(f"  - {action.details}")
         lines.append("")
@@ -1097,19 +1154,21 @@ def format_sync_plan_details(plan: PlaylistSyncPlan) -> str:
     if plan.videos_to_archive:
         lines.append("#### 📦 Videos to archive:")
         for action in plan.videos_to_archive:
-            lines.append(f"- {action.title}")
+            # Archive actions may not have new_index, use old_index
+            lines.append(f"- {format_title(action.title, action.old_index)}")
         lines.append("")
 
     if plan.videos_to_delete:
         lines.append("#### 🗑️ Videos to delete:")
         for action in plan.videos_to_delete:
-            lines.append(f"- {action.title}")
+            # Delete actions may not have new_index, use old_index
+            lines.append(f"- {format_title(action.title, action.old_index)}")
         lines.append("")
 
     if plan.videos_already_synced:
         lines.append("#### ✅ Already synced:")
         for action in plan.videos_already_synced[:5]:  # Show first 5 only
-            lines.append(f"- {action.title}")
+            lines.append(f"- {format_title(action.title, action.new_index)}")
         if len(plan.videos_already_synced) > 5:
             lines.append(f"- *... and {len(plan.videos_already_synced) - 5} more*")
         lines.append("")
