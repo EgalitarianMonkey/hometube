@@ -3985,7 +3985,8 @@ if submitted:
                 mark_video_as_skipped(playlist_workspace, video_id)
 
         # Download each video in the playlist
-        completed_count = len(playlist_already_downloaded)
+        initial_completed_count = len(playlist_already_downloaded)
+        completed_count = initial_completed_count
         failed_count = 0
 
         # Get the title pattern from session state
@@ -4003,35 +4004,43 @@ if submitted:
             if not video_url and video_id:
                 video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-            current_idx = completed_count + idx
+            downloads_total = max(videos_to_dl, 1)
+            session_current = idx
+            playlist_position = playlist_index or (initial_completed_count + idx)
+            playlist_note = ""
+            if total_videos:
+                playlist_note = t(
+                    "playlist_position_note",
+                    current=playlist_position,
+                    total=total_videos,
+                )
 
             push_log("")
-            log_title(
-                t(
-                    "playlist_downloading_video",
-                    current=current_idx,
-                    total=total_videos,
-                    title=video_title,
-                )
+            download_message = t(
+                "playlist_downloading_video",
+                current=session_current,
+                total=videos_to_dl,
+                title=video_title,
             )
+            log_title(download_message)
+            if playlist_note:
+                push_log(playlist_note)
 
             # Update status
             update_video_status_in_playlist(playlist_workspace, video_id, "downloading")
-            status_placeholder.info(
-                t(
-                    "playlist_downloading_video",
-                    current=current_idx,
-                    total=total_videos,
-                    title=video_title,
-                )
-            )
+            status_message = download_message
+            if playlist_note:
+                status_message = f"{download_message}\n{playlist_note}"
+            status_placeholder.info(status_message)
 
             # Update progress
-            progress_denominator = max(total_videos, 1)
-            raw_progress = (current_idx - 1) / progress_denominator
+            raw_progress = (session_current - 1) / downloads_total
             progress_percent = min(max(raw_progress, 0.0), 1.0)
+            progress_text = f"{session_current}/{videos_to_dl}"
+            if total_videos and playlist_position:
+                progress_text += f" | {playlist_position}/{total_videos}"
             progress_placeholder.progress(
-                progress_percent, text=f"{current_idx}/{total_videos}"
+                progress_percent, text=progress_text
             )
 
             # Create video workspace within playlist
@@ -4109,8 +4118,8 @@ if submitted:
                 push_log(
                     t(
                         "playlist_video_completed",
-                        current=current_idx,
-                        total=total_videos,
+                        current=session_current,
+                        total=videos_to_dl,
                         title=video_title,
                     )
                 )
@@ -4124,8 +4133,8 @@ if submitted:
                 push_log(
                     t(
                         "playlist_video_failed",
-                        current=current_idx,
-                        total=total_videos,
+                        current=session_current,
+                        total=videos_to_dl,
                         title=video_title,
                     )
                 )
