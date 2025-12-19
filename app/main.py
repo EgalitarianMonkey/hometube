@@ -4036,10 +4036,7 @@ if submitted:
             # Update progress
             raw_progress = (session_current - 1) / downloads_total
             progress_percent = min(max(raw_progress, 0.0), 1.0)
-            progress_text = f"{session_current}/{videos_to_dl}"
-            if total_videos and playlist_position:
-                progress_text += f" | {playlist_position}/{total_videos}"
-            progress_placeholder.progress(progress_percent, text=progress_text)
+            progress_placeholder.progress(progress_percent)
 
             # Create video workspace within playlist
             video_workspace = create_video_workspace_in_playlist(
@@ -4128,14 +4125,26 @@ if submitted:
                 update_video_status_in_playlist(
                     playlist_workspace, video_id, "failed", error_msg_final
                 )
-                push_log(
-                    t(
-                        "playlist_video_failed",
-                        current=session_current,
-                        total=videos_to_dl,
-                        title=video_title,
-                    )
+
+                failure_message = t(
+                    "playlist_video_failed",
+                    current=session_current,
+                    total=videos_to_dl,
+                    title=video_title,
                 )
+                push_log(failure_message)
+
+                status_details = failure_message
+                if error_msg_final:
+                    reason_text = t(
+                        "playlist_video_failure_reason", reason=error_msg_final
+                    )
+                    push_log(reason_text)
+                    status_details = f"{failure_message}\n{reason_text}"
+
+                if status_placeholder:
+                    status_placeholder.error(status_details)
+
                 failed_count += 1
 
         # Final summary

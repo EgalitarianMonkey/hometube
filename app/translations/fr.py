@@ -336,6 +336,7 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
     "playlist_downloading_video": "📥 Téléchargement {current}/{total}: {title}",
     "playlist_video_completed": "✅ Vidéo {current}/{total} terminée: {title}",
     "playlist_video_failed": "❌ Échec vidéo {current}/{total}: {title}",
+    "playlist_video_failure_reason": "↳ Raison : {reason}",
     "playlist_position_note": "↳ Position dans la playlist {current}/{total}",
     "playlist_video_skipped": "⏭️ Vidéo {current}/{total} ignorée (déjà existante): {title}",
     "playlist_download_complete": "🎉 Playlist téléchargée ! {completed}/{total} vidéos",
