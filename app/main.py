@@ -4039,9 +4039,7 @@ if submitted:
             progress_text = f"{session_current}/{videos_to_dl}"
             if total_videos and playlist_position:
                 progress_text += f" | {playlist_position}/{total_videos}"
-            progress_placeholder.progress(
-                progress_percent, text=progress_text
-            )
+            progress_placeholder.progress(progress_percent, text=progress_text)
 
             # Create video workspace within playlist
             video_workspace = create_video_workspace_in_playlist(
