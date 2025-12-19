@@ -13,7 +13,7 @@ ARG YTDLP_VERSION
 LABEL io.hometube.ytdlp.version="${YTDLP_VERSION}"
 
 # Minimal runtime deps
-RUN apk add --no-cache tini ca-certificates curl
+RUN apk add --no-cache tini ca-certificates curl deno
 
 # Pip/Streamlit/runtime ergonomics
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \

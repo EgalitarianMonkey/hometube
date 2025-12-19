@@ -4027,7 +4027,9 @@ if submitted:
             )
 
             # Update progress
-            progress_percent = (current_idx - 1) / total_videos
+            progress_denominator = max(total_videos, 1)
+            raw_progress = (current_idx - 1) / progress_denominator
+            progress_percent = min(max(raw_progress, 0.0), 1.0)
             progress_placeholder.progress(
                 progress_percent, text=f"{current_idx}/{total_videos}"
             )
