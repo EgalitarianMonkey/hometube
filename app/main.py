@@ -26,6 +26,7 @@ try:
         should_remove_tmp_files,
         get_unique_video_folder_name_from_url,
         clean_all_tmp_folders,
+        cleanup_tmp_files,
     )
     from .display_utils import (
         fmt_hhmmss,
@@ -125,6 +126,7 @@ except ImportError:
         should_remove_tmp_files,
         get_unique_video_folder_name_from_url,
         clean_all_tmp_folders,
+        cleanup_tmp_files,
     )
     from display_utils import (
         fmt_hhmmss,
@@ -5011,6 +5013,22 @@ if submitted:
 
         status_placeholder.success(t("status_file_ready", subfolder=display_path))
         st.toast(t("toast_download_completed"), icon="✅")
+
+        # Optional automatic cleanup of tmp workspace (env/UI controlled)
+        if should_remove_tmp_files():
+            try:
+                cleanup_tmp_files(base_output, tmp_video_dir, "all")
+
+                # Remove empty workspace folder to free disk space
+                try:
+                    if tmp_video_dir.exists() and not any(tmp_video_dir.iterdir()):
+                        tmp_video_dir.rmdir()
+                except Exception:
+                    pass
+
+                push_log("🧹 Temporary files removed (REMOVE_TMP_FILES_AFTER_DOWNLOAD)")
+            except Exception as e:
+                push_log(f"⚠️ Cleanup skipped: {e}")
     except Exception:
         status_placeholder.warning(t("warning_file_not_found"))
 
