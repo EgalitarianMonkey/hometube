@@ -370,8 +370,17 @@ def cleanup_tmp_files(
         files_cleaned = 0
 
         if cleanup_type in ("all", "download"):
-            # Download temporary files
-            patterns = [f"{base_filename}.*", "*.part", "*.ytdl", "*.temp", "*.tmp"]
+            # Download temporary files (include generic track/final files)
+            patterns = [
+                f"{base_filename}.*",
+                "*.part",
+                "*.ytdl",
+                "*.temp",
+                "*.tmp",
+                "video-*.*",
+                "audio-*.*",
+                "final.*",
+            ]
             for pattern in patterns:
                 for file_path in tmp_dir.glob(pattern):
                     if file_path.is_file() and _should_remove_file(
@@ -418,6 +427,16 @@ def cleanup_tmp_files(
                 if p.exists():
                     try:
                         p.unlink()
+                        files_cleaned += 1
+                    except Exception:
+                        pass
+
+            # Generic final files (final.{ext}) always cleaned when enabled
+            for ext in (".mkv", ".mp4", ".webm", ".avi"):
+                final_candidate = tmp_dir / f"final{ext}"
+                if final_candidate.exists():
+                    try:
+                        final_candidate.unlink()
                         files_cleaned += 1
                     except Exception:
                         pass
