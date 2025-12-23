@@ -2933,96 +2933,101 @@ with st.expander(f"{t('ads_sponsors_title')}", expanded=False):
             st.session_state.sponsors_to_mark = mark_options
 
 # Optional cutting section with dynamic behavior
-with st.expander(f"{t('cutting_title')}", expanded=False):
-    # st.markdown(f"### {t('optional_cutting')}")
+if is_playlist_mode:
+    # Cutting controls are irrelevant for playlists
+    start_text = ""
+    end_text = ""
+else:
+    with st.expander(f"{t('cutting_title')}", expanded=False):
+        # st.markdown(f"### {t('optional_cutting')}")
 
-    st.info(t("cutting_modes_presentation"))
+        st.info(t("cutting_modes_presentation"))
 
-    # Cutting mode selection
-    # st.markdown(f"**{t('cutting_mode_title')}**")
-    default_cutting_mode = settings.CUTTING_MODE
-    cutting_mode_options = ["keyframes", "precise"]
-    default_index = (
-        cutting_mode_options.index(default_cutting_mode)
-        if default_cutting_mode in cutting_mode_options
-        else 0
-    )
-
-    cutting_mode = st.radio(
-        t("cutting_mode_prompt"),
-        options=cutting_mode_options,
-        format_func=lambda x: {
-            "keyframes": t("cutting_mode_keyframes"),
-            "precise": t("cutting_mode_precise"),
-        }[x],
-        index=default_index,
-        help=t("cutting_mode_help"),
-        key="cutting_mode",
-    )
-
-    if cutting_mode == "keyframes":
-        st.info(t("cutting_mode_keyframes_info"))
-    else:
-        st.warning(t("cutting_mode_precise_info"))
-
-        # Re-encoding options for precise mode (DYNAMIC!)
-        st.markdown(f"**{t('advanced_encoding_options')}**")
-
-        # Codec selection
-        codec_choice = st.radio(
-            t("codec_video"),
-            options=["h264", "h265"],
-            format_func=lambda x: {
-                "h264": t("codec_h264"),
-                "h265": t("codec_h265"),
-            }[x],
-            index=0,
-            help=t("codec_help"),
-            key="codec_choice",
+        # Cutting mode selection
+        # st.markdown(f"**{t('cutting_mode_title')}**")
+        default_cutting_mode = settings.CUTTING_MODE
+        cutting_mode_options = ["keyframes", "precise"]
+        default_index = (
+            cutting_mode_options.index(default_cutting_mode)
+            if default_cutting_mode in cutting_mode_options
+            else 0
         )
 
-        # Quality preset
-        quality_preset = st.radio(
-            t("encoding_quality"),
-            options=["balanced", "high_quality"],
+        cutting_mode = st.radio(
+            t("cutting_mode_prompt"),
+            options=cutting_mode_options,
             format_func=lambda x: {
-                "balanced": t("quality_balanced"),
-                "high_quality": t("quality_high"),
+                "keyframes": t("cutting_mode_keyframes"),
+                "precise": t("cutting_mode_precise"),
             }[x],
-            index=0,
-            help=t("quality_help"),
-            key="quality_preset",
+            index=default_index,
+            help=t("cutting_mode_help"),
+            key="cutting_mode",
         )
 
-        # Show current settings DYNAMICALLY
-        if codec_choice == "h264":
-            crf_value = "16" if quality_preset == "balanced" else "14"
-            preset_value = "slow" if quality_preset == "balanced" else "slower"
-            st.info(t("h264_settings", preset=preset_value, crf=crf_value))
+        if cutting_mode == "keyframes":
+            st.info(t("cutting_mode_keyframes_info"))
         else:
-            crf_value = "16" if quality_preset == "balanced" else "14"
-            preset_value = "slow" if quality_preset == "balanced" else "slower"
-            st.info(t("h265_settings", preset=preset_value, crf=crf_value))
+            st.warning(t("cutting_mode_precise_info"))
 
-    c1, c2 = st.columns([1, 1])
-    with c1:
-        start_text = st.text_input(
-            t("start_time"),
-            value="",
-            help=t("time_format_help"),
-            placeholder="0:11",
-            key="start_text",
-        )
-    with c2:
-        end_text = st.text_input(
-            t("end_time"),
-            value="",
-            help=t("time_format_help"),
-            placeholder="6:55",
-            key="end_text",
-        )
+            # Re-encoding options for precise mode (DYNAMIC!)
+            st.markdown(f"**{t('advanced_encoding_options')}**")
 
-    st.info(t("sponsorblock_sections_info"))
+            # Codec selection
+            codec_choice = st.radio(
+                t("codec_video"),
+                options=["h264", "h265"],
+                format_func=lambda x: {
+                    "h264": t("codec_h264"),
+                    "h265": t("codec_h265"),
+                }[x],
+                index=0,
+                help=t("codec_help"),
+                key="codec_choice",
+            )
+
+            # Quality preset
+            quality_preset = st.radio(
+                t("encoding_quality"),
+                options=["balanced", "high_quality"],
+                format_func=lambda x: {
+                    "balanced": t("quality_balanced"),
+                    "high_quality": t("quality_high"),
+                }[x],
+                index=0,
+                help=t("quality_help"),
+                key="quality_preset",
+            )
+
+            # Show current settings DYNAMICALLY
+            if codec_choice == "h264":
+                crf_value = "16" if quality_preset == "balanced" else "14"
+                preset_value = "slow" if quality_preset == "balanced" else "slower"
+                st.info(t("h264_settings", preset=preset_value, crf=crf_value))
+            else:
+                crf_value = "16" if quality_preset == "balanced" else "14"
+                preset_value = "slow" if quality_preset == "balanced" else "slower"
+                st.info(t("h265_settings", preset=preset_value, crf=crf_value))
+
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            start_text = st.text_input(
+                t("start_time"),
+                value="",
+                help=t("time_format_help"),
+                placeholder="0:11",
+                key="start_text",
+            )
+        with c2:
+            end_text = st.text_input(
+                t("end_time"),
+                value="",
+                help=t("time_format_help"),
+                placeholder="6:55",
+                key="end_text",
+            )
+
+        st.info(t("sponsorblock_sections_info"))
 
 # Video quality selection with new strategy
 with st.expander(f"{t('quality_title')}", expanded=False):
