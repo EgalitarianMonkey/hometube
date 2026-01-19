@@ -237,19 +237,19 @@ uv-lint:
 # === UNIVERSAL CODE QUALITY COMMANDS ===
 # Format code (fixes most issues automatically)
 format:
-	python -m black app/ tests/
+	uv run python -m black app/ tests/
 	@echo "✅ Code formatting completed"
 
 # Lint code (check without fixing)
 # Code quality checks (without fixing)
 lint:
-	python -m black --check app/ tests/
-	python -m ruff check app/ tests/
+	uv run python -m black --check app/ tests/
+	uv run ruff check app/ tests/
 	@echo "✅ Linting completed"
 
 # Fix code formatting and style issues automatically
 fix:
-	python -m black app/ tests/
+	uv run python -m black app/ tests/
 	@echo "✅ Code automatically formatted with black"
 	@echo "💡 Run 'make lint' to check for remaining issues"
 

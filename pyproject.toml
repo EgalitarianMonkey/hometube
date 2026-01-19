@@ -45,6 +45,8 @@ include = ["app*"]
 exclude = ["tests*", "docs*", "tmp*", "cookies*", "downloads*", "htmlcov*"]
 
 [tool.uv]
+# Install dev dependencies by default for development workflow
+# Make uv aware to install dev extras when syncing (for local development)
 dev-dependencies = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
@@ -53,7 +55,7 @@ dev-dependencies = [
     "pytest-xdist>=3.8.0",
     "black==26.1.0",
     "ruff==0.14.13",
-    "watchdog>=3.0.0",
+    "watchdog>=6.0.0",
 ]
 
 [tool.pytest.ini_options]
