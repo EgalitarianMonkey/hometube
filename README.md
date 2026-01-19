@@ -84,12 +84,11 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 
 <br/>
 <br/>
-<br/>
 
-<!-- ![Application Demo](./docs/images/simple_ui_demo.gif) -->
-![Application Demo](https://github.com/EgalitarianMonkey/hometube/releases/download/v2.3.1/2026_01_19_HomeTube-demo.gif)
+<div align="center">
+  <img src="https://github.com/EgalitarianMonkey/hometube/releases/download/v2.3.1/2026_01_19_HomeTube-demo.gif" alt="HomeTube Demo" width="75%">
+</div>
 
-<br/>
 <br/>
 <br/>
 
