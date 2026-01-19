@@ -15,7 +15,7 @@ TRANSLATIONS = {
     "subtitles_help": "Codes langue yt-dlp (ex: en, fr, es).",
     "options": "Options",
     "other_options": "Autres options",
-    "download_button": "🎬 &nbsp; Télécharger",
+    "download_button": "📥 &nbsp; Télécharger",
     "download_button_help": "Lance le téléchargement avec les paramètres sélectionnés",
     "cancel_button": "❌ Annuler",
     "cancel_button_help": "Arrêter le téléchargement et nettoyer les fichiers temporaires",

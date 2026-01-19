@@ -15,7 +15,7 @@ TRANSLATIONS = {
     "subtitles_help": "Subtitle languages are automatically selected based on LANGUAGE_PRIMARY (if LANGUAGE_PRIMARY_INCLUDE_SUBTITLES=true) and LANGUAGES_SECONDARIES configuration in .env file",
     "options": "Options",
     "other_options": "Other options",
-    "download_button": "🎬 &nbsp; Download",
+    "download_button": "📥 &nbsp; Download",
     "download_button_help": "Start download with selected parameters",
     "cancel_button": "❌ Cancel",
     "cancel_button_help": "Stop download and clean temporary files",
