@@ -1018,10 +1018,15 @@ def _execute_profile_downloads(
 
 # === STREAMLIT UI CONFIGURATION ===
 
+# Load custom favicon for page icon
+_FAVICON_PATH = (
+    Path(__file__).resolve().parent.parent / "docs" / "icons" / "favicon.svg"
+)
+
 # Must be the first Streamlit command
 st.set_page_config(
     page_title=t("page_title"),
-    page_icon="🎬",
+    page_icon=str(_FAVICON_PATH) if _FAVICON_PATH.exists() else "🎬",
     layout="centered",
     initial_sidebar_state="collapsed",
 )

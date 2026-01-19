@@ -62,6 +62,8 @@ BASH
 # App code
 COPY app/ ./app/
 COPY .streamlit/ /app/.streamlit/
+# Copy favicon for page icon
+COPY docs/icons/favicon.svg ./docs/icons/favicon.svg
 
 # Folders + non-root user
 RUN <<'BASH'
