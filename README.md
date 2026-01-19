@@ -87,12 +87,7 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 <br/>
 
 <!-- ![Application Demo](./docs/images/simple_ui_demo.gif) -->
-<!-- Old GIF: ![Application Demo](https://github.com/EgalitarianMonkey/hometube/releases/download/v2.0.0/HomeTube-demo.gif) -->
-
-<video controls autoplay muted loop playsinline width="720">
-  <source src="https://github.com/EgalitarianMonkey/hometube/releases/download/v2.3.1/2026_01_19_HomeTube-demo.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+![Application Demo](https://github.com/EgalitarianMonkey/hometube/releases/download/v2.3.1/2026_01_19_HomeTube-demo.gif)
 
 <br/>
 <br/>
