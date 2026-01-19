@@ -132,6 +132,22 @@ version-update:
 	echo "  3. Tag: git tag -a v$$VERSION_CLEAN -m 'Release v$$VERSION_CLEAN'"; \
 	echo "  4. Push: git push && git push --tags"
 
+
+# Create and push git tag from pyproject.toml version
+version-tag:
+	@VERSION=$$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/'); \
+	echo "🏷️  Creating tag v$$VERSION..."; \
+	git tag -a "v$$VERSION" -m "Release v$$VERSION"; \
+	echo "✅ Tag v$$VERSION created"; \
+	echo ""; \
+	read -p "Push tag to remote? [y/N]: " PUSH; \
+	if [ "$$PUSH" = "y" ] || [ "$$PUSH" = "Y" ]; then \
+		git push --tags; \
+		echo "✅ Tag pushed to remote"; \
+	else \
+		echo "⏸️  Tag not pushed. Run 'git push --tags' when ready."; \
+	fi
+
 # Catch-all rule to prevent "No rule to make target" errors when passing version as argument
 %:
 	@:
@@ -221,19 +237,19 @@ uv-lint:
 # === UNIVERSAL CODE QUALITY COMMANDS ===
 # Format code (fixes most issues automatically)
 format:
-	python -m black app/ tests/
+	uv run python -m black app/ tests/
 	@echo "✅ Code formatting completed"
 
 # Lint code (check without fixing)
 # Code quality checks (without fixing)
 lint:
-	python -m black --check app/ tests/
-	python -m ruff check app/ tests/
+	uv run python -m black --check app/ tests/
+	uv run ruff check app/ tests/
 	@echo "✅ Linting completed"
 
 # Fix code formatting and style issues automatically
 fix:
-	python -m black app/ tests/
+	uv run python -m black app/ tests/
 	@echo "✅ Code automatically formatted with black"
 	@echo "💡 Run 'make lint' to check for remaining issues"
 
