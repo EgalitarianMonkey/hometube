@@ -85,8 +85,8 @@ docs/
 ├── docker.md               # Container guide
 ├── development.md          # Developer guide
 ├── deployment.md           # Production guide
-└── images/                 # Screenshots and diagrams
-    └── ui.png             # Main interface screenshot
+└── icons/                 # Screenshots and diagrams
+    └── favicon.svg             # Favorite icon
 ```
 
 ## 🔄 Keep Documentation Updated

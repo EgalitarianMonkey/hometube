@@ -7,7 +7,7 @@
 
 <br/>
 
-[![Website](https://img.shields.io/badge/🌐_Website-Hometube-blueviolet)](https://hometube.egalitarianmonkey.com)
+[![Website](https://img.shields.io/badge/🌐-Website-blueviolet)](https://hometube.egalitarianmonkey.com)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.49+-red.svg)](https://streamlit.io)
 [![Latest Release](https://img.shields.io/github/v/release/EgalitarianMonkey/hometube)](https://github.com/EgalitarianMonkey/hometube/releases)

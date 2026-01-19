@@ -1,8 +1,12 @@
 # English translations
+
+# HomeTube SVG icon (inline for HTML rendering)
+_HOMETUBE_ICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="width:0.9em;height:0.9em;vertical-align:-0.1em;display:inline-block;margin-right:0.15em;"><defs><linearGradient id="htgrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#8B5CF6"/><stop offset="100%" style="stop-color:#D946EF"/></linearGradient></defs><rect width="100" height="100" rx="20" fill="url(#htgrad)"/><polygon points="38,25 38,75 75,50" fill="white"/></svg>"""
+
 TRANSLATIONS = {
     # === PAGE & INTERFACE ===
     "page_title": "HomeTube",
-    "page_header": "🎬 &nbsp; HomeTube",
+    "page_header": f"{_HOMETUBE_ICON_SVG} HomeTube",
     "video_or_playlist_url": "Video or Playlist URL",
     "video_name": "Video name",
     "video_name_help": "Name of the output video file (without extension). If left empty, the default video title will be used.",
