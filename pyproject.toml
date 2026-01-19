@@ -72,6 +72,26 @@ markers = [
     "stress: Stress tests",
 ]
 
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+    | \.venv
+    | venv
+    | __pycache__
+    | tmp
+    | downloads
+    | cookies
+)/
+'''
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
 [tool.coverage.run]
 source = ["app"]
 omit = ["*/tests/*","*/test_*","*/__pycache__/*","*/venv/*","*/.venv/*"]
