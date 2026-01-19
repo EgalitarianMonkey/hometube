@@ -923,11 +923,15 @@ def customize_video_metadata(
             display_title = f"{user_title} - {uploader}"
 
         # Build FFmpeg command
+        # IMPORTANT: We must explicitly map all streams to preserve multi-audio tracks
+        # Without -map options, ffmpeg only keeps one audio stream by default
         cmd_metadata = [
             "ffmpeg",
             "-y",  # Overwrite output file
             "-i",
             str(video_path),
+            "-map",
+            "0",  # Map ALL streams from input (video, audio, subtitles, attachments)
             "-c",
             "copy",  # Copy streams without re-encoding (fast)
             "-map_metadata",

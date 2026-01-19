@@ -11,7 +11,6 @@ import requests
 
 from app.config import get_settings
 
-
 DEFAULT_TIMEOUT = 10
 
 

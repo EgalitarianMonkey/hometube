@@ -1,8 +1,8 @@
 [project]
 name = "hometube"
-version = "2.1.1"
+version = "2.2.0"
 description = "HomeTube development workspace"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 
 dependencies = [
     "streamlit>=1.49,<1.51",
@@ -30,10 +30,9 @@ test = [
 ]
 
 dev = [
-    "black>=25.9.0",
-    "ruff>=0.13.2",
+    "black==26.1.0",
+    "ruff==0.14.13",
     "watchdog>=6.0.0",
-    # "flake8>=7.3.0",
 ]
 
 [build-system]
@@ -52,7 +51,8 @@ dev-dependencies = [
     "pytest-cov>=7.0.0",
     "pytest-mock>=3.15.1",
     "pytest-xdist>=3.8.0",
-    "black>=25.9.0",
+    "black==26.1.0",
+    "ruff==0.14.13",
     "watchdog>=3.0.0",
 ]
 
@@ -71,6 +71,26 @@ markers = [
     "performance: Performance tests",
     "stress: Stress tests",
 ]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+    | \.venv
+    | venv
+    | __pycache__
+    | tmp
+    | downloads
+    | cookies
+)/
+'''
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
 
 [tool.coverage.run]
 source = ["app"]

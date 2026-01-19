@@ -9,7 +9,6 @@ import pytest
 
 from app.integrations_utils import trigger_jellyfin_library_scan
 
-
 pytestmark = pytest.mark.skipif(
     not (os.getenv("JELLYFIN_BASE_URL") and os.getenv("JELLYFIN_API_KEY")),
     reason="Jellyfin integration not configured",

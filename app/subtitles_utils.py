@@ -11,7 +11,6 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-
 # Import logging functions from centralized module
 try:
     from .logs_utils import safe_push_log
