@@ -3210,12 +3210,14 @@ with st.expander(t("cookies_title"), expanded=False):
     else:  # none
         st.markdown("**🚫 No authentication:**")
         st.warning("⚠️ Without cookies, you won't be able to download:")
-        st.markdown("""
+        st.markdown(
+            """
         - Age-restricted videos
         - Member-only content
         - Some region-restricted videos
         - Videos requiring sign-in
-        """)
+        """
+        )
         st.info("✅ Public videos will work normally")
 
 
@@ -3501,9 +3503,7 @@ def update_download_metrics(
         # COMPLETED PROCESS: Clean 3-column layout
         # Status (clean up icons)
         if speed:
-            clean_status = (
-                speed.replace("✅ ", "").replace("✂️ ", "").replace("📝 ", "")
-            )
+            clean_status = speed.replace("✅ ", "").replace("✂️ ", "").replace("📝 ", "")
             metrics_parts.append(f"{t('metrics_status')}: {clean_status}")
 
         # Size (always show for completed)
@@ -4323,9 +4323,7 @@ if submitted:
             log_title("✅ Found cached download (legacy detection)")
             push_log(f"  📦 Existing file: {existing_generic_file.name}")
             push_log("  🔄 Skipping download, reusing cached file")
-            push_log(
-                "  ℹ️  Note: No status.json entry for this file, consider updating"
-            )
+            push_log("  ℹ️  Note: No status.json entry for this file, consider updating")
             push_log("")
 
     # Always check for SponsorBlock segments for this video (informational)
