@@ -10,7 +10,10 @@
 README.md
 DOCKER.md
 TESTING.md
-docs/
+docs/**
+# But keep favicon for the web interface
+!docs/icons/
+!docs/icons/favicon.svg
 
 # Tests
 tests/
