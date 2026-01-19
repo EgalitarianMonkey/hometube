@@ -3,7 +3,7 @@
 
 <br/>
 
-# 🎬 HomeTube
+# <img src="docs/icons/favicon.svg" alt="" width="28" height="28" style="vertical-align: -0.15em;"> &nbsp;HomeTube
 
 <br/>
 
