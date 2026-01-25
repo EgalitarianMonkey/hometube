@@ -6,7 +6,7 @@ This guide explains how to use the HomeTube Docker image.
 
 The image is available on GitHub Container Registry:
 - `ghcr.io/EgalitarianMonkey/hometube:latest` - Stable version (main branch)
-- `ghcr.io/EgalitarianMonkey/hometube:v1.0.0` - Specific tagged version
+- `ghcr.io/EgalitarianMonkey/hometube:2.4.1` - Specific tagged version
 - `ghcr.io/EgalitarianMonkey/hometube:main` - Development version
 
 ## Quick Usage
