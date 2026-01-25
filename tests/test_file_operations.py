@@ -130,3 +130,126 @@ class TestRemoveTmpFilesConfig:
 
         # Should match the config default
         assert result == settings.REMOVE_TMP_FILES_AFTER_DOWNLOAD
+
+
+class TestMoveFinalToDestination:
+    """Test move_final_to_destination function for disk space optimization"""
+
+    def test_move_removes_source_file(self, tmp_path):
+        """Test that move_final_to_destination removes the source file"""
+        from app.file_system_utils import move_final_to_destination
+
+        # Create source file
+        src_dir = tmp_path / "tmp" / "youtube-abc123"
+        src_dir.mkdir(parents=True)
+        src_file = src_dir / "final.mkv"
+        src_file.write_text("video content")
+
+        # Create destination
+        dest_dir = tmp_path / "videos"
+        dest_dir.mkdir()
+        dest_file = dest_dir / "My Video.mkv"
+
+        # Move file
+        result = move_final_to_destination(src_file, dest_file)
+
+        # Source should no longer exist (moved, not copied)
+        assert not src_file.exists(), "Source file should be removed after move"
+        assert result.exists(), "Destination file should exist"
+        assert result == dest_file
+
+    def test_move_preserves_content(self, tmp_path):
+        """Test that move_final_to_destination preserves file content"""
+        from app.file_system_utils import move_final_to_destination
+
+        # Create source file with specific content
+        src_dir = tmp_path / "tmp"
+        src_dir.mkdir()
+        src_file = src_dir / "final.mkv"
+        original_content = "original video content"
+        src_file.write_text(original_content)
+
+        # Create destination
+        dest_file = tmp_path / "videos" / "My Video.mkv"
+
+        # Move file (destination dir will be created)
+        result = move_final_to_destination(src_file, dest_file)
+
+        # Content should be preserved
+        assert result.read_text() == original_content
+
+    def test_move_creates_destination_directory(self, tmp_path):
+        """Test that move_final_to_destination creates destination dir if needed"""
+        from app.file_system_utils import move_final_to_destination
+
+        # Create source file
+        src_dir = tmp_path / "tmp"
+        src_dir.mkdir()
+        src_file = src_dir / "final.mkv"
+        src_file.write_text("content")
+
+        # Destination dir doesn't exist yet
+        dest_file = tmp_path / "videos" / "subfolder" / "My Video.mkv"
+        assert not dest_file.parent.exists()
+
+        # Move file
+        result = move_final_to_destination(src_file, dest_file)
+
+        # Directory should be created
+        assert dest_file.parent.exists()
+        assert result.exists()
+
+    def test_move_with_logging(self, tmp_path):
+        """Test that move_final_to_destination calls log function"""
+        from app.file_system_utils import move_final_to_destination
+
+        # Create source file
+        src_dir = tmp_path / "tmp"
+        src_dir.mkdir()
+        src_file = src_dir / "final.mkv"
+        src_file.write_text("content")
+
+        dest_file = tmp_path / "videos" / "My Video.mkv"
+
+        # Track log calls
+        log_messages = []
+
+        def mock_log(msg):
+            log_messages.append(msg)
+
+        # Move with logging
+        move_final_to_destination(src_file, dest_file, log_fn=mock_log)
+
+        # Should have logged the move
+        assert len(log_messages) == 2
+        assert "Moved to:" in log_messages[0]
+        assert "Disk space saved" in log_messages[1]
+
+    def test_move_raises_on_missing_source(self, tmp_path):
+        """Test that move_final_to_destination raises error for missing source"""
+        import pytest
+        from app.file_system_utils import move_final_to_destination
+
+        src_file = tmp_path / "nonexistent.mkv"
+        dest_file = tmp_path / "dest.mkv"
+
+        with pytest.raises(FileNotFoundError):
+            move_final_to_destination(src_file, dest_file)
+
+    def test_move_with_different_filename(self, tmp_path):
+        """Test that move allows renaming during move"""
+        from app.file_system_utils import move_final_to_destination
+
+        # Create source file with generic name
+        src_dir = tmp_path / "tmp"
+        src_dir.mkdir()
+        src_file = src_dir / "final.mkv"
+        src_file.write_text("content")
+
+        # Move with a different name
+        dest_file = tmp_path / "videos" / "Beautiful Video Title.mkv"
+
+        result = move_final_to_destination(src_file, dest_file)
+
+        assert result.name == "Beautiful Video Title.mkv"
+        assert result.exists()

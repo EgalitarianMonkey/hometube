@@ -148,11 +148,11 @@ This makes it easy to identify which format was actually downloaded.
 - If not cutting: uses downloaded file extension
 - WebM files are converted to MKV for better subtitle support
 
-### Copy to Destination
-When copying to the final location:
+### Move to Destination
+When moving to the final location (saves disk space):
 1. Use the filename from user input or video title
 2. Combine with file extension
-3. Copy: `final.mkv` → `/videos/{filename}.mkv`
+3. Move: `final.mkv` → `/videos/{filename}.mkv`
 
 ## Resilience Features
 
@@ -173,7 +173,7 @@ When copying to the final location:
 
 ### Cache Preservation
 ✅ **`video-{FORMAT_ID}.{ext}` is always preserved** for future reuse  
-✅ **`final.{ext}` is created by COPY, not MOVE** (keeps source intact)  
+✅ **`final.{ext}` is MOVED to destination** (saves disk space, no duplicate)  
 ✅ No automatic cleanup in normal workflow  
 ✅ Manual cleanup available via configuration options  
 
@@ -273,13 +273,13 @@ print(f"Renamed: {downloaded.name} → {generic.name}")
 
 ### Getting Final Filename
 ```python
-# When copying to destination
+# When moving to destination
 job_config = tmp_files.load_job_config(tmp_subfolder_dir)
 intended_name = job_config["filename"]
 
-# Copy with original name
+# Move with original name (saves disk space)
 final_path = dest_dir / f"{intended_name}.mkv"
-shutil.copy2(source, final_path)
+shutil.move(source, final_path)
 ```
 
 ## Related Documentation

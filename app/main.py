@@ -27,6 +27,7 @@ try:
         get_unique_video_folder_name_from_url,
         clean_all_tmp_folders,
         cleanup_tmp_files,
+        move_final_to_destination,
     )
     from .display_utils import (
         fmt_hhmmss,
@@ -127,6 +128,7 @@ except ImportError:
         get_unique_video_folder_name_from_url,
         clean_all_tmp_folders,
         cleanup_tmp_files,
+        move_final_to_destination,
     )
     from display_utils import (
         fmt_hhmmss,
@@ -4103,12 +4105,9 @@ if submitted:
                     channel=playlist_channel,
                 )
 
-                # Copy to playlist destination with rendered title
+                # Move to playlist destination with rendered title (saves disk space)
                 dest_file = playlist_dest / resolved_title
-                import shutil
-
-                shutil.copy2(str(final_tmp), str(dest_file))
-                push_log(f"✅ Copied to destination: {dest_file.name}")
+                move_final_to_destination(final_tmp, dest_file, push_log)
 
                 # Update playlist status to mark video as completed
                 # Include pattern info for future reference
@@ -4963,21 +4962,19 @@ if submitted:
     # - final.{ext} can be reused for resume scenarios
     # Manual cleanup: set REMOVE_TMP_FILES=true in .env or delete tmp/ folder
 
-    # Measure final processed file size before copying
+    # Measure final processed file size before moving
     if final_source.exists():
         processed_size = final_source.stat().st_size
         processed_size_mb = processed_size / (1024 * 1024)
-        push_log(f"📊 Processed file size: {processed_size_mb:.2f}MiB (before copy)")
+        push_log(f"📊 Processed file size: {processed_size_mb:.2f}MiB")
 
     try:
         # Build final destination path with intended filename
         final_ext = final_source.suffix
         final_destination = dest_dir / f"{base_output}{final_ext}"
 
-        # Copy file with intended name
-        shutil.copy2(str(final_source), str(final_destination))
-        push_log(f"✅ Copied to: {final_destination.name}")
-        push_log(f"📋 Original kept in: {final_source.parent.name}/{final_source.name}")
+        # Move file to destination (saves disk space by not duplicating)
+        move_final_to_destination(final_source, final_destination, push_log)
 
         final_copied = final_destination
         progress_placeholder.progress(100, text=t("status_completed"))
@@ -4992,7 +4989,7 @@ if submitted:
         update_format_status(
             tmp_url_workspace=tmp_video_dir,
             video_format=format_id,
-            final_file=final_source,  # Verify the file in tmp (before copy)
+            final_file=final_destination,  # Verify the file at destination (after move)
         )
 
         # Update metrics with final accurate file size (no duration for now)
