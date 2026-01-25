@@ -16,7 +16,7 @@ File naming convention:
         ├── subtitles.{lang}.srt  # Original subtitles
         ├── subtitles-cut.{lang}.srt  # Cut subtitles
         ├── session.log           # Processing logs
-        └── final.{ext}           # Final muxed file ready for copy (e.g., final.mkv)
+        └── final.{ext}           # Final muxed file, moved to destination (e.g., final.mkv)
 
 Benefits:
 - Generic names independent of video titles

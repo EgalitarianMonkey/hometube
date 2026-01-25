@@ -14,7 +14,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from app.file_system_utils import sanitize_filename, ensure_dir
+from app.file_system_utils import (
+    sanitize_filename,
+    ensure_dir,
+    move_final_to_destination,
+)
 from app.logs_utils import safe_push_log
 from app.text_utils import render_title
 
@@ -720,8 +724,6 @@ def copy_playlist_to_destination(
     Returns:
         Tuple of (copied_count, failed_count)
     """
-    import shutil
-
     if video_extensions is None:
         video_extensions = [".mkv", ".mp4", ".webm"]
 
@@ -779,12 +781,11 @@ def copy_playlist_to_destination(
         dest_path = playlist_dest / dest_filename
 
         try:
-            shutil.copy2(str(final_file), str(dest_path))
-            safe_push_log(f"✅ Copied: {dest_filename}")
+            move_final_to_destination(final_file, dest_path, safe_push_log)
             copied += 1
         except Exception as e:
-            safe_push_log(f"❌ Failed to copy {video_id}: {e}")
+            safe_push_log(f"❌ Failed to move {video_id}: {e}")
             failed += 1
 
-    safe_push_log(f"📊 Playlist copy complete: {copied} copied, {failed} failed")
+    safe_push_log(f"📊 Playlist move complete: {copied} moved, {failed} failed")
     return copied, failed

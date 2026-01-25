@@ -291,6 +291,49 @@ def copy_file(src: Path, dest_dir: Path) -> Path:
     return target
 
 
+def move_final_to_destination(
+    source: Path,
+    destination: Path,
+    log_fn=None,
+) -> Path:
+    """
+    Move the final processed video file to its destination.
+
+    This is the centralized function for moving final.mkv (or similar) to
+    the user's destination folder with the intended filename. Using move
+    instead of copy saves disk space by avoiding duplication.
+
+    The original downloaded file (video-{FORMAT_ID}.{ext}) is preserved
+    in tmp for cache reuse.
+
+    Args:
+        source: Path to the source file (e.g., final.mkv in tmp)
+        destination: Full destination path including filename
+        log_fn: Optional logging function (e.g., push_log or safe_push_log)
+
+    Returns:
+        Path: Path to the moved file at destination
+
+    Raises:
+        FileNotFoundError: If source file doesn't exist
+        OSError: If move operation fails
+    """
+    if not source.exists():
+        raise FileNotFoundError(f"Source file not found: {source}")
+
+    # Ensure destination directory exists
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    # Move the file
+    shutil.move(str(source), str(destination))
+
+    if log_fn:
+        log_fn(f"✅ Moved to: {destination.name}")
+        log_fn("💾 Disk space saved by moving instead of copying")
+
+    return destination
+
+
 def should_remove_tmp_files() -> bool:
     """
     Check if temporary files should be removed after successful download.

@@ -496,7 +496,7 @@ _Check CI results for validation before merging._
 
 **Production**:
 - Version tags → versioned Docker images
-- Available at `ghcr.io/EgalitarianMonkey/hometube:v0.8.0
+- Available at `ghcr.io/EgalitarianMonkey/hometube:2.4.1`
 - GitHub releases with changelogs and artifacts
 
 ## 🛠️ Development Tools

@@ -71,16 +71,16 @@ def test_destination_subfolder_only_used_for_final_copy():
         final_source = tmp_files.get_final_path(tmp_video_dir, "mp4")
         final_source.write_text("final video content")
 
-        # Copy to destination WITH subfolder structure
+        # Move to destination WITH subfolder structure (saves disk space)
         intended_filename = "my_video"
         final_destination = dest_dir / f"{intended_filename}.mp4"
 
         import shutil
 
-        shutil.copy2(str(final_source), str(final_destination))
+        shutil.move(str(final_source), str(final_destination))
 
         # Verify structure
-        assert final_source.parent == tmp_video_dir, "Source should be at tmp root"
+        assert not final_source.exists(), "Source should be moved (not exist anymore)"
         assert final_destination.parent == dest_dir, "Destination should use subfolder"
         assert final_destination.exists(), "Final file should exist in destination"
 
