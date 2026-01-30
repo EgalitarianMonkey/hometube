@@ -1105,9 +1105,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# === NOTIFICATIONS ===
+# Display non-invasive notifications (updates, announcements, etc.)
+from app.notifications import render_notifications_streamlit  # noqa: E402
 
-# === VERSION INFORMATION REMOVED ===
-# Version info is now only shown in update notifications when needed
+render_notifications_streamlit()
 
 
 # === SESSION ===
