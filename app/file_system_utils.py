@@ -235,8 +235,16 @@ def move_final_to_destination(
     # Ensure destination directory exists
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    # Move the file
-    shutil.move(str(source), str(destination))
+    # Try to move the file (atomic on same filesystem)
+    # If move fails (e.g., cross-device in Docker), fallback to copy + delete
+    try:
+        shutil.move(str(source), str(destination))
+    except OSError as e:
+        # Cross-device move - fallback to copy + delete
+        if log_fn:
+            log_fn(f"ℹ️ Cross-device move detected, using copy+delete: {e}")
+        shutil.copy2(str(source), str(destination))
+        source.unlink()
 
     if log_fn:
         log_fn(f"✅ Moved to: {destination.name}")

@@ -8,6 +8,7 @@
 <br/>
 
 [![Website](https://img.shields.io/badge/🌐-Website-blueviolet)](https://hometube.egalitarianmonkey.com)
+[![Reddit](https://img.shields.io/badge/Reddit-r%2FHomeTube-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/r/HomeTube/)
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.49+-red.svg)](https://streamlit.io)
 [![Latest Release](https://img.shields.io/github/v/release/EgalitarianMonkey/hometube)](https://github.com/EgalitarianMonkey/hometube/releases)
