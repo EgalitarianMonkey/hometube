@@ -21,8 +21,49 @@ from app.config import get_settings
 from app.file_system_utils import sanitize_filename, ensure_dir
 from app.logs_utils import safe_push_log
 from app.text_utils import render_title
-from app.tmp_files import find_downloaded_video
+from app.tmp_files import find_downloaded_video, VIDEO_EXTENSIONS
 from app.workspace import get_video_workspace
+
+# === HELPER FUNCTIONS ===
+
+
+def render_video_filename(
+    pattern: str,
+    video_id: str,
+    title: str,
+    index: int,
+    total: int,
+    extension: str,
+    channel: str = "",
+) -> str:
+    """
+    Render a video filename from pattern and metadata.
+
+    This is the SINGLE function to use for consistent filename generation
+    during playlist sync operations.
+
+    Args:
+        pattern: Title pattern (e.g., "{i:02d} - {title}.{ext}")
+        video_id: Video ID
+        title: Video title
+        index: Playlist index (1-based)
+        total: Total videos in playlist
+        extension: File extension without dot (e.g., "mkv")
+        channel: Optional channel/uploader name
+
+    Returns:
+        Rendered filename string
+    """
+    return render_title(
+        pattern,
+        i=index,
+        title=title,
+        video_id=video_id,
+        ext=extension.lstrip("."),
+        total=total,
+        channel=channel,
+    )
+
 
 # === SYNC ACTION TYPES ===
 
@@ -174,15 +215,14 @@ def scan_destination_videos(dest_dir: Path) -> Dict[str, Dict]:
 
     Returns dict mapping video_id -> metadata dict
     """
-    video_extensions = [".mkv", ".mp4", ".webm", ".avi", ".mov"]
     videos_by_id = {}
     videos_by_filename = {}
 
     if not dest_dir.exists():
         return videos_by_id
 
-    for ext in video_extensions:
-        for video_file in dest_dir.glob(f"*{ext}"):
+    for ext in VIDEO_EXTENSIONS:
+        for video_file in dest_dir.glob(f"*.{ext}"):
             metadata = get_video_metadata_from_file(video_file)
             if metadata:
                 video_id = metadata.get("video_id")
@@ -534,13 +574,13 @@ def sync_playlist(
             else:
                 entry_title = title
 
-            expected_filename = render_title(
-                new_pattern,
-                i=new_index,
-                title=entry_title,
+            expected_filename = render_video_filename(
+                pattern=new_pattern,
                 video_id=video_id,
-                ext=old_path.suffix.lstrip("."),
+                title=entry_title,
+                index=new_index,
                 total=total_videos,
+                extension=old_path.suffix,
                 channel=playlist_channel,
             )
             expected_path = dest_dir / expected_filename
@@ -588,13 +628,13 @@ def sync_playlist(
 
                 if found_video:
                     old_path = found_video.get("path")
-                    expected_filename = render_title(
-                        new_pattern,
-                        i=new_index,
-                        title=title,
+                    expected_filename = render_video_filename(
+                        pattern=new_pattern,
                         video_id=video_id,
-                        ext=old_path.suffix.lstrip("."),
+                        title=title,
+                        index=new_index,
                         total=total_videos,
+                        extension=old_path.suffix,
                         channel=playlist_channel,
                     )
                     expected_path = dest_dir / expected_filename
@@ -747,13 +787,11 @@ def _find_renamed_video(
     Scans all videos in dest_dir and checks their metadata for matching video_id.
     Also performs approximate duration check.
     """
-    video_extensions = [".mkv", ".mp4", ".webm", ".avi", ".mov"]
-
     # Get expected duration from video_data if available
     expected_duration = video_data.get("duration")
 
-    for ext in video_extensions:
-        for video_file in dest_dir.glob(f"*{ext}"):
+    for ext in VIDEO_EXTENSIONS:
+        for video_file in dest_dir.glob(f"*.{ext}"):
             metadata = get_video_metadata_from_file(video_file)
             if not metadata:
                 continue
@@ -946,14 +984,13 @@ def apply_sync_plan(
                     # Calculate the new filename based on pattern and index
                     entry = entries_by_id.get(action.video_id)
                     if entry and action.new_index is not None:
-                        # Render the filename with the new pattern
-                        new_filename = render_title(
-                            new_pattern,
-                            i=action.new_index,
-                            title=entry.get("title", action.title),
+                        new_filename = render_video_filename(
+                            pattern=new_pattern,
                             video_id=action.video_id,
-                            ext=action.old_path.suffix.lstrip("."),
+                            title=entry.get("title", action.title),
+                            index=action.new_index,
                             total=total_videos,
+                            extension=action.old_path.suffix,
                             channel=playlist_channel,
                         )
                     else:
@@ -1011,13 +1048,13 @@ def apply_sync_plan(
                     # Calculate the destination filename based on pattern
                     entry = entries_by_id.get(action.video_id)
                     if entry and action.new_index is not None:
-                        new_filename = render_title(
-                            new_pattern,
-                            i=action.new_index,
-                            title=entry.get("title", action.title),
+                        new_filename = render_video_filename(
+                            pattern=new_pattern,
                             video_id=action.video_id,
-                            ext=action.old_path.suffix.lstrip("."),
+                            title=entry.get("title", action.title),
+                            index=action.new_index,
                             total=total_videos,
+                            extension=action.old_path.suffix,
                             channel=playlist_channel,
                         )
                     else:
@@ -1106,13 +1143,13 @@ def apply_sync_plan(
                     (e for e in new_entries if e.get("id") == action.video_id), None
                 )
                 if entry and action.new_index is not None and action.old_path:
-                    new_filename = render_title(
-                        new_pattern,
-                        i=action.new_index,
-                        title=entry.get("title", action.title),
+                    new_filename = render_video_filename(
+                        pattern=new_pattern,
                         video_id=action.video_id,
-                        ext=action.old_path.suffix.lstrip("."),
+                        title=entry.get("title", action.title),
+                        index=action.new_index,
                         total=len(new_entries),
+                        extension=action.old_path.suffix,
                         channel=playlist_channel,
                     )
                     videos[action.video_id]["resolved_title"] = new_filename
@@ -1126,13 +1163,13 @@ def apply_sync_plan(
                     (e for e in new_entries if e.get("id") == action.video_id), None
                 )
                 if entry and action.new_index is not None and action.old_path:
-                    new_filename = render_title(
-                        new_pattern,
-                        i=action.new_index,
-                        title=entry.get("title", action.title),
+                    new_filename = render_video_filename(
+                        pattern=new_pattern,
                         video_id=action.video_id,
-                        ext=action.old_path.suffix.lstrip("."),
+                        title=entry.get("title", action.title),
+                        index=action.new_index,
                         total=len(new_entries),
+                        extension=action.old_path.suffix,
                         channel=playlist_channel,
                     )
                     videos[action.video_id]["resolved_title"] = new_filename

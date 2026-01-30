@@ -37,6 +37,10 @@ Benefits:
 from pathlib import Path
 from typing import Optional
 
+# Shared constant for video extensions used throughout the codebase
+VIDEO_EXTENSIONS = ["mkv", "mp4", "webm", "avi", "mov"]
+AUDIO_EXTENSIONS = ["opus", "m4a", "webm", "mp3", "aac"]
+
 
 def get_video_track_path(tmp_dir: Path, format_id: str, extension: str) -> Path:
     """
@@ -133,9 +137,8 @@ def find_video_tracks(tmp_dir: Path) -> list[Path]:
     if not tmp_dir.exists():
         return []
 
-    # Glob doesn't support {ext1,ext2} syntax, so we need to search separately
     tracks = []
-    for ext in ["webm", "mp4", "mkv", "avi"]:
+    for ext in VIDEO_EXTENSIONS:
         tracks.extend(tmp_dir.glob(f"video-*.{ext}"))
 
     return sorted(tracks)
@@ -154,9 +157,8 @@ def find_audio_tracks(tmp_dir: Path) -> list[Path]:
     if not tmp_dir.exists():
         return []
 
-    # Glob doesn't support {ext1,ext2} syntax, so we need to search separately
     tracks = []
-    for ext in ["opus", "m4a", "webm", "mp3", "aac"]:
+    for ext in AUDIO_EXTENSIONS:
         tracks.extend(tmp_dir.glob(f"audio-*.{ext}"))
 
     return sorted(tracks)
@@ -195,7 +197,7 @@ def find_final_file(tmp_dir: Path) -> Optional[Path]:
         return None
 
     # Prioritize MKV format (best for modern codecs), then MP4, then others
-    for ext in ["mkv", "mp4", "webm", "avi"]:
+    for ext in VIDEO_EXTENSIONS:
         candidate = tmp_dir / f"final.{ext}"
         if candidate.exists():
             return candidate
@@ -227,8 +229,6 @@ def find_downloaded_video(tmp_dir: Path) -> Optional[Path]:
     if not tmp_dir.exists():
         return None
 
-    VIDEO_EXTENSIONS = ["mkv", "mp4", "webm", "avi", "mov"]
-
     # Priority 1: Look for final.{ext} (fully processed)
     for ext in VIDEO_EXTENSIONS:
         candidate = tmp_dir / f"final.{ext}"
@@ -255,21 +255,6 @@ def find_downloaded_video(tmp_dir: Path) -> Optional[Path]:
             return max(matches, key=lambda p: p.stat().st_size)
 
     return None
-
-
-def is_video_downloaded(tmp_dir: Path) -> bool:
-    """
-    Simple check: is there ANY video file in this tmp workspace?
-
-    This is the SIMPLEST possible check for resilience.
-
-    Args:
-        tmp_dir: Temporary directory for the video
-
-    Returns:
-        True if any video file exists, False otherwise
-    """
-    return find_downloaded_video(tmp_dir) is not None
 
 
 def extract_format_id_from_filename(filename: str) -> Optional[str]:

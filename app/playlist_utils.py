@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from app.config import get_settings
 from app.file_system_utils import (
     sanitize_filename,
     ensure_dir,
@@ -153,17 +152,17 @@ def check_existing_videos_in_destination(
     video_extensions: List[str] = None,
     playlist_workspace: Optional[Path] = None,
     title_pattern: Optional[str] = None,
-    tmp_base_dir: Optional[Path] = None,
-    platform: str = "youtube",
 ) -> Tuple[List[Dict], List[Dict], int]:
     """
-    Check which playlist videos already exist in destination folder OR tmp workspace.
+    Check which playlist videos already exist in destination folder.
 
-    Uses multiple strategies:
+    Uses multiple strategies to detect existing videos:
     1. Check status.json in playlist workspace for "completed" status with resolved_title
     2. Check filesystem for files matching the title pattern (if provided)
     3. Check filesystem for existing video files by title or video ID
-    4. Check tmp/videos/{platform}/{video_id}/ for final.{ext} files (already downloaded)
+
+    NOTE: This function does NOT check tmp workspace. Videos in tmp are "ready to move",
+    not "already downloaded". The tmp check is done separately in sync_playlist().
 
     Args:
         dest_dir: Destination directory to check
@@ -171,8 +170,6 @@ def check_existing_videos_in_destination(
         video_extensions: List of video extensions to check (default: [".mkv", ".mp4", ".webm"])
         playlist_workspace: Optional path to playlist workspace to check status.json
         title_pattern: Optional title pattern for filename matching
-        tmp_base_dir: Optional base tmp directory to check for already downloaded videos
-        platform: Platform name for tmp workspace lookup (default: "youtube")
 
     Returns:
         Tuple of:
@@ -182,11 +179,6 @@ def check_existing_videos_in_destination(
     """
     if video_extensions is None:
         video_extensions = [".mkv", ".mp4", ".webm", ".avi", ".mov"]
-
-    # Get tmp_base_dir from settings if not provided
-    if tmp_base_dir is None:
-        settings = get_settings()
-        tmp_base_dir = settings.TMP_DOWNLOAD_FOLDER
 
     # First, check status.json if playlist workspace is provided
     status_completed_videos = {}  # video_id -> video_data (for resolved_title)
