@@ -1,7 +1,7 @@
 # Makefile for HomeTube testing and development
 # Supports both UV (fast) and standard Python (universal) workflows
 
-.PHONY: help install test test-unit test-integration test-performance test-coverage clean lint format type-check dev-setup docker-build docker-up docker-down docker-logs docker-test version-update
+.PHONY: help install test test-unit test-integration test-performance test-coverage clean lint format type-check dev-setup docker-build docker-up docker-down docker-logs docker-test version-update run
 
 # Default target
 help:
@@ -22,6 +22,9 @@ help:
 	@echo "  update-deps      - Update all dependencies and sync files (uses script)"
 	@echo "  update-reqs      - Run update-requirements.sh script directly"
 	@echo "  version-update [VERSION] - Update version (interactive or direct)"
+	@echo ""
+	@echo "🚀 Run:"
+	@echo "  run              - Run HomeTube with Streamlit (uv run)"
 	@echo ""
 	@echo "🧪 Testing (universal - works with any Python environment):"
 	@echo "  test             - Run all fast tests including external (local dev)"
@@ -51,6 +54,11 @@ help:
 	@echo ""
 	@echo "⚙️ Configuration:"
 	@echo "  config-check     - Check .env configuration and display summary"
+
+# === RUN COMMAND ===
+# Run HomeTube with Streamlit
+run:
+	uv run streamlit run app/main.py
 
 # === UNIVERSAL SETUP COMMANDS ===
 # Install dependencies (works with conda, venv, etc.)

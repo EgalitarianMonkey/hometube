@@ -21,6 +21,8 @@ from app.config import get_settings
 from app.file_system_utils import sanitize_filename, ensure_dir
 from app.logs_utils import safe_push_log
 from app.text_utils import render_title
+from app.tmp_files import find_downloaded_video
+from app.workspace import get_video_workspace
 
 # === SYNC ACTION TYPES ===
 
@@ -29,7 +31,9 @@ from app.text_utils import render_title
 class SyncAction:
     """Represents a single synchronization action."""
 
-    action_type: str  # "rename", "archive", "delete", "add", "keep", "relocate"
+    action_type: (
+        str  # "rename", "archive", "delete", "add", "keep", "relocate", "move_from_tmp"
+    )
     video_id: str
     title: str
     details: str = ""
@@ -53,6 +57,9 @@ class PlaylistSyncPlan:
     videos_to_download: List[SyncAction] = field(default_factory=list)
     videos_already_synced: List[SyncAction] = field(default_factory=list)
     videos_to_relocate: List[SyncAction] = field(default_factory=list)
+    videos_ready_to_move: List[SyncAction] = field(
+        default_factory=list
+    )  # In tmp, ready to copy
 
     # Location/pattern changes
     location_changed: bool = False
@@ -71,6 +78,7 @@ class PlaylistSyncPlan:
             + len(self.videos_to_delete)
             + len(self.videos_to_download)
             + len(self.videos_to_relocate)
+            + len(self.videos_ready_to_move)
         )
 
     @property
@@ -85,6 +93,7 @@ class PlaylistSyncPlan:
             or len(self.videos_to_archive) > 0
             or len(self.videos_to_delete) > 0
             or len(self.videos_to_relocate) > 0
+            or len(self.videos_ready_to_move) > 0
             or self.location_changed
             or self.pattern_changed
         )
@@ -682,6 +691,45 @@ def sync_playlist(
             if action.video_id not in videos_to_relocate_set
         ]
 
+    # === PHASE 5: Check tmp workspace for already downloaded videos ===
+    # Videos may exist in tmp/videos/{platform}/{video_id}/
+    # These should NOT be re-downloaded, they just need to be MOVED to destination
+    videos_still_to_download = []
+
+    for action in plan.videos_to_download:
+        video_workspace = get_video_workspace(
+            settings.TMP_DOWNLOAD_FOLDER, "youtube", action.video_id
+        )
+        if video_workspace.exists():
+            downloaded_file = find_downloaded_video(video_workspace)
+            if downloaded_file:
+                safe_push_log(
+                    f"📦 Found in tmp (ready to move): {action.video_id} ({downloaded_file.name})"
+                )
+                # This video doesn't need download, it just needs to be MOVED
+                # NOT "already synced" - it still needs action!
+                move_action = SyncAction(
+                    action_type="move_from_tmp",
+                    video_id=action.video_id,
+                    title=action.title,
+                    details=f"Move from tmp to destination ({downloaded_file.name})",
+                    old_path=downloaded_file,
+                    new_index=action.new_index,
+                )
+                plan.videos_ready_to_move.append(move_action)
+            else:
+                videos_still_to_download.append(action)
+        else:
+            videos_still_to_download.append(action)
+
+    # Update the to_download list to exclude videos found in tmp
+    plan.videos_to_download = videos_still_to_download
+
+    if plan.videos_ready_to_move:
+        safe_push_log(
+            f"📦 {len(plan.videos_ready_to_move)} video(s) in tmp workspace (ready to move, no re-download)"
+        )
+
     return plan
 
 
@@ -948,6 +996,46 @@ def apply_sync_plan(
                 # Not critical if cleanup fails
                 safe_push_log(f"⚠️ Could not clean up old directory: {e}")
 
+    # === Apply move from tmp actions ===
+    if plan.videos_ready_to_move:
+        ensure_dir(dest_dir)
+
+        # Get total videos count and build entries map for title rendering
+        entries = get_playlist_entries(new_url_info)
+        total_videos = len(entries)
+        entries_by_id = {e.get("id"): e for e in entries if e.get("id")}
+
+        for action in plan.videos_ready_to_move:
+            if action.old_path and action.old_path.exists():
+                try:
+                    # Calculate the destination filename based on pattern
+                    entry = entries_by_id.get(action.video_id)
+                    if entry and action.new_index is not None:
+                        new_filename = render_title(
+                            new_pattern,
+                            i=action.new_index,
+                            title=entry.get("title", action.title),
+                            video_id=action.video_id,
+                            ext=action.old_path.suffix.lstrip("."),
+                            total=total_videos,
+                            channel=playlist_channel,
+                        )
+                    else:
+                        # Fallback to the file's current name
+                        new_filename = action.old_path.name
+
+                    new_path = dest_dir / new_filename
+
+                    # Copy (not move) from tmp to destination
+                    # We keep the tmp file for resilience
+                    shutil.copy2(str(action.old_path), str(new_path))
+                    safe_push_log(
+                        f"📦 Copied from tmp: {action.old_path.name} → {new_filename}"
+                    )
+                except Exception as e:
+                    safe_push_log(f"❌ Failed to copy {action.old_path.name}: {e}")
+                    success = False
+
     # === Update status.json ===
     status_data = load_playlist_status(playlist_workspace)
     if not status_data:
@@ -1029,14 +1117,38 @@ def apply_sync_plan(
                     )
                     videos[action.video_id]["resolved_title"] = new_filename
 
+        # Mark videos moved from tmp as completed
+        for action in plan.videos_ready_to_move:
+            if action.video_id in videos:
+                videos[action.video_id]["status"] = "completed"
+                # Calculate the destination filename
+                entry = next(
+                    (e for e in new_entries if e.get("id") == action.video_id), None
+                )
+                if entry and action.new_index is not None and action.old_path:
+                    new_filename = render_title(
+                        new_pattern,
+                        i=action.new_index,
+                        title=entry.get("title", action.title),
+                        video_id=action.video_id,
+                        ext=action.old_path.suffix.lstrip("."),
+                        total=len(new_entries),
+                        channel=playlist_channel,
+                    )
+                    videos[action.video_id]["resolved_title"] = new_filename
+                videos[action.video_id]["downloaded_at"] = datetime.now(
+                    timezone.utc
+                ).isoformat()
+
         status_data["videos"] = videos
         status_data["total_videos"] = len(new_entries)
         status_data["title"] = plan.playlist_title
 
-    # Record synchronization timestamp
+    # Record synchronization timestamp and update location/pattern
+    # Use the canonical field names (no duplication)
     status_data["playlist_synchronisation"] = datetime.now(timezone.utc).isoformat()
-    status_data["last_sync_location"] = new_location
-    status_data["last_sync_pattern"] = new_pattern
+    status_data["playlist_location"] = new_location
+    status_data["title_pattern"] = new_pattern
 
     # Save updated status
     if not save_playlist_status(playlist_workspace, status_data):
@@ -1101,6 +1213,11 @@ def format_sync_plan_summary(plan: PlaylistSyncPlan) -> str:
     lines.append(f"   ✏️ To rename: {len(plan.videos_to_rename)}")
     lines.append(f"   📥 To download: {len(plan.videos_to_download)}")
 
+    if plan.videos_ready_to_move:
+        lines.append(
+            f"   📦 Ready to move (from tmp): {len(plan.videos_ready_to_move)}"
+        )
+
     if plan.videos_to_archive:
         lines.append(f"   📦 To archive: {len(plan.videos_to_archive)}")
 
@@ -1149,6 +1266,14 @@ def format_sync_plan_details(
         lines.append("#### 📥 Videos to download:")
         for action in plan.videos_to_download:
             lines.append(f"- {format_title(action.title, action.new_index)}")
+        lines.append("")
+
+    if plan.videos_ready_to_move:
+        lines.append("#### 📦 Videos ready to move (already in tmp):")
+        for action in plan.videos_ready_to_move:
+            lines.append(f"- {format_title(action.title, action.new_index)}")
+            if action.old_path:
+                lines.append(f"  - From: `{action.old_path.name}`")
         lines.append("")
 
     if plan.videos_to_relocate:
