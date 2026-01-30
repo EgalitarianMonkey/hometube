@@ -1042,9 +1042,62 @@ st.set_page_config(
 )
 
 # === SIDEBAR ===
+
+
+# Helper function to get tmp folder size
+def get_tmp_folder_size_mb() -> float:
+    """Calculate the size of the tmp folder in MB."""
+    try:
+        if TMP_DOWNLOAD_FOLDER.exists():
+            total_size = sum(
+                f.stat().st_size for f in TMP_DOWNLOAD_FOLDER.rglob("*") if f.is_file()
+            )
+            return total_size / (1024 * 1024)
+    except Exception:
+        pass
+    return 0.0
+
+
 with st.sidebar.expander("⚙️ System"):
     if st.button("🔄 Check for updates", use_container_width=True):
         check_and_show_updates()
+
+with st.sidebar.expander("📀 Temporary Files"):
+    # Show current size
+    tmp_size_mb = get_tmp_folder_size_mb()
+
+    if tmp_size_mb > 0:
+        # Format size with appropriate unit
+        if tmp_size_mb >= 1024:
+            size_display = f"{tmp_size_mb / 1024:.1f} GB"
+        else:
+            size_display = f"{tmp_size_mb:.0f} MB"
+
+        st.metric(label=t("tmp_files_current_size"), value=size_display)
+
+        # Clean button
+        if st.button(
+            t("tmp_files_clean_all_button"),
+            type="secondary",
+            use_container_width=True,
+            key="sidebar_clean_tmp_button",
+        ):
+            with st.spinner(t("tmp_files_cleaning_spinner")):
+                folders_count, size_freed = clean_all_tmp_folders()
+
+                if folders_count > 0:
+                    st.success(
+                        t(
+                            "tmp_files_cleanup_success",
+                            count=folders_count,
+                            size=size_freed,
+                        )
+                    )
+                    st.rerun()
+                else:
+                    st.info(t("tmp_files_cleanup_nothing"))
+    else:
+        st.caption(t("tmp_files_cleanup_nothing"))
 
 
 st.markdown(
@@ -3336,35 +3389,31 @@ with st.expander(t("advanced_options"), expanded=False):
             key="clean_all_tmp_button",
         ):
             with st.spinner(t("tmp_files_cleaning_spinner")):
-                folders_count, size_mb = clean_all_tmp_folders()
+                folders_count, size_freed = clean_all_tmp_folders()
 
                 if folders_count > 0:
                     st.success(
                         t(
                             "tmp_files_cleanup_success",
                             count=folders_count,
-                            size=size_mb,
+                            size=size_freed,
                         )
                     )
+                    st.rerun()
                 else:
                     st.info(t("tmp_files_cleanup_nothing"))
 
     with col2:
-        # Show tmp folder size if available
-        try:
-            if TMP_DOWNLOAD_FOLDER.exists():
-                total_size = sum(
-                    f.stat().st_size
-                    for f in TMP_DOWNLOAD_FOLDER.rglob("*")
-                    if f.is_file()
-                )
-                size_mb = total_size / (1024 * 1024)
-                st.metric(
-                    label=t("tmp_files_current_size"),
-                    value=f"{size_mb:.0f} MB",
-                )
-        except Exception:
-            pass
+        # Show tmp folder size using helper function
+        tmp_size = get_tmp_folder_size_mb()
+        if tmp_size >= 1024:
+            size_display = f"{tmp_size / 1024:.1f} GB"
+        else:
+            size_display = f"{tmp_size:.0f} MB"
+        st.metric(
+            label=t("tmp_files_current_size"),
+            value=size_display,
+        )
 
 # === DOWNLOAD BUTTON ===
 st.markdown("\n")
