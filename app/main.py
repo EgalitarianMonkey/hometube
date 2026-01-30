@@ -23,11 +23,17 @@ try:
         sanitize_filename,
         list_subdirs_recursive,
         ensure_dir,
-        should_remove_tmp_files,
         get_unique_video_folder_name_from_url,
+        should_remove_tmp_files,
         clean_all_tmp_folders,
         cleanup_tmp_files,
         move_final_to_destination,
+    )
+    from .workspace import (
+        parse_url as parse_url_info,
+        ensure_workspace_from_url,
+        ensure_video_workspace,
+        ensure_playlist_workspace,
     )
     from .display_utils import (
         fmt_hhmmss,
@@ -95,8 +101,6 @@ try:
         get_playlist_entries,
         check_existing_videos_in_destination,
         get_download_progress_percent,
-        create_playlist_workspace,
-        create_video_workspace_in_playlist,
         create_playlist_status,
         load_playlist_status,
         update_video_status_in_playlist,
@@ -129,6 +133,12 @@ except ImportError:
         clean_all_tmp_folders,
         cleanup_tmp_files,
         move_final_to_destination,
+    )
+    from workspace import (
+        parse_url as parse_url_info,
+        ensure_workspace_from_url,
+        ensure_video_workspace,
+        ensure_playlist_workspace,
     )
     from display_utils import (
         fmt_hhmmss,
@@ -198,8 +208,6 @@ except ImportError:
         get_playlist_entries,
         check_existing_videos_in_destination,
         get_download_progress_percent,
-        create_playlist_workspace,
-        create_video_workspace_in_playlist,
         create_playlist_status,
         load_playlist_status,
         update_video_status_in_playlist,
@@ -1648,12 +1656,16 @@ def url_analysis(url: str) -> Optional[Dict]:
     Always initializes session state variables and checks for existing url_info.json.
 
     This function:
-    1. Sanitizes URL and creates unique tmp folder
-    2. Sets all session state variables (tmp_url_workspace, unique_folder_name, etc.)
+    1. Sanitizes URL and creates unique tmp folder using new structure
+    2. Sets all session state variables (tmp_url_workspace, url_info, etc.)
     3. Checks if url_info.json exists with good integrity
     4. If exists: loads it and returns
     5. If not: fetches from yt-dlp via init_url_workspace()
     6. For VIDEOS only: computes optimal format profiles
+
+    New folder structure:
+    - Videos: tmp/videos/{platform}/{id}/
+    - Playlists: tmp/playlists/{platform}/{id}/
 
     Args:
         url: Video or playlist URL to analyze
@@ -1665,10 +1677,17 @@ def url_analysis(url: str) -> Optional[Dict]:
         return None
 
     try:
-        # Sanitize URL and create unique folder for this URL (video or playlist)
+        # Sanitize URL and parse to get platform/id/type
         clean_url = sanitize_url(url)
-        unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
-        tmp_url_workspace = TMP_DOWNLOAD_FOLDER / unique_folder_name
+        url_info_parsed = parse_url_info(clean_url)
+
+        # Create workspace using new structure
+        tmp_url_workspace, _ = ensure_workspace_from_url(TMP_DOWNLOAD_FOLDER, clean_url)
+
+        # For display purposes, create a readable folder name
+        unique_folder_name = (
+            f"{url_info_parsed.type}s/{url_info_parsed.platform}/{url_info_parsed.id}"
+        )
 
         # Check if NEW_DOWNLOAD_WITHOUT_TMP_FILES is enabled (UI override or config default)
         clean_tmp_before_download = st.session_state.get(
@@ -1681,13 +1700,16 @@ def url_analysis(url: str) -> Optional[Dict]:
             import shutil
 
             shutil.rmtree(tmp_url_workspace)
-
-        ensure_dir(tmp_url_workspace)
+            # Re-create the workspace
+            tmp_url_workspace, _ = ensure_workspace_from_url(
+                TMP_DOWNLOAD_FOLDER, clean_url
+            )
 
         # ALWAYS store in session state for reuse across the application
         st.session_state["tmp_url_workspace"] = tmp_url_workspace
         st.session_state["unique_folder_name"] = unique_folder_name
         st.session_state["current_video_url"] = clean_url
+        st.session_state["url_info_parsed"] = url_info_parsed
 
         # Reset folder initialization flag for new URL
         st.session_state["default_folder_initialized"] = False
@@ -1713,10 +1735,8 @@ def url_analysis(url: str) -> Optional[Dict]:
                 playlist_id = existing_info.get("id", "")
                 if playlist_id:
                     # Check if this playlist has been downloaded before (custom_title set)
-                    playlist_workspace = create_playlist_workspace(
-                        TMP_DOWNLOAD_FOLDER, playlist_id
-                    )
-                    existing_status = load_playlist_status(playlist_workspace)
+                    # Playlist workspace is already at tmp_url_workspace for playlists
+                    existing_status = load_playlist_status(tmp_url_workspace)
                     if (
                         existing_status
                         and existing_status.get("custom_title") is not None
@@ -2135,12 +2155,12 @@ if url and url.strip():
                 if is_playlist_info(url_info):
                     playlist_id = url_info.get("id", "")
                     if playlist_id:
-                        playlist_workspace = create_playlist_workspace(
-                            TMP_DOWNLOAD_FOLDER, playlist_id
+                        playlist_workspace = ensure_playlist_workspace(
+                            TMP_DOWNLOAD_FOLDER, "youtube", playlist_id
                         )
                         st.session_state["tmp_url_workspace"] = playlist_workspace
                         st.session_state["unique_folder_name"] = (
-                            f"youtube-playlist-{playlist_id}"
+                            f"playlists/youtube/{playlist_id}"
                         )
     else:
         # Reuse existing url_info from session state
@@ -2154,8 +2174,8 @@ if url and url.strip():
         if is_playlist:
             playlist_id = url_info.get("id", "")
             if playlist_id:
-                playlist_workspace = create_playlist_workspace(
-                    TMP_DOWNLOAD_FOLDER, playlist_id
+                playlist_workspace = ensure_playlist_workspace(
+                    TMP_DOWNLOAD_FOLDER, "youtube", playlist_id
                 )
                 # Always update to ensure we use the correct playlist workspace
                 st.session_state["tmp_url_workspace"] = playlist_workspace
@@ -2202,12 +2222,13 @@ if is_playlist_mode and not tmp_url_workspace:
     # Try to construct workspace from playlist_id or URL
     playlist_id = st.session_state.get("playlist_id")
     if playlist_id:
-        tmp_url_workspace = create_playlist_workspace(TMP_DOWNLOAD_FOLDER, playlist_id)
+        tmp_url_workspace = ensure_playlist_workspace(
+            TMP_DOWNLOAD_FOLDER, "youtube", playlist_id
+        )
     elif url and url.strip():
         # Fallback: construct from URL
         clean_url = sanitize_url(url)
-        unique_folder_name = get_unique_video_folder_name_from_url(clean_url)
-        tmp_url_workspace = TMP_DOWNLOAD_FOLDER / unique_folder_name
+        tmp_url_workspace, _ = ensure_workspace_from_url(TMP_DOWNLOAD_FOLDER, clean_url)
     # Update session state with the workspace we found/created
     if tmp_url_workspace:
         st.session_state["tmp_url_workspace"] = tmp_url_workspace
@@ -2524,8 +2545,8 @@ if (
             sync_plan = None
 
             if playlist_id_for_sync:
-                playlist_workspace_for_sync = create_playlist_workspace(
-                    TMP_DOWNLOAD_FOLDER, playlist_id_for_sync
+                playlist_workspace_for_sync = ensure_playlist_workspace(
+                    TMP_DOWNLOAD_FOLDER, "youtube", playlist_id_for_sync
                 )
                 existing_status_for_sync = load_playlist_status(
                     playlist_workspace_for_sync
@@ -2536,16 +2557,11 @@ if (
                         existing_status_for_sync.get("custom_title") is not None
                     )
 
-            # For existing playlists, calculate sync plan automatically
-            if existing_status_for_sync and has_previous_downloads:
-                # Get saved preferences from status.json
-                saved_location = existing_status_for_sync.get("playlist_location", "/")
-                saved_pattern = existing_status_for_sync.get(
-                    "title_pattern",
-                    settings.PLAYLIST_VIDEOS_TITLES_PATTERN
-                    or DEFAULT_PLAYLIST_TITLE_PATTERN,
-                )
-
+            # Calculate sync plan:
+            # - For existing playlists (has custom_title): check location/pattern changes
+            # - For all playlists: check if videos exist in tmp workspace
+            # This ensures we detect videos already downloaded but not moved to destination
+            if playlist_id_for_sync and playlist_workspace_for_sync:
                 # Get current UI values
                 current_location = "/"
                 if (
@@ -2561,7 +2577,7 @@ if (
                     or DEFAULT_PLAYLIST_TITLE_PATTERN,
                 )
 
-                # Compute sync plan automatically
+                # Compute sync plan
                 new_url_info = st.session_state.get("url_info", {})
                 keep_old_videos_val = settings.PLAYLIST_KEEP_OLD_VIDEOS
 
@@ -2602,6 +2618,10 @@ if (
                             "playlist_changes_download",
                             count=len(sync_plan.videos_to_download),
                         )
+                    )
+                if sync_plan.videos_ready_to_move:
+                    changes_lines.append(
+                        f"📦 {len(sync_plan.videos_ready_to_move)} video(s) ready to move from tmp"
                     )
                 if sync_plan.videos_to_relocate:
                     changes_lines.append(
@@ -2682,13 +2702,28 @@ if (
                             settings.PLAYLIST_KEEP_OLD_VIDEOS,
                         )
 
+                        # Get values from session state for robustness during Streamlit reruns
+                        apply_url_info = st.session_state.get("url_info", {})
+                        apply_dest_dir = st.session_state.get(
+                            "playlist_sync_dest", playlist_dest_dir
+                        )
+                        apply_location = st.session_state.get(
+                            "playlist_sync_location", current_location
+                        )
+                        apply_pattern = st.session_state.get(
+                            "playlist_sync_pattern", current_pattern
+                        )
+                        apply_workspace = st.session_state.get(
+                            "playlist_workspace_for_sync", playlist_workspace_for_sync
+                        )
+
                         success = apply_sync_plan(
                             plan=sync_plan,
-                            playlist_workspace=playlist_workspace_for_sync,
-                            dest_dir=playlist_dest_dir,
-                            new_location=current_location,
-                            new_pattern=current_pattern,
-                            new_url_info=new_url_info,
+                            playlist_workspace=apply_workspace,
+                            dest_dir=apply_dest_dir,
+                            new_location=apply_location,
+                            new_pattern=apply_pattern,
+                            new_url_info=apply_url_info,
                             keep_old_videos=keep_old_videos_pref,
                         )
 
@@ -3922,7 +3957,9 @@ if submitted:
         push_log("")
 
         # Create playlist workspace
-        playlist_workspace = create_playlist_workspace(TMP_DOWNLOAD_FOLDER, playlist_id)
+        playlist_workspace = ensure_playlist_workspace(
+            TMP_DOWNLOAD_FOLDER, "youtube", playlist_id
+        )
         push_log(f"🔧 Playlist workspace: {playlist_workspace}")
 
         # Create playlist destination folder
@@ -4052,9 +4089,10 @@ if submitted:
             progress_percent = min(max(raw_progress, 0.0), 1.0)
             progress_placeholder.progress(progress_percent)
 
-            # Create video workspace within playlist
-            video_workspace = create_video_workspace_in_playlist(
-                playlist_workspace, video_id
+            # Create video workspace (videos are stored separately, not inside playlist)
+            # This ensures the same video is never downloaded twice
+            video_workspace = ensure_video_workspace(
+                TMP_DOWNLOAD_FOLDER, "youtube", video_id
             )
 
             # Use the reusable video download function (same as single videos)

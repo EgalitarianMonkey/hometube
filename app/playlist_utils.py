@@ -21,6 +21,11 @@ from app.file_system_utils import (
 )
 from app.logs_utils import safe_push_log
 from app.text_utils import render_title
+from app.workspace import (
+    ensure_playlist_workspace,
+    ensure_video_workspace,
+    get_video_workspace,
+)
 
 # === PLAYLIST DETECTION ===
 
@@ -151,10 +156,13 @@ def check_existing_videos_in_destination(
     """
     Check which playlist videos already exist in destination folder.
 
-    Uses multiple strategies:
+    Uses multiple strategies to detect existing videos:
     1. Check status.json in playlist workspace for "completed" status with resolved_title
     2. Check filesystem for files matching the title pattern (if provided)
     3. Check filesystem for existing video files by title or video ID
+
+    NOTE: This function does NOT check tmp workspace. Videos in tmp are "ready to move",
+    not "already downloaded". The tmp check is done separately in sync_playlist().
 
     Args:
         dest_dir: Destination directory to check
@@ -259,6 +267,11 @@ def check_existing_videos_in_destination(
         if not found and video_id and video_id in existing_video_ids:
             found = True
 
+        # NOTE: We do NOT check tmp workspace here!
+        # A video in tmp is NOT "already downloaded" from the user's perspective.
+        # It's "ready to move" but still needs to be processed.
+        # The tmp check happens in sync_playlist/download logic to avoid re-downloading.
+
         if found:
             already_downloaded.append(entry)
         else:
@@ -338,60 +351,63 @@ def get_download_progress_percent(
 def create_playlist_workspace(
     tmp_base_dir: Path,
     playlist_id: str,
+    platform: str = "youtube",
 ) -> Path:
     """
     Create temporary workspace folder for a playlist.
 
+    Uses the new centralized structure: playlists/{platform}/{playlist_id}/
+
     Args:
         tmp_base_dir: Base temporary directory
         playlist_id: Playlist ID
+        platform: Platform name (default: "youtube")
 
     Returns:
         Path: Path to playlist workspace folder
     """
-    playlist_folder = tmp_base_dir / f"youtube-playlist-{playlist_id}"
-    ensure_dir(playlist_folder)
-    return playlist_folder
+    return ensure_playlist_workspace(tmp_base_dir, platform, playlist_id)
 
 
 def create_video_workspace_in_playlist(
-    playlist_workspace: Path,
+    tmp_base_dir: Path,
     video_id: str,
     platform: str = "youtube",
 ) -> Path:
     """
-    Create a video workspace folder within a playlist workspace.
+    Create a video workspace for a playlist entry.
+
+    IMPORTANT: Videos are stored in videos/{platform}/{id}/, NOT inside
+    the playlist folder. This ensures videos are never downloaded twice.
 
     Args:
-        playlist_workspace: Path to playlist workspace
-        video_id: Video ID
-        platform: Platform name (default: "youtube")
-
-    Returns:
-        Path: Path to video workspace folder within playlist
-    """
-    video_folder = playlist_workspace / f"{platform}-{video_id}"
-    ensure_dir(video_folder)
-    return video_folder
-
-
-def get_video_workspace_path(
-    playlist_workspace: Path,
-    video_id: str,
-    platform: str = "youtube",
-) -> Path:
-    """
-    Get path to a video workspace within a playlist (without creating).
-
-    Args:
-        playlist_workspace: Path to playlist workspace
+        tmp_base_dir: Base temporary directory (TMP_DOWNLOAD_FOLDER)
         video_id: Video ID
         platform: Platform name (default: "youtube")
 
     Returns:
         Path: Path to video workspace folder
     """
-    return playlist_workspace / f"{platform}-{video_id}"
+    return ensure_video_workspace(tmp_base_dir, platform, video_id)
+
+
+def get_video_workspace_in_playlist(
+    tmp_base_dir: Path,
+    video_id: str,
+    platform: str = "youtube",
+) -> Path:
+    """
+    Get path to a video workspace for a playlist entry (without creating).
+
+    Args:
+        tmp_base_dir: Base temporary directory (TMP_DOWNLOAD_FOLDER)
+        video_id: Video ID
+        platform: Platform name (default: "youtube")
+
+    Returns:
+        Path: Path to video workspace folder
+    """
+    return get_video_workspace(tmp_base_dir, platform, video_id)
 
 
 # === PLAYLIST STATUS MANAGEMENT ===
@@ -705,18 +721,22 @@ def get_last_playlist_download_attempt(playlist_workspace: Path) -> Optional[Dic
 
 
 def copy_playlist_to_destination(
+    tmp_base_dir: Path,
     playlist_workspace: Path,
     dest_dir: Path,
     playlist_name: str,
     video_extensions: List[str] = None,
 ) -> Tuple[int, int]:
     """
-    Copy all completed videos from playlist workspace to destination folder.
+    Move all completed videos from their workspaces to destination folder.
 
-    Creates a folder with playlist_name in dest_dir and copies all completed videos.
+    Creates a folder with playlist_name in dest_dir and moves all completed videos.
+
+    Note: Videos are stored in videos/{platform}/{id}/, NOT inside the playlist folder.
 
     Args:
-        playlist_workspace: Path to playlist workspace
+        tmp_base_dir: Base temporary directory (TMP_DOWNLOAD_FOLDER)
+        playlist_workspace: Path to playlist workspace (for status.json)
         dest_dir: Base destination directory
         playlist_name: Name for the playlist folder
         video_extensions: List of video extensions to copy
@@ -747,8 +767,8 @@ def copy_playlist_to_destination(
         if video_data.get("status") != "completed":
             continue
 
-        # Find the video folder
-        video_folder = get_video_workspace_path(playlist_workspace, video_id)
+        # Find the video folder (videos are stored separately from playlist)
+        video_folder = get_video_workspace_in_playlist(tmp_base_dir, video_id)
         if not video_folder.exists():
             safe_push_log(f"⚠️ Video folder not found: {video_folder}")
             failed += 1

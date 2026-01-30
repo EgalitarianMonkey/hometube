@@ -48,113 +48,24 @@ def get_unique_video_folder_name_from_url(url: str) -> str:
     """
     Generate a unique folder name for a video or playlist based on its URL.
 
-    Extracts platform and video/playlist ID from the URL to create a consistent,
-    filesystem-safe folder name. The same URL will always produce the same folder name.
+    DEPRECATED: This function returns a legacy flat folder name.
+    For new code, use workspace.parse_url() and workspace.get_*_workspace() instead.
 
-    Supported platforms:
-    - YouTube Playlist: youtube-playlist-{playlist_id}
-    - YouTube: youtube-{video_id}
-    - YouTube Shorts: youtube-shorts-{video_id}
-    - Instagram: instagram-{post_id}
-    - TikTok: tiktok-{video_id}
-    - Vimeo: vimeo-{video_id}
-    - Dailymotion: dailymotion-{video_id}
-    - Other: generic-{hash}
+    The new folder structure is:
+    - Videos: videos/{platform}/{id}/
+    - Playlists: playlists/{platform}/{id}/
+
+    This function is kept for backward compatibility.
 
     Args:
         url: Sanitized video URL (should be cleaned with sanitize_url first)
 
     Returns:
-        Unique folder name string (e.g., "youtube-dQw4w9WgXcQ" or "youtube-playlist-PLxxxxx")
-
-    Examples:
-        >>> get_unique_video_folder_name_from_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-        'youtube-dQw4w9WgXcQ'
-        >>> get_unique_video_folder_name_from_url("https://youtu.be/dQw4w9WgXcQ")
-        'youtube-dQw4w9WgXcQ'
-        >>> get_unique_video_folder_name_from_url("https://www.youtube.com/shorts/abc123")
-        'youtube-shorts-abc123'
-        >>> get_unique_video_folder_name_from_url("https://www.youtube.com/playlist?list=PLxxx")
-        'youtube-playlist-PLxxx'
-        >>> get_unique_video_folder_name_from_url("https://www.instagram.com/p/ABC123/")
-        'instagram-ABC123'
-        >>> get_unique_video_folder_name_from_url("https://www.tiktok.com/@user/video/1234567890")
-        'tiktok-1234567890'
-        >>> get_unique_video_folder_name_from_url("https://vimeo.com/123456789")
-        'vimeo-123456789'
+        Legacy folder name string (e.g., "youtube-dQw4w9WgXcQ")
     """
-    if not url:
-        return "unknown"
+    from app.workspace import get_legacy_folder_name
 
-    # Clean URL for processing
-    url = url.strip()
-
-    # YouTube Playlist: youtube.com/playlist?list=PLAYLIST_ID
-    # Must be checked BEFORE video detection to prioritize playlists
-    # Note: watch URLs with &list= are treated as videos, not playlists
-    # (when watching a video from a playlist, we want to download the video, not the playlist)
-    youtube_playlist_match = re.search(
-        r"youtube\.com/playlist\?list=([a-zA-Z0-9_-]+)", url
-    )
-    if youtube_playlist_match:
-        playlist_id = youtube_playlist_match.group(1)
-        return f"youtube-playlist-{playlist_id}"
-
-    # YouTube standard format: youtube.com/watch?v=VIDEO_ID
-    youtube_watch_match = re.search(
-        r"(?:youtube\.com/watch\?v=|youtube\.com/.*[?&]v=)([a-zA-Z0-9_-]{11})", url
-    )
-    if youtube_watch_match:
-        video_id = youtube_watch_match.group(1)
-        return f"youtube-{video_id}"
-
-    # YouTube short URL: youtu.be/VIDEO_ID
-    youtube_short_match = re.search(r"youtu\.be/([a-zA-Z0-9_-]{11})", url)
-    if youtube_short_match:
-        video_id = youtube_short_match.group(1)
-        return f"youtube-{video_id}"
-
-    # YouTube Shorts: youtube.com/shorts/VIDEO_ID
-    youtube_shorts_match = re.search(r"youtube\.com/shorts/([a-zA-Z0-9_-]+)", url)
-    if youtube_shorts_match:
-        video_id = youtube_shorts_match.group(1)
-        return f"youtube-shorts-{video_id}"
-
-    # Instagram: instagram.com/p/POST_ID or /reel/POST_ID or /tv/POST_ID
-    instagram_match = re.search(r"instagram\.com/(?:p|reel|tv)/([a-zA-Z0-9_-]+)", url)
-    if instagram_match:
-        post_id = instagram_match.group(1)
-        return f"instagram-{post_id}"
-
-    # TikTok: tiktok.com/@user/video/VIDEO_ID
-    tiktok_match = re.search(r"tiktok\.com/.*?/video/(\d+)", url)
-    if tiktok_match:
-        video_id = tiktok_match.group(1)
-        return f"tiktok-{video_id}"
-
-    # TikTok short URL: vm.tiktok.com/SHORT_CODE or vt.tiktok.com/SHORT_CODE
-    tiktok_short_match = re.search(r"v[mt]\.tiktok\.com/([a-zA-Z0-9]+)", url)
-    if tiktok_short_match:
-        short_code = tiktok_short_match.group(1)
-        return f"tiktok-{short_code}"
-
-    # Vimeo: vimeo.com/VIDEO_ID
-    vimeo_match = re.search(r"vimeo\.com/(\d+)", url)
-    if vimeo_match:
-        video_id = vimeo_match.group(1)
-        return f"vimeo-{video_id}"
-
-    # Dailymotion: dailymotion.com/video/VIDEO_ID
-    dailymotion_match = re.search(r"dailymotion\.com/video/([a-zA-Z0-9]+)", url)
-    if dailymotion_match:
-        video_id = dailymotion_match.group(1)
-        return f"dailymotion-{video_id}"
-
-    # Generic fallback: use hash of URL for unknown platforms
-    import hashlib
-
-    url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()[:12]
-    return f"generic-{url_hash}"
+    return get_legacy_folder_name(url)
 
 
 def is_valid_cookie_file(file_path: str) -> bool:

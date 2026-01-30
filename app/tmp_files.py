@@ -6,19 +6,27 @@ for temporary files in the video processing pipeline. This approach improves
 robustness by making the system independent of video titles and allows easy
 verification of what files exist.
 
-File naming convention:
+Directory structure (NEW):
     TMP_DOWNLOAD_FOLDER/
-    └── youtube-{VIDEO_ID}/
-        ├── url_info.json         # Video metadata from yt-dlp
-        ├── status.json           # Download status and progress tracking
-        ├── video-{FORMAT_ID}.{ext}   # Downloaded video track
-        ├── audio-{FORMAT_ID}.{ext}   # Downloaded audio track(s)
-        ├── subtitles.{lang}.srt  # Original subtitles
-        ├── subtitles-cut.{lang}.srt  # Cut subtitles
-        ├── session.log           # Processing logs
-        └── final.{ext}           # Final muxed file, moved to destination (e.g., final.mkv)
+    ├── videos/
+    │   └── {platform}/           # e.g., youtube, instagram, tiktok
+    │       └── {video_id}/
+    │           ├── url_info.json         # Video metadata from yt-dlp
+    │           ├── status.json           # Download status and progress
+    │           ├── video-{FORMAT_ID}.{ext}   # Downloaded video track
+    │           ├── audio-{FORMAT_ID}.{ext}   # Downloaded audio track(s)
+    │           ├── subtitles.{lang}.srt  # Original subtitles
+    │           ├── subtitles-cut.{lang}.srt  # Cut subtitles
+    │           ├── session.log           # Processing logs
+    │           └── final.{ext}           # Final muxed file (moved to destination)
+    └── playlists/
+        └── {platform}/
+            └── {playlist_id}/
+                ├── url_info.json         # Playlist metadata
+                └── status.json           # Playlist download status
 
 Benefits:
+- Videos are NEVER downloaded twice (shared between playlists and individual downloads)
 - Generic names independent of video titles
 - Easy to verify what exists
 - Resilient to title changes or special characters
@@ -28,6 +36,10 @@ Benefits:
 
 from pathlib import Path
 from typing import Optional
+
+# Shared constant for video extensions used throughout the codebase
+VIDEO_EXTENSIONS = ["mkv", "mp4", "webm", "avi", "mov"]
+AUDIO_EXTENSIONS = ["opus", "m4a", "webm", "mp3", "aac"]
 
 
 def get_video_track_path(tmp_dir: Path, format_id: str, extension: str) -> Path:
@@ -125,9 +137,8 @@ def find_video_tracks(tmp_dir: Path) -> list[Path]:
     if not tmp_dir.exists():
         return []
 
-    # Glob doesn't support {ext1,ext2} syntax, so we need to search separately
     tracks = []
-    for ext in ["webm", "mp4", "mkv", "avi"]:
+    for ext in VIDEO_EXTENSIONS:
         tracks.extend(tmp_dir.glob(f"video-*.{ext}"))
 
     return sorted(tracks)
@@ -146,9 +157,8 @@ def find_audio_tracks(tmp_dir: Path) -> list[Path]:
     if not tmp_dir.exists():
         return []
 
-    # Glob doesn't support {ext1,ext2} syntax, so we need to search separately
     tracks = []
-    for ext in ["opus", "m4a", "webm", "mp3", "aac"]:
+    for ext in AUDIO_EXTENSIONS:
         tracks.extend(tmp_dir.glob(f"audio-*.{ext}"))
 
     return sorted(tracks)
@@ -187,10 +197,62 @@ def find_final_file(tmp_dir: Path) -> Optional[Path]:
         return None
 
     # Prioritize MKV format (best for modern codecs), then MP4, then others
-    for ext in ["mkv", "mp4", "webm", "avi"]:
+    for ext in VIDEO_EXTENSIONS:
         candidate = tmp_dir / f"final.{ext}"
         if candidate.exists():
             return candidate
+
+    return None
+
+
+def find_downloaded_video(tmp_dir: Path) -> Optional[Path]:
+    """
+    Find ANY downloaded video file in the temporary directory.
+
+    This is the RESILIENT function that checks for any video file,
+    not just 'final.{ext}'. This handles cases where:
+    - The video was downloaded with a different naming convention
+    - The video download was interrupted before rename to 'final'
+    - Legacy naming conventions like 'video-{format_id}.{ext}'
+
+    Priority order:
+    1. final.{ext} (preferred, fully processed)
+    2. video-*.{ext} (downloaded but maybe not fully processed)
+    3. Any .mkv/.mp4/.webm file (fallback for any video)
+
+    Args:
+        tmp_dir: Temporary directory for the video
+
+    Returns:
+        Path to any video file found, or None if no video exists
+    """
+    if not tmp_dir.exists():
+        return None
+
+    # Priority 1: Look for final.{ext} (fully processed)
+    for ext in VIDEO_EXTENSIONS:
+        candidate = tmp_dir / f"final.{ext}"
+        if candidate.exists():
+            return candidate
+
+    # Priority 2: Look for video-*.{ext} (downloaded video tracks)
+    for ext in VIDEO_EXTENSIONS:
+        matches = list(tmp_dir.glob(f"video-*.{ext}"))
+        if matches:
+            # Return the first one (or the largest one for safety)
+            return max(matches, key=lambda p: p.stat().st_size)
+
+    # Priority 3: Any video file in the directory (excluding subtitles, logs, etc.)
+    for ext in VIDEO_EXTENSIONS:
+        matches = list(tmp_dir.glob(f"*.{ext}"))
+        # Exclude known non-video patterns
+        matches = [
+            m
+            for m in matches
+            if not m.name.startswith("audio-") and not m.name.startswith("subtitles")
+        ]
+        if matches:
+            return max(matches, key=lambda p: p.stat().st_size)
 
     return None
 
