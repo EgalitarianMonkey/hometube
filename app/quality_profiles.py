@@ -17,6 +17,7 @@ import time
 import streamlit as st
 from typing import Dict, List, Optional, Tuple, Union
 
+from app.config import get_settings
 from app.process_utils import run_subprocess_safe
 from app.logs_utils import safe_push_log, log_title
 from app.medias_utils import sanitize_url
@@ -26,6 +27,7 @@ from app.medias_utils import sanitize_url
 def _get_main_functions():
     """Lazy import to avoid circular dependencies"""
     from app import main
+
     return main
 
 
@@ -43,17 +45,17 @@ def get_cached_video_analysis(url: str):
 def parse_format_line(line: str) -> Optional[Dict]:
     """Stub for profile_utils.parse_format_line"""
     from app.profile_utils import parse_format_line as pfl
+
     return pfl(line)
 
 
 def match_profiles_to_formats(formats, profiles, video_quality_max):
     """Stub for profile_utils.match_profiles_to_formats"""
     from app.profile_utils import match_profiles_to_formats as mptf
+
     return mptf(formats, profiles, video_quality_max)
 
 
-# Settings
-from app.config import get_settings
 settings = get_settings()
 
 # Constants

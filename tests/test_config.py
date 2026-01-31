@@ -1,6 +1,41 @@
 """
-Tests for subtitle language configuration based on audio preferences.
+Tests for configuration settings (app/config.py)
+
+This module tests:
+- Jellyfin configuration defaults and overrides
+- Subtitle language configuration
+- Other settings behavior
 """
+
+
+class TestJellyfinSettings:
+    """Tests for Jellyfin-related configuration."""
+
+    def test_jellyfin_settings_defaults(self, monkeypatch):
+        """Ensure Jellyfin settings default to empty strings when not configured."""
+        monkeypatch.delenv("JELLYFIN_BASE_URL", raising=False)
+        monkeypatch.delenv("JELLYFIN_API_KEY", raising=False)
+
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+        settings = get_settings()
+
+        assert settings.JELLYFIN_BASE_URL == ""
+        assert settings.JELLYFIN_API_KEY == ""
+
+    def test_jellyfin_settings_env_overrides(self, monkeypatch):
+        """Ensure Jellyfin settings respect environment overrides and strip whitespace."""
+        monkeypatch.setenv("JELLYFIN_BASE_URL", " https://jellyfin.example:8096/ ")
+        monkeypatch.setenv("JELLYFIN_API_KEY", " super-secret ")
+
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+        settings = get_settings()
+
+        assert settings.JELLYFIN_BASE_URL == "https://jellyfin.example:8096/"
+        assert settings.JELLYFIN_API_KEY == "super-secret"
 
 
 class TestSubtitleLanguageConfiguration:
@@ -12,7 +47,6 @@ class TestSubtitleLanguageConfiguration:
         monkeypatch.setenv("LANGUAGES_SECONDARIES", "")
         monkeypatch.setenv("LANGUAGE_PRIMARY_INCLUDE_SUBTITLES", "true")
 
-        # Clear cache to reload settings
         from app.config import get_settings, get_default_subtitle_languages
 
         get_settings.cache_clear()

@@ -29,9 +29,7 @@ AUTH_ERROR_PATTERNS: List[str] = [
 # === ANSI ESCAPE PATTERN ===
 # Regular expression to strip ANSI color codes and control sequences from logs.
 # Used in main.py and logs_utils.py for log cleaning.
-ANSI_ESCAPE_PATTERN: Pattern = re.compile(
-    r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])"
-)
+ANSI_ESCAPE_PATTERN: Pattern = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
 # === BROWSER SUPPORT ===
 # Valid browsers for cookie extraction (yt-dlp --cookies-from-browser).
@@ -94,6 +92,4 @@ FRAGMENT_PROGRESS_PATTERN: Pattern = re.compile(
     r"\[download\]\s+Got fragment\s+(\d+)\s+of\s+(\d+)"
 )
 
-GENERIC_PERCENTAGE_PATTERN: Pattern = re.compile(
-    r"(\d{1,3}(?:\.\d+)?)%"
-)
+GENERIC_PERCENTAGE_PATTERN: Pattern = re.compile(r"(\d{1,3}(?:\.\d+)?)%")

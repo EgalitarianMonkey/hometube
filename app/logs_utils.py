@@ -7,9 +7,8 @@ for better user experience and debugging.
 
 import streamlit as st
 
-from app.constants import ANSI_ESCAPE_PATTERN, AUTH_ERROR_PATTERNS
+from app.constants import AUTH_ERROR_PATTERNS
 from app.file_system_utils import is_valid_cookie_file
-
 
 # === LOGGING FUNCTIONS ===
 

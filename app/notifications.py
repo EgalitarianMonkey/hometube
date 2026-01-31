@@ -59,7 +59,10 @@ def load_notification_state() -> dict:
     """Load the notification state from disk."""
     state_file = get_notifications_file_path()
     default_state = {"dismissed": {}, "shown": {}}
-    return safe_load_json(state_file, default=default_state, log_errors=False) or default_state
+    return (
+        safe_load_json(state_file, default=default_state, log_errors=False)
+        or default_state
+    )
 
 
 def save_notification_state(state: dict) -> None:

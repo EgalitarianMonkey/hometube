@@ -16,7 +16,6 @@ import streamlit as st
 
 from app.translations import t
 
-
 # === CONSTANTS ===
 HOMETUBE_GITHUB_REPO = "EgalitarianMonkey/hometube"  # GitHub repository for HomeTube
 

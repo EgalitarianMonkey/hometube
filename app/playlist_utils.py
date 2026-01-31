@@ -8,7 +8,6 @@ This module provides functions for handling YouTube playlists:
 - Creating folder structure for playlist videos
 """
 
-import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path

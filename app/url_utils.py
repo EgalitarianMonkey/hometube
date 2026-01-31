@@ -194,9 +194,7 @@ def is_url_info_complet(json_path: Path) -> Tuple[bool, Optional[Dict]]:
         has_premium = check_url_info_integrity(existing_info)
 
         if has_premium:
-            safe_push_log(
-                "✅ Existing url_info.json has premium formats - reusing it"
-            )
+            safe_push_log("✅ Existing url_info.json has premium formats - reusing it")
             return True, existing_info
         else:
             safe_push_log(
