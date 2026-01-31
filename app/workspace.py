@@ -269,43 +269,6 @@ def ensure_workspace_from_url(tmp_base: Path, url: str) -> Tuple[Path, UrlInfo]:
     return workspace, info
 
 
-def get_video_workspace_for_playlist_entry(
-    tmp_base: Path, video_id: str, platform: str = "youtube"
-) -> Path:
-    """
-    Get video workspace for a playlist entry.
-
-    This ensures all videos are stored in the same location, whether
-    downloaded individually or as part of a playlist.
-
-    Args:
-        tmp_base: Base temporary directory
-        video_id: Video ID
-        platform: Platform name (default: "youtube")
-
-    Returns:
-        Path to video workspace
-    """
-    return get_video_workspace(tmp_base, platform, video_id)
-
-
-def ensure_video_workspace_for_playlist_entry(
-    tmp_base: Path, video_id: str, platform: str = "youtube"
-) -> Path:
-    """
-    Create and return video workspace for a playlist entry.
-
-    Args:
-        tmp_base: Base temporary directory
-        video_id: Video ID
-        platform: Platform name (default: "youtube")
-
-    Returns:
-        Path to created video workspace
-    """
-    return ensure_video_workspace(tmp_base, platform, video_id)
-
-
 # === LEGACY COMPATIBILITY ===
 # These functions provide backward compatibility with the old naming scheme
 

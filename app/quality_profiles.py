@@ -17,28 +17,16 @@ import time
 import streamlit as st
 from typing import Dict, List, Optional, Tuple, Union
 
-# Import centralized utilities
-try:
-    from .process_utils import run_subprocess_safe
-    from .logs_utils import safe_push_log, log_title
-    from .medias_utils import sanitize_url
-except ImportError:
-    from process_utils import run_subprocess_safe
-    from logs_utils import safe_push_log, log_title
-    from medias_utils import sanitize_url
+from app.process_utils import run_subprocess_safe
+from app.logs_utils import safe_push_log, log_title
+from app.medias_utils import sanitize_url
 
 
 # Lazy imports to avoid circular dependencies
 def _get_main_functions():
     """Lazy import to avoid circular dependencies"""
-    try:
-        from . import main
-
-        return main
-    except ImportError:
-        import main as main_module
-
-        return main_module
+    from app import main
+    return main
 
 
 # Logging functions are now imported from logs_utils
@@ -54,52 +42,19 @@ def get_cached_video_analysis(url: str):
 
 def parse_format_line(line: str) -> Optional[Dict]:
     """Stub for profile_utils.parse_format_line"""
-    try:
-        from .profile_utils import parse_format_line as pfl
-
-        return pfl(line)
-    except ImportError:
-        try:
-            from profile_utils import parse_format_line as pfl
-
-            return pfl(line)
-        except ImportError:
-            return None
+    from app.profile_utils import parse_format_line as pfl
+    return pfl(line)
 
 
 def match_profiles_to_formats(formats, profiles, video_quality_max):
     """Stub for profile_utils.match_profiles_to_formats"""
-    try:
-        from .profile_utils import match_profiles_to_formats as mptf
-
-        return mptf(formats, profiles, video_quality_max)
-    except ImportError:
-        try:
-            from profile_utils import match_profiles_to_formats as mptf
-
-            return mptf(formats, profiles, video_quality_max)
-        except ImportError:
-            return []
+    from app.profile_utils import match_profiles_to_formats as mptf
+    return mptf(formats, profiles, video_quality_max)
 
 
-# Settings stub
-class SettingsStub:
-    VIDEO_QUALITY_MAX = 2160
-    QUALITY_PROFILE = "auto"
-
-
-settings = None
-try:
-    from .config import get_settings
-
-    settings = get_settings()
-except ImportError:
-    try:
-        from config import get_settings
-
-        settings = get_settings()
-    except ImportError:
-        settings = SettingsStub()
+# Settings
+from app.config import get_settings
+settings = get_settings()
 
 # Constants
 CACHE_EXPIRY_MINUTES = 30

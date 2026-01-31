@@ -10,24 +10,14 @@ import requests
 from typing import Dict, List, Tuple
 from urllib.parse import urlparse
 
-try:
-    from .translations import t
-    from .logs_utils import push_log_generic as push_log, safe_push_log
-    from .medias_utils import video_id_from_url
-    from .display_utils import fmt_hhmmss
-    from .core import (
-        build_sponsorblock_params as core_build_sponsorblock_params,
-        get_sponsorblock_config as core_get_sponsorblock_config,
-    )
-except ImportError:
-    from translations import t
-    from logs_utils import push_log_generic as push_log, safe_push_log
-    from medias_utils import video_id_from_url
-    from display_utils import fmt_hhmmss
-    from core import (
-        build_sponsorblock_params as core_build_sponsorblock_params,
-        get_sponsorblock_config as core_get_sponsorblock_config,
-    )
+from app.translations import t
+from app.logs_utils import push_log_generic as push_log, safe_push_log
+from app.medias_utils import video_id_from_url
+from app.display_utils import fmt_hhmmss
+from app.core import (
+    build_sponsorblock_params as core_build_sponsorblock_params,
+    get_sponsorblock_config as core_get_sponsorblock_config,
+)
 
 # SponsorBlock API configuration
 SPONSORBLOCK_API = "https://sponsor.ajay.app"

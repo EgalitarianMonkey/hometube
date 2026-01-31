@@ -1,6 +1,6 @@
 # 🚀 Deployment Guide
 
-Production deployment strategies for the Universal Video Downloader.
+Production deployment strategies for HomeTube.
 
 ## 📋 Prerequisites
 
@@ -518,4 +518,4 @@ docker logs hometube --tail 100
 
 ---
 
-**Previous: [Development Guide](development.md)** | **Next: [Installation Guide](installation.md)**
+**Previous: [Contributing Guide](contributing.md)** | **Next: [Installation Guide](installation.md)**

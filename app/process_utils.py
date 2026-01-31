@@ -8,11 +8,7 @@ timeout management, and logging integration.
 import subprocess
 from typing import List
 
-# Import logging functions
-try:
-    from .logs_utils import safe_push_log
-except ImportError:
-    from logs_utils import safe_push_log
+from app.logs_utils import safe_push_log
 
 
 def run_subprocess_safe(

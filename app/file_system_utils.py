@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import List
 
 import streamlit as st
+from app.constants import SUPPORTED_BROWSERS_SET
 
 # === FILE NAMING AND SANITIZATION ===
 
@@ -108,28 +109,10 @@ def is_valid_browser(browser: str) -> bool:
     Returns:
         True if valid browser name
     """
-    valid_browsers = {
-        "chrome",
-        "firefox",
-        "safari",
-        "edge",
-        "opera",
-        "brave",
-        "vivaldi",
-        "chromium",
-        "whale",
-    }
-    return browser.lower().strip() in valid_browsers
+    return browser.lower().strip() in SUPPORTED_BROWSERS_SET
 
 
 # === DIRECTORY OPERATIONS ===
-
-
-def list_subdirs(root: Path) -> List[str]:
-    """List immediate subdirectories in root folder"""
-    if not root.exists():
-        return []
-    return sorted([p.name for p in root.iterdir() if p.is_dir()])
 
 
 def list_subdirs_recursive(root: Path, max_depth: int = 2) -> List[str]:
@@ -268,14 +251,10 @@ def should_remove_tmp_files() -> bool:
         return st.session_state.remove_tmp_files
 
     # Otherwise use the configuration default - get settings dynamically
-    try:
-        from app.config import get_settings
+    from app.config import get_settings
 
-        settings = get_settings()
-        return settings.REMOVE_TMP_FILES_AFTER_DOWNLOAD
-    except ImportError:
-        # Fallback if config not available
-        return False
+    settings = get_settings()
+    return settings.REMOVE_TMP_FILES_AFTER_DOWNLOAD
 
 
 def _should_remove_file(file_path: Path, cleanup_type: str) -> bool:
@@ -303,10 +282,7 @@ def cleanup_tmp_files(
         cleanup_type: Type of cleanup - "all", "download", "subtitles", "cutting", "outputs"
     """
     # Import logging here to avoid circular dependency
-    try:
-        from .logs_utils import safe_push_log
-    except ImportError:
-        from logs_utils import safe_push_log
+    from app.logs_utils import safe_push_log
 
     if not should_remove_tmp_files():
         safe_push_log(
@@ -316,14 +292,9 @@ def cleanup_tmp_files(
 
     # Get TMP_DOWNLOAD_FOLDER if not provided
     if tmp_dir is None:
-        try:
-            from app.config import ensure_folders_exist
+        from app.config import ensure_folders_exist
 
-            _, tmp_dir = ensure_folders_exist()
-        except ImportError:
-            # Fallback - use current directory tmp folder
-            tmp_dir = Path("tmp")
-            ensure_dir(tmp_dir)
+        _, tmp_dir = ensure_folders_exist()
 
     safe_push_log(f"🧹 Cleaning {cleanup_type} temporary files...")
 
@@ -438,22 +409,15 @@ def clean_all_tmp_folders(tmp_base_dir: Path = None) -> tuple[int, int]:
         tuple[int, int]: (folders_removed, total_size_mb) - count and total size freed
     """
     # Import dependencies
-    try:
-        from .logs_utils import safe_push_log
-    except ImportError:
-        from logs_utils import safe_push_log
+    from app.logs_utils import safe_push_log
 
     import shutil
 
     # Get TMP_DOWNLOAD_FOLDER if not provided
     if tmp_base_dir is None:
-        try:
-            from app.config import ensure_folders_exist
+        from app.config import ensure_folders_exist
 
-            _, tmp_base_dir = ensure_folders_exist()
-        except ImportError:
-            # Fallback - use current directory tmp folder
-            tmp_base_dir = Path("tmp")
+        _, tmp_base_dir = ensure_folders_exist()
 
     if not tmp_base_dir.exists():
         safe_push_log("✅ No tmp folder to clean")

@@ -1,6 +1,6 @@
 # 📖 Usage Guide
 
-Complete guide to using the Universal Video Downloader application.
+Complete guide to using HomeTube.
 
 ## � Quick Start
 

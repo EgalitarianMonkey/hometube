@@ -14,10 +14,7 @@ from typing import Optional
 import requests
 import streamlit as st
 
-try:
-    from .translations import t
-except ImportError:
-    from translations import t
+from app.translations import t
 
 
 # === CONSTANTS ===

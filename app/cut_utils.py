@@ -8,14 +8,9 @@ segment manipulation, and time remapping for SponsorBlock integration.
 from pathlib import Path
 from typing import Dict, List, Callable, Tuple
 
-try:
-    from .translations import t
-    from .logs_utils import push_log_generic as push_log
-    from .process_utils import run_subprocess_safe
-except ImportError:
-    from translations import t
-    from logs_utils import push_log_generic as push_log
-    from process_utils import run_subprocess_safe
+from app.translations import t
+from app.logs_utils import push_log_generic as push_log
+from app.process_utils import run_subprocess_safe
 
 
 # === KEYFRAME OPERATIONS ===
