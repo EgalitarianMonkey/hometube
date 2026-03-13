@@ -1,6 +1,6 @@
 # 🛠️ Development Guide
 
-Guide for developers contributing to the Universal Video Downloader project.
+Guide for developers contributing to HomeTube.
 
 ## 🏗️ Development Setup
 

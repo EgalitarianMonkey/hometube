@@ -5,11 +5,11 @@ This module manages status.json files that track download progress
 and completion status for each video.
 """
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from app.json_utils import safe_load_json, safe_save_json
 from app.logs_utils import safe_push_log
 
 
@@ -44,12 +44,8 @@ def create_initial_status(
 
     # Save to file
     status_path = tmp_url_workspace / "status.json"
-    try:
-        with open(status_path, "w", encoding="utf-8") as f:
-            json.dump(status_data, f, indent=2, ensure_ascii=False)
+    if safe_save_json(status_path, status_data):
         safe_push_log(f"📊 Status file created: {status_path.name}")
-    except Exception as e:
-        safe_push_log(f"⚠️ Could not create status file: {e}")
 
     return status_data
 
@@ -64,16 +60,7 @@ def load_status(tmp_url_workspace: Path) -> Optional[Dict]:
     Returns:
         Dict with status data or None if not found
     """
-    status_path = tmp_url_workspace / "status.json"
-    if not status_path.exists():
-        return None
-
-    try:
-        with open(status_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        safe_push_log(f"⚠️ Could not load status file: {e}")
-        return None
+    return safe_load_json(tmp_url_workspace / "status.json")
 
 
 def save_status(tmp_url_workspace: Path, status_data: Dict) -> bool:
@@ -87,18 +74,10 @@ def save_status(tmp_url_workspace: Path, status_data: Dict) -> bool:
     Returns:
         bool: True if saved successfully, False otherwise
     """
-    status_path = tmp_url_workspace / "status.json"
-
     # Update last_updated timestamp
     status_data["last_updated"] = datetime.now(timezone.utc).isoformat()
 
-    try:
-        with open(status_path, "w", encoding="utf-8") as f:
-            json.dump(status_data, f, indent=2, ensure_ascii=False)
-        return True
-    except Exception as e:
-        safe_push_log(f"⚠️ Could not save status file: {e}")
-        return False
+    return safe_save_json(tmp_url_workspace / "status.json", status_data)
 
 
 def add_selected_format(

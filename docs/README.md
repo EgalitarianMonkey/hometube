@@ -1,113 +1,74 @@
-# 📚 Documentation Index
+# 📚 HomeTube Documentation
 
-Welcome to the Universal Video Downloader documentation! This index will guide you to the right documentation for your needs.
+Welcome to the HomeTube documentation! This guide helps you install, use, and contribute to HomeTube.
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
-**New to the project?** Start here:
-
-1. **[Installation Guide](installation.md)** - Set up the application on your system
-2. **[Usage Guide](usage.md)** - Learn how to use all features (1800+ platforms)
-3. **[Supported Platforms](supported-platforms.md)** - Complete list of supported video sources
-4. **[Quick Start in main README](../README.md)** - Get running in 5 minutes
+| Goal                        | Documentation                           |
+| --------------------------- | --------------------------------------- |
+| **Install & run HomeTube**  | [Installation Guide](installation.md)  |
+| **Download videos**         | [Usage Guide](usage.md)                 |
+| **Deploy with Docker**      | [Docker Guide](docker.md)               |
+| **Contribute code**         | [Contributing Guide](contributing.md)  |
 
 ## 📖 User Documentation
 
-### For End Users
-- **[Installation Guide](installation.md)** - Complete setup instructions for all platforms
-- **[Usage Guide](usage.md)** - Comprehensive feature documentation and tutorials
-- **[Supported Platforms](supported-platforms.md)** - Complete list of 1800+ supported video sources
-- **[Docker Guide](docker.md)** - Container deployment and configuration
+### For Users
 
-### For System Administrators
-- **[Deployment Guide](deployment.md)** - Production deployment strategies
-- **[Docker Guide](docker.md)** - Advanced container configuration
-- **Security Configuration** - See [Deployment Guide](deployment.md#security-configuration)
+- **[Installation Guide](installation.md)** - Set up HomeTube (Docker or local)
+- **[Usage Guide](usage.md)** - Learn all features and download strategies
+- **[Supported Platforms](supported-platforms.md)** - 1800+ video sources supported
+
+### For Deployment
+
+- **[Docker Guide](docker.md)** - Container configuration and volumes
+- **[Deployment Guide](deployment.md)** - Production deployment, reverse proxy, security
 
 ## 🛠️ Developer Documentation
 
 ### For Contributors
-- **[Development Setup Guide](development-setup.md)** - Complete setup for all environments (Conda, UV, pip)
-- **[Development Guide](development.md)** - Setup development environment and contribute
-- **[Testing Documentation](testing.md)** - Complete testing framework and guidelines
-- **[Generic File Naming](generic-file-naming.md)** - Temporary file system and download resilience
-- **[Intelligent Caching](intelligent-caching.md)** - URL info caching and resume support
-- **[Testing Framework](development.md#testing-framework)** - Run and write tests
-- **[CI/CD Pipeline](development.md#ci-cd-pipeline)** - Automated workflows
-- **[Project Roadmap](todo.md)** - Planned features and improvements
 
-### For DevOps Engineers
-- **[Deployment Guide](deployment.md)** - Production deployment and monitoring
-- **[Development Guide](development.md#ci-cd-pipeline)** - CI/CD configuration
-- **[Docker Guide](docker.md)** - Container orchestration
-- **[yt-dlp Version Management](ytdlp-version-management.md)** - Automated updates and version tracking
+- **[Contributing Guide](contributing.md)** - Development setup, testing, and workflow
 
-## 🎯 Quick Navigation
+### Architecture Reference
 
-### By Use Case
+- **[Generic File Naming](architecture/generic-file-naming.md)** - Temporary file system and download resilience
+- **[Intelligent Caching](architecture/intelligent-caching.md)** - URL info caching and resume support
+- **[yt-dlp Version Management](architecture/ytdlp-version-management.md)** - Automated updates tracking
 
-**"I want to download YouTube videos"**
-→ [Installation](installation.md) → [Usage Guide](usage.md)
+### Testing Reference
 
-**"I want to deploy this in my homelab"**
-→ [Docker Guide](docker.md) → [Deployment Guide](deployment.md)
-
-**"I want to contribute to the project"**
-→ [Development Guide](development.md)
-
-**"I need to deploy this in production"**
-→ [Deployment Guide](deployment.md)
-
-### By Experience Level
-
-**Beginner** 🌱
-- [Main README](../README.md) - Project overview
-- [Installation Guide](installation.md) - Step-by-step setup
-- [Usage Guide](usage.md) - Basic features
-
-**Intermediate** 🚀
-- [Docker Guide](docker.md) - Container deployment
-- [Advanced Usage](usage.md#advanced-features) - All features
-- [Production Deployment](deployment.md#homelab-deployment) - HomeLab setup
-
-**Advanced** ⚡
-- [Development Guide](development.md) - Contributing
-- [Production Deployment](deployment.md) - Enterprise deployment
-- [CI/CD Configuration](development.md#ci-cd-pipeline) - Automation
+- **[Testing Guide](testing.md)** - Test framework and guidelines
 
 ## 📋 Documentation Structure
 
-```
+```text
 docs/
-├── README.md                # This index
-├── installation.md          # Setup instructions
-├── usage.md                 # User guide
-├── docker.md               # Container guide
-├── development.md          # Developer guide
-├── deployment.md           # Production guide
-└── icons/                 # Screenshots and diagrams
-    └── favicon.svg             # Favorite icon
+├── README.md                   # This index
+├── installation.md             # Setup instructions (Docker + local)
+├── usage.md                    # User guide and features
+├── docker.md                   # Container configuration
+├── deployment.md               # Production deployment
+├── supported-platforms.md      # Supported video sources
+├── contributing.md             # Development setup & workflow
+├── testing.md                  # Testing framework
+├── architecture/               # Technical documentation
+│   ├── generic-file-naming.md  # File naming system
+│   ├── intelligent-caching.md  # Caching system
+│   └── ytdlp-version-management.md  # Version tracking
+├── examples/                   # Configuration examples
+│   └── nginx/                  # Nginx configuration
+├── icons/                      # Favicon
+└── images/                     # Screenshots
 ```
 
-## 🔄 Keep Documentation Updated
+## 🔗 Quick Links
 
-This documentation is maintained alongside the code. If you notice:
-- ❌ Outdated information
-- 🐛 Broken links
-- 📝 Missing content
-- 💡 Improvement suggestions
-
-Please [open an issue](https://github.com/EgalitarianMonkey/hometube/issues) or submit a pull request!
-
-## 📞 Getting Help
-
-**Can't find what you're looking for?**
-
-1. **Search**: Use Ctrl/Cmd + F to search within documentation
-2. **GitHub Issues**: Check [existing issues](https://github.com/EgalitarianMonkey/hometube/issues)
-3. **Discussions**: Join [GitHub Discussions](https://github.com/EgalitarianMonkey/hometube/discussions)
-4. **Create Issue**: [Report a problem](https://github.com/EgalitarianMonkey/hometube/issues/new)
+- **[Main README](../README.md)** - Project overview
+- **[GitHub Repository](https://github.com/EgalitarianMonkey/hometube)**
+- **[GitHub Issues](https://github.com/EgalitarianMonkey/hometube/issues)**
+- **[GitHub Discussions](https://github.com/EgalitarianMonkey/hometube/discussions)**
 
 ---
 
-**Happy downloading! 🎬**
+Happy downloading! 🎬

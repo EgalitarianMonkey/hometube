@@ -148,3 +148,133 @@ class TestTmpFileNaming:
         assert find_video_tracks(nonexistent) == []
         assert find_audio_tracks(nonexistent) == []
         assert find_final_file(nonexistent) is None
+
+
+class TestTmpFolderStructure:
+    """Test that temporary files are always at root of unique video folder."""
+
+    def test_tmp_folder_always_at_root(self, tmp_path):
+        """
+        Test that tmp folder structure is flat (no subfolder replication).
+
+        Even if the user selects a subfolder like "Tech/HomeLab", all temporary files
+        should be written directly to the root of the unique video folder.
+        """
+        from app.tmp_files import (
+            get_video_track_path,
+            get_subtitle_path,
+            get_final_path,
+        )
+
+        tmp_video_dir = tmp_path / "youtube-abc123"
+        tmp_video_dir.mkdir()
+
+        # Create test files at the root of unique folder
+        video_file = get_video_track_path(tmp_video_dir, "22", "mp4")
+        video_file.parent.mkdir(parents=True, exist_ok=True)
+        video_file.write_text("fake video")
+
+        subtitle_file = get_subtitle_path(tmp_video_dir, "en", is_cut=False)
+        subtitle_file.write_text("fake subtitle")
+
+        final_file = get_final_path(tmp_video_dir, "mp4")
+        final_file.write_text("fake final")
+
+        # Verify all files are at the root of tmp_video_dir
+        assert video_file.parent == tmp_video_dir, "Video should be at root"
+        assert subtitle_file.parent == tmp_video_dir, "Subtitle should be at root"
+        assert final_file.parent == tmp_video_dir, "Final file should be at root"
+
+        # Verify no subfolder was created
+        tech_subfolder = tmp_video_dir / "Tech"
+        assert not tech_subfolder.exists(), "No subfolder should be created in tmp"
+
+    def test_destination_subfolder_only_used_for_final_copy(self, tmp_path):
+        """
+        Test that the user's selected subfolder is only used when copying final file.
+        """
+        import shutil
+        from app.tmp_files import get_final_path
+
+        # Setup directories
+        tmp_video_dir = tmp_path / "tmp" / "youtube-abc123"
+        tmp_video_dir.mkdir(parents=True)
+
+        videos_folder = tmp_path / "Videos"
+        videos_folder.mkdir()
+
+        # User selected subfolder
+        video_subfolder = "Tech/HomeLab"
+        dest_dir = videos_folder / video_subfolder
+        dest_dir.mkdir(parents=True)
+
+        # Temporary files are at root of unique folder
+        final_source = get_final_path(tmp_video_dir, "mp4")
+        final_source.write_text("final video content")
+
+        # Move to destination WITH subfolder structure
+        intended_filename = "my_video"
+        final_destination = dest_dir / f"{intended_filename}.mp4"
+        shutil.move(str(final_source), str(final_destination))
+
+        # Verify structure
+        assert not final_source.exists(), "Source should be moved"
+        assert final_destination.parent == dest_dir
+        assert final_destination.exists()
+
+
+class TestResilienceScenarios:
+    """Test realistic resilience scenarios for generic file naming."""
+
+    def test_resume_after_download_interruption(self, tmp_path):
+        """Test resuming after download was interrupted."""
+        from app.tmp_files import find_final_file
+
+        # Create generic file simulating interrupted download
+        generic_file = tmp_path / "final.mkv"
+        generic_file.write_text("downloaded content")
+
+        # New session starts - should find existing file
+        found = find_final_file(tmp_path)
+
+        assert found is not None
+        assert found == generic_file
+        assert found.name == "final.mkv"
+
+    def test_no_confusion_with_multiple_videos(self, tmp_path):
+        """Test that generic files from different videos don't conflict."""
+        from app.tmp_files import get_final_path, find_final_file
+
+        # Create subdirectories for different videos
+        video1_dir = tmp_path / "youtube-abc123"
+        video2_dir = tmp_path / "youtube-def456"
+        video1_dir.mkdir()
+        video2_dir.mkdir()
+
+        file1 = get_final_path(video1_dir, "mkv")
+        file2 = get_final_path(video2_dir, "mkv")
+
+        file1.write_text("video 1 content")
+        file2.write_text("video 2 content")
+
+        # Finding files in each directory should work independently
+        found1 = find_final_file(video1_dir)
+        found2 = find_final_file(video2_dir)
+
+        assert found1 == file1
+        assert found2 == file2
+        assert found1.name == "final.mkv"
+        assert found2.name == "final.mkv"
+
+    def test_find_final_file_prefers_mkv_over_mp4(self, tmp_path):
+        """Test that MKV is preferred when both formats exist."""
+        from app.tmp_files import find_final_file
+
+        mkv_file = tmp_path / "final.mkv"
+        mp4_file = tmp_path / "final.mp4"
+        mkv_file.write_text("mkv content")
+        mp4_file.write_text("mp4 content")
+
+        result = find_final_file(tmp_path)
+
+        assert result == mkv_file  # MKV should be preferred

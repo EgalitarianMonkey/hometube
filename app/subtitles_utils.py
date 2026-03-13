@@ -11,11 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-# Import logging functions from centralized module
-try:
-    from .logs_utils import safe_push_log
-except ImportError:
-    from logs_utils import safe_push_log
+from app.logs_utils import safe_push_log
 
 
 def find_subtitle_files_optimized(

@@ -8,7 +8,6 @@ This module provides functions for handling YouTube playlists:
 - Creating folder structure for playlist videos
 """
 
-import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +18,7 @@ from app.file_system_utils import (
     ensure_dir,
     move_final_to_destination,
 )
+from app.json_utils import safe_load_json, safe_save_json
 from app.logs_utils import safe_push_log
 from app.text_utils import render_title
 from app.workspace import (
@@ -462,12 +462,8 @@ def create_playlist_status(
 
     # Save to file
     status_path = playlist_workspace / "status.json"
-    try:
-        with open(status_path, "w", encoding="utf-8") as f:
-            json.dump(status_data, f, indent=2, ensure_ascii=False)
+    if safe_save_json(status_path, status_data):
         safe_push_log(f"📊 Playlist status file created: {status_path.name}")
-    except Exception as e:
-        safe_push_log(f"⚠️ Could not create playlist status file: {e}")
 
     return status_data
 
@@ -482,16 +478,7 @@ def load_playlist_status(playlist_workspace: Path) -> Optional[Dict]:
     Returns:
         Dict with playlist status or None if not found
     """
-    status_path = playlist_workspace / "status.json"
-    if not status_path.exists():
-        return None
-
-    try:
-        with open(status_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        safe_push_log(f"⚠️ Could not load playlist status: {e}")
-        return None
+    return safe_load_json(playlist_workspace / "status.json")
 
 
 def save_playlist_status(playlist_workspace: Path, status_data: Dict) -> bool:
@@ -505,16 +492,8 @@ def save_playlist_status(playlist_workspace: Path, status_data: Dict) -> bool:
     Returns:
         bool: True if saved successfully
     """
-    status_path = playlist_workspace / "status.json"
     status_data["last_updated"] = datetime.now(timezone.utc).isoformat()
-
-    try:
-        with open(status_path, "w", encoding="utf-8") as f:
-            json.dump(status_data, f, indent=2, ensure_ascii=False)
-        return True
-    except Exception as e:
-        safe_push_log(f"⚠️ Could not save playlist status: {e}")
-        return False
+    return safe_save_json(playlist_workspace / "status.json", status_data)
 
 
 def update_video_status_in_playlist(

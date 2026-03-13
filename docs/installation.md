@@ -214,7 +214,7 @@ For production environments, see the [Deployment Guide](deployment.md).
 
 ### Development Setup
 
-For contributing to the project, see the [Development Guide](development.md).
+For contributing to the project, see the [Contributing Guide](contributing.md).
 
 ## ⚙️ Environment Configuration
 

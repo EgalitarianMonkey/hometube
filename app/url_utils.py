@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 
+from app.json_utils import safe_load_json, safe_save_json
 from app.logs_utils import safe_push_log
 
 # === URL MANIPULATION ===
@@ -82,17 +83,7 @@ def load_url_info_from_file(file_path: Path) -> Optional[Dict]:
     Returns:
         Dictionary with URL info or None if error
     """
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return None
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON file {file_path}: {e}")
-        return None
-    except Exception as e:
-        print(f"Error loading URL info from {file_path}: {e}")
-        return None
+    return safe_load_json(file_path, log_errors=True)
 
 
 def save_url_info(json_path: Path, url_info: Dict) -> bool:
@@ -106,19 +97,10 @@ def save_url_info(json_path: Path, url_info: Dict) -> bool:
     Returns:
         bool: True if saved successfully, False otherwise
     """
-    try:
-        # Ensure parent directory exists
-        json_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(url_info, f, indent=2, ensure_ascii=False)
-
+    if safe_save_json(json_path, url_info, create_parents=True):
         safe_push_log(f"💾 URL info saved to {json_path}")
         return True
-
-    except Exception as e:
-        safe_push_log(f"⚠️ Could not save URL info to file: {e}")
-        return False
+    return False
 
 
 def check_url_info_integrity(url_info: Dict) -> bool:
@@ -191,50 +173,40 @@ def is_url_info_complet(json_path: Path) -> Tuple[bool, Optional[Dict]]:
         return False, None
 
     # Try to load and parse the file
-    try:
-        safe_push_log("📋 Found existing url_info.json, checking integrity...")
-        with open(json_path, "r", encoding="utf-8") as f:
-            existing_info = json.load(f)
+    safe_push_log("📋 Found existing url_info.json, checking integrity...")
+    existing_info = safe_load_json(json_path, log_errors=False)
 
-        # Check if it's a video or playlist
-        is_video = existing_info.get("_type") == "video" or "duration" in existing_info
-        is_playlist = existing_info.get("_type") == "playlist"
+    if existing_info is None:
+        safe_push_log("⚠️ Could not read url_info.json - will re-download")
+        return False, None
 
-        # For playlists, always reuse
-        if is_playlist:
-            safe_push_log("✅ Existing url_info.json (playlist) - reusing it")
+    # Check if it's a video or playlist
+    is_video = existing_info.get("_type") == "video" or "duration" in existing_info
+    is_playlist = existing_info.get("_type") == "playlist"
+
+    # For playlists, always reuse
+    if is_playlist:
+        safe_push_log("✅ Existing url_info.json (playlist) - reusing it")
+        return True, existing_info
+
+    # For videos, check integrity (premium formats presence)
+    if is_video:
+        has_premium = check_url_info_integrity(existing_info)
+
+        if has_premium:
+            safe_push_log("✅ Existing url_info.json has premium formats - reusing it")
             return True, existing_info
+        else:
+            safe_push_log(
+                "⚠️ Existing url_info.json has limited formats (h264 only) - will re-download"
+            )
+            return False, None
 
-        # For videos, check integrity (premium formats presence)
-        if is_video:
-            has_premium = check_url_info_integrity(existing_info)
-
-            if has_premium:
-                safe_push_log(
-                    "✅ Existing url_info.json has premium formats - reusing it"
-                )
-                return True, existing_info
-            else:
-                safe_push_log(
-                    "⚠️ Existing url_info.json has limited formats (h264 only) - will re-download"
-                )
-                return False, None
-
-        # Unknown type, be safe and re-download
-        safe_push_log(
-            f"⚠️ Unknown content type in url_info.json: {existing_info.get('_type')} - will re-download"
-        )
-        return False, None
-
-    except json.JSONDecodeError as e:
-        safe_push_log(f"⚠️ Corrupted url_info.json: {e} - will re-download")
-        return False, None
-    except KeyError as e:
-        safe_push_log(f"⚠️ Invalid url_info.json structure: {e} - will re-download")
-        return False, None
-    except Exception as e:
-        safe_push_log(f"⚠️ Could not read url_info.json: {e} - will re-download")
-        return False, None
+    # Unknown type, be safe and re-download
+    safe_push_log(
+        f"⚠️ Unknown content type in url_info.json: {existing_info.get('_type')} - will re-download"
+    )
+    return False, None
 
 
 # === URL INFO DOWNLOAD & BUILD ===

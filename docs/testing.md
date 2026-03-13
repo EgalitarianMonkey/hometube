@@ -97,7 +97,7 @@ make pre-commit         # Full quality checks
 - **Network tests**: Crane-based version detection from registries
 - **Integration tests**: Local build consistency validation
 - Version coherence between upstream and HomeTube
-- See [yt-dlp Version Management](ytdlp-version-management.md) for details
+- See [yt-dlp Version Management](architecture/ytdlp-version-management.md) for details
 
 ### 7. Robust translation tests (`test_translations.py`)
 - Cross-language consistency verification

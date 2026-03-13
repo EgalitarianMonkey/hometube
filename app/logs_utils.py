@@ -5,34 +5,10 @@ Provides centralized logging functionality and error message analysis
 for better user experience and debugging.
 """
 
-import re
 import streamlit as st
 
-try:
-    from .file_system_utils import is_valid_cookie_file
-except ImportError:
-    from file_system_utils import is_valid_cookie_file
-
-
-# Authentication error patterns (imported from main constants)
-AUTH_ERROR_PATTERNS = [
-    "sign in to confirm",
-    "please log in",
-    "login required",
-    "video is private",
-    "video is unavailable",
-    "age restricted",
-    "requires authentication",
-    "authentication required",
-    "requested format is not available",
-    "format is not available",
-    "403",
-    "forbidden",
-]
-
-# ANSI escape pattern for log cleaning
-ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-
+from app.constants import AUTH_ERROR_PATTERNS
+from app.file_system_utils import is_valid_cookie_file
 
 # === LOGGING FUNCTIONS ===
 

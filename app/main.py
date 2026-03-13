@@ -1,6 +1,5 @@
 # Standard library imports
 import os
-import re
 import shutil
 import subprocess
 import time
@@ -10,218 +9,121 @@ from typing import Dict, List, Optional, Tuple, Union
 # Third-party imports
 import streamlit as st
 
-try:
-    # Try relative imports first (when running as module or with Streamlit)
-    from .translations import t, configure_language
-    from .core import (
-        build_base_ytdlp_command,
-        build_cookies_params as core_build_cookies_params,
-    )
-    from .file_system_utils import (
-        is_valid_cookie_file,
-        is_valid_browser,
-        sanitize_filename,
-        list_subdirs_recursive,
-        ensure_dir,
-        get_unique_video_folder_name_from_url,
-        should_remove_tmp_files,
-        clean_all_tmp_folders,
-        cleanup_tmp_files,
-        move_final_to_destination,
-    )
-    from .workspace import (
-        parse_url as parse_url_info,
-        ensure_workspace_from_url,
-        ensure_video_workspace,
-        ensure_playlist_workspace,
-    )
-    from .display_utils import (
-        fmt_hhmmss,
-        parse_time_like,
-        build_info_items,
-        render_media_card,
-    )
-    from .medias_utils import (
-        analyze_audio_formats,
-        get_profiles_with_formats_id_to_download,
-        get_available_formats,
-        get_video_title,
-        customize_video_metadata,
-    )
-    from .url_utils import (
-        is_url_info_complet,
-        sanitize_url,
-        build_url_info,
-        video_id_from_url,
-    )
-    from . import tmp_files
-    from .subtitles_utils import (
-        embed_subtitles_manually,
-        process_subtitles_for_cutting,
-        check_required_subtitles_embedded,
-        find_subtitle_files_optimized,
-    )
-    from .ytdlp_version_check import check_and_show_updates
-    from .logs_utils import (
-        is_cookies_expired_warning,
-        should_suppress_message,
-        is_authentication_error,
-        is_format_unavailable_error,
-        safe_push_log,
-        log_title,
-        log_authentication_error_hint,
-        log_format_unavailable_error_hint,
-        register_main_push_log,
-    )
-    from .cut_utils import (
-        get_keyframes,
-        find_nearest_keyframes,
-        build_cut_command,
-    )
-    from .sponsors_utils import (
-        fetch_sponsorblock_segments,
-        get_sponsorblock_segments,
-        calculate_sponsor_overlap,
-        get_sponsorblock_config,
-        build_sponsorblock_params,
-    )
-    from .integrations_utils import post_download_actions
-    from .status_utils import (
-        create_initial_status,
-        add_selected_format,
-        update_format_status,
-        mark_format_error,
-        get_first_completed_format,
-        add_download_attempt,
-        get_last_download_attempt,
-    )
-    from .playlist_utils import (
-        save_playlist_status,
-        is_playlist_info,
-        get_playlist_entries,
-        check_existing_videos_in_destination,
-        get_download_progress_percent,
-        create_playlist_status,
-        load_playlist_status,
-        update_video_status_in_playlist,
-        mark_video_as_skipped,
-        add_playlist_download_attempt,
-        get_last_playlist_download_attempt,
-    )
-    from .playlist_sync import (
-        sync_playlist,
-        apply_sync_plan,
-        format_sync_plan_details,
-        refresh_playlist_url_info,
-    )
-    from .text_utils import render_title, DEFAULT_PLAYLIST_TITLE_PATTERN
-except ImportError:
-    # Fallback for direct execution from app directory
-    from translations import t, configure_language
-    from core import (
-        build_base_ytdlp_command,
-        build_cookies_params as core_build_cookies_params,
-    )
-    from file_system_utils import (
-        is_valid_cookie_file,
-        is_valid_browser,
-        sanitize_filename,
-        list_subdirs_recursive,
-        ensure_dir,
-        should_remove_tmp_files,
-        get_unique_video_folder_name_from_url,
-        clean_all_tmp_folders,
-        cleanup_tmp_files,
-        move_final_to_destination,
-    )
-    from workspace import (
-        parse_url as parse_url_info,
-        ensure_workspace_from_url,
-        ensure_video_workspace,
-        ensure_playlist_workspace,
-    )
-    from display_utils import (
-        fmt_hhmmss,
-        parse_time_like,
-        build_info_items,
-        render_media_card,
-    )
-    from medias_utils import (
-        analyze_audio_formats,
-        get_profiles_with_formats_id_to_download,
-        get_available_formats,
-        get_video_title,
-        customize_video_metadata,
-    )
-    from url_utils import (
-        is_url_info_complet,
-        sanitize_url,
-        build_url_info,
-        video_id_from_url,
-    )
-    import tmp_files
-    from subtitles_utils import (
-        embed_subtitles_manually,
-        process_subtitles_for_cutting,
-        check_required_subtitles_embedded,
-        find_subtitle_files_optimized,
-    )
-    from ytdlp_version_check import check_and_show_updates
-    from logs_utils import (
-        is_cookies_expired_warning,
-        should_suppress_message,
-        is_authentication_error,
-        is_format_unavailable_error,
-        safe_push_log,
-        log_title,
-        log_authentication_error_hint,
-        log_format_unavailable_error_hint,
-        register_main_push_log,
-    )
-    from cut_utils import (
-        get_keyframes,
-        find_nearest_keyframes,
-        build_cut_command,
-    )
-    from sponsors_utils import (
-        fetch_sponsorblock_segments,
-        get_sponsorblock_segments,
-        calculate_sponsor_overlap,
-        get_sponsorblock_config,
-        build_sponsorblock_params,
-    )
-    from integrations_utils import post_download_actions
-    from status_utils import (
-        create_initial_status,
-        add_selected_format,
-        update_format_status,
-        mark_format_error,
-        get_first_completed_format,
-        add_download_attempt,
-        get_last_download_attempt,
-        is_format_completed,
-        get_profiles_cached,
-    )
-    from playlist_utils import (
-        save_playlist_status,
-        is_playlist_info,
-        get_playlist_entries,
-        check_existing_videos_in_destination,
-        get_download_progress_percent,
-        create_playlist_status,
-        load_playlist_status,
-        update_video_status_in_playlist,
-        mark_video_as_skipped,
-        add_playlist_download_attempt,
-        get_last_playlist_download_attempt,
-    )
-    from playlist_sync import (
-        sync_playlist,
-        apply_sync_plan,
-        format_sync_plan_details,
-        refresh_playlist_url_info,
-    )
-    from text_utils import render_title, DEFAULT_PLAYLIST_TITLE_PATTERN
+# HomeTube imports (using absolute imports for consistency)
+from app.constants import (
+    ANSI_ESCAPE_PATTERN,
+    AUTH_ERROR_PATTERNS,
+    DOWNLOAD_PROGRESS_PATTERN,
+    FRAGMENT_PROGRESS_PATTERN,
+    GENERIC_PERCENTAGE_PATTERN,
+    LOGS_CONTAINER_STYLE,
+    SUPPORTED_BROWSERS,
+)
+from app.translations import t, configure_language
+from app.core import (
+    build_base_ytdlp_command,
+    build_cookies_params as core_build_cookies_params,
+)
+from app.file_system_utils import (
+    is_valid_cookie_file,
+    is_valid_browser,
+    sanitize_filename,
+    list_subdirs_recursive,
+    ensure_dir,
+    get_unique_video_folder_name_from_url,
+    should_remove_tmp_files,
+    clean_all_tmp_folders,
+    cleanup_tmp_files,
+    move_final_to_destination,
+)
+from app.workspace import (
+    parse_url as parse_url_info,
+    ensure_workspace_from_url,
+    ensure_video_workspace,
+    ensure_playlist_workspace,
+)
+from app.display_utils import (
+    fmt_hhmmss,
+    parse_time_like,
+    build_info_items,
+    render_media_card,
+)
+from app.medias_utils import (
+    analyze_audio_formats,
+    get_profiles_with_formats_id_to_download,
+    get_available_formats,
+    get_video_title,
+    customize_video_metadata,
+)
+from app.url_utils import (
+    is_url_info_complet,
+    sanitize_url,
+    build_url_info,
+    video_id_from_url,
+)
+from app import tmp_files
+from app.subtitles_utils import (
+    embed_subtitles_manually,
+    process_subtitles_for_cutting,
+    check_required_subtitles_embedded,
+    find_subtitle_files_optimized,
+)
+from app.ytdlp_version_check import check_and_show_updates
+from app.logs_utils import (
+    is_cookies_expired_warning,
+    should_suppress_message,
+    is_authentication_error,
+    is_format_unavailable_error,
+    safe_push_log,
+    log_title,
+    log_authentication_error_hint,
+    log_format_unavailable_error_hint,
+    register_main_push_log,
+)
+from app.cut_utils import (
+    get_keyframes,
+    find_nearest_keyframes,
+    build_cut_command,
+)
+from app.sponsors_utils import (
+    fetch_sponsorblock_segments,
+    get_sponsorblock_segments,
+    calculate_sponsor_overlap,
+    get_sponsorblock_config,
+    build_sponsorblock_params,
+)
+from app.integrations_utils import post_download_actions
+from app.status_utils import (
+    create_initial_status,
+    add_selected_format,
+    update_format_status,
+    mark_format_error,
+    get_first_completed_format,
+    add_download_attempt,
+    get_last_download_attempt,
+    is_format_completed,
+    get_profiles_cached,
+)
+from app.playlist_utils import (
+    save_playlist_status,
+    is_playlist_info,
+    get_playlist_entries,
+    check_existing_videos_in_destination,
+    get_download_progress_percent,
+    create_playlist_status,
+    load_playlist_status,
+    update_video_status_in_playlist,
+    mark_video_as_skipped,
+    add_playlist_download_attempt,
+    get_last_playlist_download_attempt,
+)
+from app.playlist_sync import (
+    sync_playlist,
+    apply_sync_plan,
+    format_sync_plan_details,
+    refresh_playlist_url_info,
+)
+from app.text_utils import render_title, DEFAULT_PLAYLIST_TITLE_PATTERN
 
 # Configuration import (must be after translations for configure_language)
 from app.config import (
@@ -232,7 +134,7 @@ from app.config import (
     YOUTUBE_CLIENT_FALLBACKS,
 )
 
-# === CONSTANTS ===
+# === SETTINGS INITIALIZATION ===
 
 # Load settings once
 settings = get_settings()
@@ -251,58 +153,6 @@ IN_CONTAINER = settings.IN_CONTAINER
 # Print configuration summary in development mode
 if __name__ == "__main__" or settings.DEBUG:
     print_config_summary()
-
-# CSS Styles
-LOGS_CONTAINER_STYLE = """
-    height: 400px;
-    overflow-y: auto;
-    background-color: #0e1117;
-    color: #fafafa;
-    padding: 1rem;
-    border-radius: 0.5rem;
-    font-family: 'Source Code Pro', monospace;
-    font-size: 14px;
-    line-height: 1.4;
-    white-space: pre-wrap;
-    border: 1px solid #262730;
-"""
-
-# API and system constants
-MIN_COOKIE_FILE_SIZE = 100  # bytes
-ANSI_ESCAPE_PATTERN = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
-
-# Browser support for cookie extraction
-SUPPORTED_BROWSERS = [
-    "brave",
-    "chrome",
-    "chromium",
-    "edge",
-    "firefox",
-    "opera",
-    "safari",
-    "vivaldi",
-    "whale",
-]
-
-# Profile resolution constants
-CACHE_EXPIRY_MINUTES = 5
-MAX_OPTIMAL_PROFILES = 10
-
-# Authentication error patterns
-AUTH_ERROR_PATTERNS = [
-    "sign in to confirm",
-    "please log in",
-    "login required",
-    "video is private",
-    "video is unavailable",
-    "age restricted",
-    "requires authentication",
-    "authentication required",
-    "requested format is not available",
-    "format is not available",
-    "403",
-    "forbidden",
-]
 
 
 # === VIDEO FORMAT EXTRACTION AND ANALYSIS ===
@@ -2137,15 +1987,7 @@ class DownloadMetrics:
         self.start_time = time.time()
 
 
-# Progress parsing patterns and utility functions
-DOWNLOAD_PROGRESS_PATTERN = re.compile(
-    r"\[download\]\s+(\d{1,3}\.\d+)%\s+of\s+([\d.]+\w+)\s+at\s+"
-    r"([\d.]+\w+/s)\s+ETA\s+(\d{2}:\d{2})"
-)
-FRAGMENT_PROGRESS_PATTERN = re.compile(
-    r"\[download\]\s+Got fragment\s+(\d+)\s+of\s+(\d+)"
-)
-GENERIC_PERCENTAGE_PATTERN = re.compile(r"(\d{1,3}(?:\.\d+)?)%")
+# Progress parsing utility functions (patterns imported from constants.py)
 
 
 def parse_download_progress(line: str) -> Optional[Tuple[float, str, str, str]]:

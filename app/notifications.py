@@ -9,13 +9,14 @@ This module provides a non-invasive notification system for:
 Notifications are stored in tmp/user_notifications.json to avoid spamming users.
 """
 
-import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 import re
+
+from app.json_utils import safe_load_json, safe_save_json
 
 
 class NotificationType(Enum):
@@ -57,29 +58,18 @@ def get_notifications_file_path() -> Path:
 def load_notification_state() -> dict:
     """Load the notification state from disk."""
     state_file = get_notifications_file_path()
-
-    if not state_file.exists():
-        return {"dismissed": {}, "shown": {}}
-
-    try:
-        with open(state_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {"dismissed": {}, "shown": {}}
+    default_state = {"dismissed": {}, "shown": {}}
+    return (
+        safe_load_json(state_file, default=default_state, log_errors=False)
+        or default_state
+    )
 
 
 def save_notification_state(state: dict) -> None:
     """Save the notification state to disk."""
     state_file = get_notifications_file_path()
-
-    try:
-        # Ensure parent directory exists
-        state_file.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(state_file, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass  # Silently fail - notifications are non-critical
+    # Silently fail - notifications are non-critical
+    safe_save_json(state_file, state, log_errors=False)
 
 
 def is_notification_dismissed(notification_id: str) -> bool:
@@ -265,7 +255,7 @@ def check_cleanup_notification_v260() -> Optional[Notification]:
         title="Clean up recommended",
         message=(
             "HomeTube v2.6 introduces a new temporary files organization. "
-            "Consider cleaning up old temporary files to benefit from the improved structure."
+            'Consider cleaning up old temporary files, from the HomeTube left sidebar or "Advanced Options" to benefit from the improved structure.'
         ),
         notification_type=NotificationType.INFO,
         action_label="Learn more",

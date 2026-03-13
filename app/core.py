@@ -7,10 +7,7 @@ import shlex
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 
-try:
-    from .file_system_utils import is_valid_cookie_file
-except ImportError:
-    from file_system_utils import is_valid_cookie_file
+from app.file_system_utils import is_valid_cookie_file
 
 
 def build_base_ytdlp_command(
