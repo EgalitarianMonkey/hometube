@@ -208,7 +208,7 @@ def check_update_notification() -> Optional[Notification]:
         message=f"HomeTube {latest} is available. You're running {current}.",
         notification_type=NotificationType.SUCCESS,
         action_label="View release",
-        action_url=f"https://github.com/music-mash/hometube/releases/tag/v{latest}",
+        action_url=f"https://github.com/EgalitarianMonkey/hometube/releases/tag/v{latest}",
         icon="🎉",
     )
 
