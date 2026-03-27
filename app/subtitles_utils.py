@@ -9,7 +9,6 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 from app.logs_utils import safe_push_log
 
@@ -17,9 +16,9 @@ from app.logs_utils import safe_push_log
 def find_subtitle_files_optimized(
     base_output: str,
     tmp_video_dir: Path,
-    subtitle_languages: List[str],
+    subtitle_languages: list[str],
     is_cut: bool = False,
-) -> List[Path]:
+) -> list[Path]:
     """
     Find subtitle files using optimized search patterns.
 
@@ -98,10 +97,10 @@ def find_subtitle_files_optimized(
 def process_subtitles_for_cutting(
     base_output: str,
     tmp_video_dir: Path,
-    subtitle_languages: List[str],
+    subtitle_languages: list[str],
     start_time: float,
     duration: float,
-) -> List[tuple]:
+) -> list[tuple]:
     """
     Process multiple subtitle files for video cutting.
 
@@ -311,7 +310,7 @@ def normalize_language_code(lang_code: str) -> str:
 
 
 def check_required_subtitles_embedded(
-    video_path: Path, required_languages: List[str]
+    video_path: Path, required_languages: list[str]
 ) -> bool:
     """
     Check if all required subtitle languages are embedded in the video.
@@ -390,7 +389,7 @@ def get_optimal_subtitle_codec(container_format: str) -> tuple:
         return "srt", True, "srt"  # Default fallback
 
 
-def get_language_names(lang_code: str) -> Tuple[str, str]:
+def get_language_names(lang_code: str) -> tuple[str, str]:
     """
     Get the ISO code and native name for a language.
 
@@ -543,7 +542,7 @@ def get_iso639_2_code(lang_code: str) -> str:
     return iso639_2_map.get(lang_code.lower(), "und")  # "und" = undefined
 
 
-def validate_subtitle_files(subtitle_files: List[Path]) -> List[Path]:
+def validate_subtitle_files(subtitle_files: list[Path]) -> list[Path]:
     """
     Validate a list of subtitle files and return only valid ones.
 
@@ -570,7 +569,7 @@ def validate_subtitle_files(subtitle_files: List[Path]) -> List[Path]:
     return valid_subtitle_files
 
 
-def create_backup_and_temp_paths(video_path: Path) -> Tuple[Path, Path]:
+def create_backup_and_temp_paths(video_path: Path) -> tuple[Path, Path]:
     """
     Create backup and temporary output paths for video processing.
 
@@ -612,7 +611,7 @@ def finalize_video_processing(
 
 
 def add_subtitle_metadata(
-    cmd: List[str], subtitle_files: List[Path], use_mp4_optimized: bool = False
+    cmd: list[str], subtitle_files: list[Path], use_mp4_optimized: bool = False
 ) -> None:
     """
     Add subtitle metadata to ffmpeg command.
@@ -652,7 +651,7 @@ def add_subtitle_metadata(
             safe_push_log(f"   📝 Subtitle {i+1}: {sub_file.name} → Unknown")
 
 
-def extract_language_from_filename(filename: str) -> Optional[str]:
+def extract_language_from_filename(filename: str) -> str | None:
     """
     Extract language code from subtitle filename using various patterns.
 
@@ -744,7 +743,7 @@ def validate_subtitle_file(subtitle_path: Path) -> bool:
 
 
 def embed_subtitles_manually_mp4_optimized(
-    video_path: Path, subtitle_files: List[Path]
+    video_path: Path, subtitle_files: list[Path]
 ) -> bool:
     """
     MP4-optimized subtitle embedding with enhanced metadata support.
@@ -818,7 +817,7 @@ def embed_subtitles_manually_mp4_optimized(
         return False
 
 
-def embed_subtitles_manually(video_path: Path, subtitle_files: List[Path]) -> bool:
+def embed_subtitles_manually(video_path: Path, subtitle_files: list[Path]) -> bool:
     """
     Manually embed subtitle files into video using ffmpeg with format-optimized settings.
 
@@ -998,8 +997,8 @@ def embed_subtitles_manually(video_path: Path, subtitle_files: List[Path]) -> bo
 
 
 def find_subtitle_files(
-    video_path: Path, search_patterns: Optional[List[str]] = None
-) -> List[Path]:
+    video_path: Path, search_patterns: list[str] | None = None
+) -> list[Path]:
     """
     Find subtitle files matching the video file.
 
@@ -1130,7 +1129,7 @@ def cut_subtitle_file(
 
 
 def ensure_subtitles_embedded(
-    video_path: Path, search_patterns: Optional[List[str]] = None
+    video_path: Path, search_patterns: list[str] | None = None
 ) -> bool:
     """
     Ensure subtitles are embedded in video file. If not, find and embed available subtitle files.

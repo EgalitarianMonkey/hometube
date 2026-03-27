@@ -10,18 +10,18 @@ across status_utils.py, url_utils.py, playlist_utils.py, etc.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional, TypeVar, Union
+from typing import Any, TypeVar
 
 # Type alias for JSON-compatible data
-JsonData = Dict[str, Any]
+JsonData = dict[str, Any]
 T = TypeVar("T")
 
 
 def safe_load_json(
-    path: Union[Path, str],
-    default: Optional[T] = None,
+    path: Path | str,
+    default: T | None = None,
     log_errors: bool = True,
-) -> Optional[Union[JsonData, T]]:
+) -> JsonData | T | None:
     """
     Safely load JSON from a file with consistent error handling.
 
@@ -64,7 +64,7 @@ def safe_load_json(
 
 
 def safe_save_json(
-    path: Union[Path, str],
+    path: Path | str,
     data: JsonData,
     indent: int = 2,
     ensure_ascii: bool = False,
@@ -117,7 +117,7 @@ def safe_save_json(
         return False
 
 
-def json_file_exists(path: Union[Path, str]) -> bool:
+def json_file_exists(path: Path | str) -> bool:
     """
     Check if a JSON file exists and appears valid.
 
@@ -142,7 +142,7 @@ def json_file_exists(path: Union[Path, str]) -> bool:
 
 
 def update_json_file(
-    path: Union[Path, str],
+    path: Path | str,
     updates: JsonData,
     create_if_missing: bool = True,
     log_errors: bool = True,

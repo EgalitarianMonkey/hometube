@@ -4,8 +4,6 @@ Display and formatting utilities.
 Functions for formatting time, durations, and other display-related utilities.
 """
 
-from typing import Optional
-
 
 def fmt_hhmmss(seconds: int) -> str:
     """
@@ -27,7 +25,7 @@ def fmt_hhmmss(seconds: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
-def parse_time_like(time_str: str) -> Optional[int]:
+def parse_time_like(time_str: str) -> int | None:
     """
     Parse a time-like string and return the duration in seconds.
     Accepts: "11" (sec), "0:11", "00:00:11", "1:02:03"
@@ -77,12 +75,12 @@ def build_info_items(
     platform_emoji: str,
     platform_name: str,
     media_type: str,
-    uploader: Optional[str] = None,
-    duration: Optional[int] = None,
-    view_count: Optional[int] = None,
-    like_count: Optional[int] = None,
-    entries_count: Optional[int] = None,
-    first_video_title: Optional[str] = None,
+    uploader: str | None = None,
+    duration: int | None = None,
+    view_count: int | None = None,
+    like_count: int | None = None,
+    entries_count: int | None = None,
+    first_video_title: str | None = None,
 ) -> list:
     """
     Build a list of formatted info items for display.

@@ -9,7 +9,6 @@ and display update information in the UI.
 import json
 import os
 import subprocess
-from typing import Optional
 
 import requests
 import streamlit as st
@@ -23,7 +22,7 @@ HOMETUBE_GITHUB_REPO = "EgalitarianMonkey/hometube"  # GitHub repository for Hom
 # === YT-DLP VERSION CHECK ===
 
 
-def get_current_ytdlp_version() -> Optional[str]:
+def get_current_ytdlp_version() -> str | None:
     """Get the currently installed yt-dlp version."""
     try:
         result = subprocess.run(
@@ -36,7 +35,7 @@ def get_current_ytdlp_version() -> Optional[str]:
     return None
 
 
-def get_latest_ytdlp_version() -> Optional[str]:
+def get_latest_ytdlp_version() -> str | None:
     """Get the latest yt-dlp version from GitHub API."""
     # Environment variable for testing
     test_version = os.getenv("TEST_LATEST_YTDLP_VERSION")
@@ -58,7 +57,7 @@ def get_latest_ytdlp_version() -> Optional[str]:
 # === HOMETUBE VERSION CHECK ===
 
 
-def get_current_hometube_version() -> Optional[str]:
+def get_current_hometube_version() -> str | None:
     """Get the current HomeTube version from pyproject.toml."""
     try:
         import tomllib
@@ -85,7 +84,7 @@ def get_current_hometube_version() -> Optional[str]:
     return None
 
 
-def get_latest_hometube_version() -> Optional[str]:
+def get_latest_hometube_version() -> str | None:
     """Get the latest HomeTube version from GitHub API."""
     # Environment variable for testing
     test_version = os.getenv("TEST_LATEST_HOMETUBE_VERSION")

@@ -6,13 +6,13 @@ timeout management, and logging integration.
 """
 
 import subprocess
-from typing import List
+from collections.abc import Callable
 
 from app.logs_utils import safe_push_log
 
 
 def run_subprocess_safe(
-    cmd: List[str], timeout: int = 60, error_context: str = ""
+    cmd: list[str], timeout: int = 60, error_context: str = ""
 ) -> subprocess.CompletedProcess:
     """
     Run subprocess with standardized error handling and timeout.
@@ -46,7 +46,7 @@ def run_subprocess_safe(
         safe_push_log(f"⚠️ {error_msg}")
         # Return a fake result object for consistency
         return subprocess.CompletedProcess(cmd, 1, "", error_msg)
-    except Exception as e:
+    except OSError as e:
         error_msg = f"Command failed: {str(e)}"
         if error_context:
             error_msg = f"{error_context}: {error_msg}"
@@ -55,10 +55,10 @@ def run_subprocess_safe(
 
 
 def run_subprocess_with_progress(
-    cmd: List[str],
+    cmd: list[str],
     timeout: int = 300,
     error_context: str = "",
-    progress_callback: callable = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> subprocess.CompletedProcess:
     """
     Run subprocess with optional progress monitoring.
@@ -121,7 +121,7 @@ def run_subprocess_with_progress(
             error_msg = f"{error_context}: {error_msg}"
         safe_push_log(f"⚠️ {error_msg}")
         return subprocess.CompletedProcess(cmd, 1, "", error_msg)
-    except Exception as e:
+    except OSError as e:
         error_msg = f"Command with progress monitoring failed: {str(e)}"
         if error_context:
             error_msg = f"{error_context}: {error_msg}"

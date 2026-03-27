@@ -8,7 +8,6 @@ including cleanup operations, directory listing, and file operations.
 import re
 import shutil
 from pathlib import Path
-from typing import List
 
 import streamlit as st
 from app.constants import SUPPORTED_BROWSERS_SET
@@ -115,7 +114,7 @@ def is_valid_browser(browser: str) -> bool:
 # === DIRECTORY OPERATIONS ===
 
 
-def list_subdirs_recursive(root: Path, max_depth: int = 2) -> List[str]:
+def list_subdirs_recursive(root: Path, max_depth: int = 2) -> list[str]:
     """
     List subdirectories recursively up to max_depth levels.
     Returns paths relative to root, formatted for display.

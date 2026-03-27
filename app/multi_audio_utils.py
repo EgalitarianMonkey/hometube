@@ -5,17 +5,16 @@ yt-dlp has issues with multi-language audio format strings, so we handle it manu
 
 import subprocess
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
 
 
 def download_video_and_audios_separately(
     url: str,
     video_format_id: str,
-    audio_formats: List[Dict],
+    audio_formats: list[dict],
     output_base: Path,
     temp_dir: Path,
-    cookies_args: List[str] = None,
-) -> Tuple[bool, Optional[Path]]:
+    cookies_args: list[str] = None,
+) -> tuple[bool, Path | None]:
     """
     Download video and multiple audio tracks separately, then merge with ffmpeg.
 

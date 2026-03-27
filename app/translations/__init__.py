@@ -3,7 +3,7 @@ Translation system for the YouTube downloader app
 """
 
 import os
-from typing import Dict, Any
+from typing import Any
 
 # Cache for translations to avoid repeated loading
 _translations_cache = None
@@ -22,7 +22,7 @@ def configure_language(language: str) -> None:
     _translations_cache = None  # Clear cache to force reload
 
 
-def get_translations() -> Dict[str, Any]:
+def get_translations() -> dict[str, Any]:
     """Get translations based on configured language or UI_LANGUAGE environment variable"""
     global _translations_cache
 

@@ -15,7 +15,6 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from app.config import get_settings
 from app.file_system_utils import sanitize_filename, ensure_dir
@@ -78,10 +77,10 @@ class SyncAction:
     video_id: str
     title: str
     details: str = ""
-    old_path: Optional[Path] = None
-    new_path: Optional[Path] = None
-    old_index: Optional[int] = None
-    new_index: Optional[int] = None
+    old_path: Path | None = None
+    new_path: Path | None = None
+    old_index: int | None = None
+    new_index: int | None = None
 
 
 @dataclass
@@ -92,13 +91,13 @@ class PlaylistSyncPlan:
     playlist_title: str
 
     # Actions to perform
-    videos_to_rename: List[SyncAction] = field(default_factory=list)
-    videos_to_archive: List[SyncAction] = field(default_factory=list)
-    videos_to_delete: List[SyncAction] = field(default_factory=list)
-    videos_to_download: List[SyncAction] = field(default_factory=list)
-    videos_already_synced: List[SyncAction] = field(default_factory=list)
-    videos_to_relocate: List[SyncAction] = field(default_factory=list)
-    videos_ready_to_move: List[SyncAction] = field(
+    videos_to_rename: list[SyncAction] = field(default_factory=list)
+    videos_to_archive: list[SyncAction] = field(default_factory=list)
+    videos_to_delete: list[SyncAction] = field(default_factory=list)
+    videos_to_download: list[SyncAction] = field(default_factory=list)
+    videos_already_synced: list[SyncAction] = field(default_factory=list)
+    videos_to_relocate: list[SyncAction] = field(default_factory=list)
+    videos_ready_to_move: list[SyncAction] = field(
         default_factory=list
     )  # In tmp, ready to copy
 
@@ -143,7 +142,7 @@ class PlaylistSyncPlan:
 # === METADATA EXTRACTION ===
 
 
-def get_video_metadata_from_file(video_path: Path) -> Optional[Dict]:
+def get_video_metadata_from_file(video_path: Path) -> dict | None:
     """
     Extract metadata from a video file using ffprobe.
 
@@ -209,7 +208,7 @@ def get_video_metadata_from_file(video_path: Path) -> Optional[Dict]:
         return None
 
 
-def scan_destination_videos(dest_dir: Path) -> Dict[str, Dict]:
+def scan_destination_videos(dest_dir: Path) -> dict[str, dict]:
     """
     Scan destination directory and extract metadata from all video files.
 
@@ -239,7 +238,7 @@ def extract_title_from_pattern(
     pattern: str,
     index: int,
     total: int,
-) -> Optional[str]:
+) -> str | None:
     """
     Try to extract the original title from a filename based on a known pattern.
 
@@ -253,7 +252,7 @@ def extract_title_from_pattern(
 # === ARCHIVE URL_INFO ===
 
 
-def archive_url_info(playlist_workspace: Path) -> Optional[Path]:
+def archive_url_info(playlist_workspace: Path) -> Path | None:
     """
     Archive the current url_info.json before fetching a new one.
 
@@ -282,7 +281,7 @@ def archive_url_info(playlist_workspace: Path) -> Optional[Path]:
 def refresh_playlist_url_info(
     playlist_workspace: Path,
     playlist_url: str,
-) -> Optional[Dict]:
+) -> dict | None:
     """
     Refresh url_info.json by fetching the latest playlist data from YouTube.
 
@@ -371,11 +370,11 @@ def refresh_playlist_url_info(
 def sync_playlist(
     playlist_workspace: Path,
     dest_dir: Path,
-    new_url_info: Dict,
+    new_url_info: dict,
     new_location: str,
     new_pattern: str,
     dry_run: bool = True,
-    keep_old_videos: Optional[bool] = None,
+    keep_old_videos: bool | None = None,
 ) -> PlaylistSyncPlan:
     """
     Generate a synchronization plan for a playlist.
@@ -776,11 +775,11 @@ def sync_playlist(
 def _find_renamed_video(
     dest_dir: Path,
     video_id: str,
-    video_data: Dict,
+    video_data: dict,
     pattern: str,
     expected_index: int,
     total: int,
-) -> Optional[Dict]:
+) -> dict | None:
     """
     Try to find a video that was renamed by the user.
 
@@ -822,8 +821,8 @@ def apply_sync_plan(
     dest_dir: Path,
     new_location: str,
     new_pattern: str,
-    new_url_info: Dict,
-    keep_old_videos: Optional[bool] = None,
+    new_url_info: dict,
+    keep_old_videos: bool | None = None,
 ) -> bool:
     """
     Apply a synchronization plan to the filesystem and status.json.
@@ -1267,9 +1266,7 @@ def format_sync_plan_summary(plan: PlaylistSyncPlan) -> str:
     return "\n".join(lines)
 
 
-def format_sync_plan_details(
-    plan: PlaylistSyncPlan, channel: Optional[str] = None
-) -> str:
+def format_sync_plan_details(plan: PlaylistSyncPlan, channel: str | None = None) -> str:
     """
     Format detailed list of all sync actions.
 
@@ -1280,7 +1277,7 @@ def format_sync_plan_details(
     lines = []
 
     def format_title(
-        title: str, index: Optional[int] = None, include_channel: bool = True
+        title: str, index: int | None = None, include_channel: bool = True
     ) -> str:
         """Helper to format title with optional index and channel."""
         parts = []

@@ -35,7 +35,6 @@ Benefits:
 """
 
 from pathlib import Path
-from typing import Optional
 
 # Shared constant for video extensions used throughout the codebase
 VIDEO_EXTENSIONS = ["mkv", "mp4", "webm", "avi", "mov"]
@@ -182,7 +181,7 @@ def find_subtitles(tmp_dir: Path, is_cut: bool = False) -> list[Path]:
     return sorted(tmp_dir.glob(pattern))
 
 
-def find_final_file(tmp_dir: Path) -> Optional[Path]:
+def find_final_file(tmp_dir: Path) -> Path | None:
     """
     Find the final processed file in the temporary directory.
     Prioritizes MKV over other formats.
@@ -205,7 +204,7 @@ def find_final_file(tmp_dir: Path) -> Optional[Path]:
     return None
 
 
-def find_downloaded_video(tmp_dir: Path) -> Optional[Path]:
+def find_downloaded_video(tmp_dir: Path) -> Path | None:
     """
     Find ANY downloaded video file in the temporary directory.
 
@@ -257,7 +256,7 @@ def find_downloaded_video(tmp_dir: Path) -> Optional[Path]:
     return None
 
 
-def extract_format_id_from_filename(filename: str) -> Optional[str]:
+def extract_format_id_from_filename(filename: str) -> str | None:
     """
     Extract format ID from a video or audio track filename.
 
@@ -283,7 +282,7 @@ def extract_format_id_from_filename(filename: str) -> Optional[str]:
     return None
 
 
-def extract_language_from_subtitle(filename: str) -> Optional[str]:
+def extract_language_from_subtitle(filename: str) -> str | None:
     """
     Extract language code from a subtitle filename.
 

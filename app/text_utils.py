@@ -7,7 +7,6 @@ consistent, filesystem-safe filenames from video titles.
 
 import re
 import unicodedata
-from typing import Optional
 
 # Windows reserved filenames (case-insensitive)
 _RESERVED = {
@@ -175,8 +174,8 @@ def render_title(
     title: str,
     video_id: str,
     ext: str,
-    total: Optional[int] = None,
-    channel: Optional[str] = None,
+    total: int | None = None,
+    channel: str | None = None,
 ) -> str:
     """
     Render a video title from a pattern with placeholders.

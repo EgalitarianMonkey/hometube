@@ -4,7 +4,6 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
 
 # Third-party imports
 import streamlit as st
@@ -185,7 +184,7 @@ def _display_strategy_content(quality_strategy: str) -> None:
         cached_format_ids = {p.get("format_id", "") for p in cached_profiles}
 
     # Helper function to check if a specific profile is cached and completed
-    def is_profile_cached(profile: Dict) -> bool:
+    def is_profile_cached(profile: dict) -> bool:
         """Check if a specific profile/format is downloaded and completed."""
         format_id = profile.get("format_id", "")
         return format_id in cached_format_ids
@@ -394,15 +393,15 @@ def smart_download_with_profiles(
     ytdlp_custom_args: str,
     url: str,
     download_mode: str,
-    target_profile: Optional[Union[str, Dict]] = None,
+    target_profile: str | dict | None = None,
     refuse_quality_downgrade: bool = False,
     do_cut: bool = False,
-    subs_selected: List[str] = None,
+    subs_selected: list[str] = None,
     sb_choice: str = "disabled",
     progress_placeholder=None,
     status_placeholder=None,
     info_placeholder=None,
-) -> Tuple[int, str]:
+) -> tuple[int, str]:
     """
     Intelligent profile-based download with smart fallback strategy.
 
@@ -419,7 +418,7 @@ def smart_download_with_profiles(
         refuse_quality_downgrade: stop at first failure instead of trying lower quality
 
     Returns:
-        Tuple[int, str]: (return_code, error_message)
+        tuple[int, str]: (return_code, error_message)
     """
     safe_push_log("")
     log_title("🎯 Starting profile-based download...")
@@ -493,9 +492,9 @@ def smart_download_with_profiles(
 
 
 def _handle_profile_failure(
-    profile: Dict,
+    profile: dict,
     profile_idx: int,
-    profiles_to_try: List[Dict],
+    profiles_to_try: list[dict],
     download_mode: str,
     refuse_quality_downgrade: bool,
 ) -> bool:
@@ -532,9 +531,9 @@ def _handle_profile_failure(
 
 
 def _try_profile_with_clients(
-    cmd_base: List[str],
+    cmd_base: list[str],
     url: str,
-    cookies_part: List[str],
+    cookies_part: list[str],
     cookies_available: bool,
     status_placeholder,
     progress_placeholder,
@@ -624,16 +623,16 @@ def _try_profile_with_clients(
 
 
 def _build_profile_command(
-    profile: Dict,
+    profile: dict,
     base_output: str,
     tmp_video_dir: Path,
     embed_chapters: bool,
     embed_subs: bool,
     ytdlp_custom_args: str,
-    subs_selected: List[str],
+    subs_selected: list[str],
     do_cut: bool,
     sb_choice: str,
-) -> List[str]:
+) -> list[str]:
     """Build ytdlp command for a specific profile."""
     # Get format string from format_id (single source of truth)
     format_string = profile.get("format_id", "")
@@ -691,7 +690,7 @@ def _build_profile_command(
     return cmd_base
 
 
-def _get_profile_codec_info(profile: Dict) -> List[str]:
+def _get_profile_codec_info(profile: dict) -> list[str]:
     """Extract codec information from profile for display."""
     codec_info = []
 
@@ -720,24 +719,24 @@ def _get_profile_codec_info(profile: Dict) -> List[str]:
 
 
 def _execute_profile_downloads(
-    profiles_to_try: List[Dict],
+    profiles_to_try: list[dict],
     base_output: str,
     tmp_video_dir: Path,
     embed_chapters: bool,
     embed_subs: bool,
     ytdlp_custom_args: str,
     url: str,
-    cookies_part: List[str],
+    cookies_part: list[str],
     cookies_available: bool,
     refuse_quality_downgrade: bool,
     do_cut: bool,
-    subs_selected: List[str],
+    subs_selected: list[str],
     sb_choice: str,
     progress_placeholder,
     status_placeholder,
     info_placeholder,
     download_mode: str,
-) -> Tuple[int, str]:
+) -> tuple[int, str]:
     """Execute download attempts for each profile."""
     log_title("🚀 Starting download attempts...")
     safe_push_log(f"profiles_to_try: {profiles_to_try}")
@@ -979,7 +978,7 @@ def init_url_workspace(
     clean_url: str,
     json_output_path: Path,
     tmp_url_workspace: Path,
-) -> Optional[Dict]:
+) -> dict | None:
     """
     Initialize workspace for a new URL by fetching video info and creating status files.
 
@@ -1033,7 +1032,7 @@ def init_url_workspace(
     return info
 
 
-def compute_optimal_profiles(url_info: Dict, json_path: Path) -> None:
+def compute_optimal_profiles(url_info: dict, json_path: Path) -> None:
     """
     Compute optimal format profiles for a VIDEO (not playlist).
     This function is called once after URL analysis to pre-calculate all profiles.
@@ -1122,7 +1121,7 @@ def initialize_video_workspace(
     video_id: str,
     video_title: str,
     video_workspace: Path,
-) -> Tuple[Optional[Dict], bool]:
+) -> tuple[dict | None, bool]:
     """
     Initialize a video workspace with url_info.json and status.json.
 
@@ -1139,7 +1138,7 @@ def initialize_video_workspace(
         video_workspace: Path to video workspace directory
 
     Returns:
-        Tuple[Optional[Dict], bool]: (url_info dict or None, success bool)
+        tuple[dict | None, bool]: (url_info dict or None, success bool)
     """
     video_url_info_path = video_workspace / "url_info.json"
     video_status_path = video_workspace / "status.json"
@@ -1198,8 +1197,8 @@ def initialize_video_workspace(
 
 def check_existing_video_file(
     video_workspace: Path,
-    requested_format_id: Optional[str] = None,
-) -> Tuple[Optional[Path], Optional[str]]:
+    requested_format_id: str | None = None,
+) -> tuple[Path | None, str | None]:
     """
     Check if a video file already exists in the workspace.
 
@@ -1213,7 +1212,7 @@ def check_existing_video_file(
         requested_format_id: Optional format ID requested by user
 
     Returns:
-        Tuple[Optional[Path], Optional[str]]: (existing_file_path or None, completed_format_id or None)
+        tuple[Path | None, str | None]: (existing_file_path or None, completed_format_id or None)
     """
     existing_generic_file = None
     completed_format_id = get_first_completed_format(video_workspace)
@@ -1278,13 +1277,13 @@ def download_single_video(
     force_mp4: bool,
     ytdlp_custom_args: str,
     do_cut: bool,
-    subs_selected: List[str],
+    subs_selected: list[str],
     sb_choice: str,
-    requested_format_id: Optional[str] = None,
+    requested_format_id: str | None = None,
     progress_placeholder=None,
     status_placeholder=None,
     info_placeholder=None,
-) -> Tuple[int, Optional[Path], Optional[str]]:
+) -> tuple[int, Path | None, str | None]:
     """
     Download a single video using the full workflow.
 
@@ -1313,7 +1312,7 @@ def download_single_video(
         info_placeholder: Streamlit info placeholder
 
     Returns:
-        Tuple[int, Optional[Path], Optional[str]]: (return_code, final_file_path, error_message)
+        tuple[int, Path | None, str | None]: (return_code, final_file_path, error_message)
         return_code: 0 = success, -1 = cancelled, >0 = error
     """
     # Initialize workspace
@@ -1388,7 +1387,7 @@ def download_single_video(
 def find_final_video_file(
     video_workspace: Path,
     base_output: str,
-) -> Optional[Path]:
+) -> Path | None:
     """
     Find the final video file after download.
 
@@ -1402,7 +1401,7 @@ def find_final_video_file(
         base_output: Base output filename (without extension)
 
     Returns:
-        Optional[Path]: Path to final file or None if not found
+        Path | None: Path to final file or None if not found
     """
     final_tmp = None
 
@@ -1438,7 +1437,7 @@ def organize_downloaded_video_file(
     video_workspace: Path,
     downloaded_file: Path,
     base_output: str,
-    subs_selected: List[str] = None,
+    subs_selected: list[str] = None,
 ) -> Path:
     """
     Organize downloaded video file: rename to generic name and create final.{ext}.
@@ -1555,7 +1554,7 @@ def organize_downloaded_video_file(
         return final_tmp
 
 
-def url_analysis(url: str) -> Optional[Dict]:
+def url_analysis(url: str) -> dict | None:
     """
     Analyze URL and fetch comprehensive video/playlist information using yt-dlp.
     Always initializes session state variables and checks for existing url_info.json.
@@ -1694,7 +1693,7 @@ def url_analysis(url: str) -> Optional[Dict]:
         return {"error": f"Unexpected error: {str(e)}"}
 
 
-def display_url_info(url_info: Dict) -> None:
+def display_url_info(url_info: dict) -> None:
     """
     Display URL analysis information in a user-friendly, visually appealing format.
 
@@ -1804,7 +1803,7 @@ def display_url_info(url_info: Dict) -> None:
         st.caption(t("url_invalid_content"))
 
 
-def get_url_info() -> Optional[Dict]:
+def get_url_info() -> dict | None:
     """
     Get the stored URL info from session state.
 
@@ -1814,7 +1813,7 @@ def get_url_info() -> Optional[Dict]:
     return st.session_state.get("url_info", None)
 
 
-def get_url_info_path() -> Optional[Path]:
+def get_url_info_path() -> Path | None:
     """
     Get the path to the saved URL info JSON file from session state.
 
@@ -1827,7 +1826,7 @@ def get_url_info_path() -> Optional[Path]:
     return None
 
 
-def get_tmp_url_workspace() -> Optional[Path]:
+def get_tmp_url_workspace() -> Path | None:
     """
     Get the unique URL workspace directory from session state.
     This directory is created during url_analysis() and stored in session.
@@ -1839,7 +1838,7 @@ def get_tmp_url_workspace() -> Optional[Path]:
     return st.session_state.get("tmp_url_workspace")
 
 
-def get_tmp_video_dir() -> Optional[Path]:
+def get_tmp_video_dir() -> Path | None:
     """
     Get the temporary video directory from session state.
 
@@ -1854,7 +1853,7 @@ def get_tmp_video_dir() -> Optional[Path]:
     return st.session_state.get("tmp_url_workspace")
 
 
-def build_cookies_params() -> List[str]:
+def build_cookies_params() -> list[str]:
     """
     Builds cookie parameters based on user selection.
 
@@ -1893,7 +1892,7 @@ def build_cookies_params() -> List[str]:
         return result
 
 
-def build_cookies_params_from_config() -> List[str]:
+def build_cookies_params_from_config() -> list[str]:
     """
     Builds cookie parameters from configuration settings (for early URL analysis).
     Used before session_state is available.
@@ -1990,7 +1989,7 @@ class DownloadMetrics:
 # Progress parsing utility functions (patterns imported from constants.py)
 
 
-def parse_download_progress(line: str) -> Optional[Tuple[float, str, str, str]]:
+def parse_download_progress(line: str) -> tuple[float, str, str, str] | None:
     """Parse download progress line and return (percentage, size, speed, eta)"""
     match = DOWNLOAD_PROGRESS_PATTERN.search(line)
     if match:
@@ -1998,7 +1997,7 @@ def parse_download_progress(line: str) -> Optional[Tuple[float, str, str, str]]:
     return None
 
 
-def parse_fragment_progress(line: str) -> Optional[Tuple[int, int]]:
+def parse_fragment_progress(line: str) -> tuple[int, int] | None:
     """Parse fragment progress and return (current, total)"""
     match = FRAGMENT_PROGRESS_PATTERN.search(line)
     if match:
@@ -2006,7 +2005,7 @@ def parse_fragment_progress(line: str) -> Optional[Tuple[int, int]]:
     return None
 
 
-def parse_generic_percentage(line: str) -> Optional[float]:
+def parse_generic_percentage(line: str) -> float | None:
     """Parse generic percentage from line"""
     if "download" in line:
         return None
@@ -3495,7 +3494,7 @@ def update_download_metrics(
         info_placeholder.info("📊 Processing...")
 
 
-def create_command_summary(cmd: List[str]) -> str:
+def create_command_summary(cmd: list[str]) -> str:
     """Create a user-friendly summary of the yt-dlp command instead of showing the full verbose command"""
     if not cmd or len(cmd) < 2:
         return "Running command..."
@@ -3536,7 +3535,7 @@ def create_command_summary(cmd: List[str]) -> str:
     return " • ".join(summary_parts)
 
 
-def run_cmd(cmd: List[str], progress=None, status=None, info=None) -> int:
+def run_cmd(cmd: list[str], progress=None, status=None, info=None) -> int:
     """Execute command with enhanced progress tracking and metrics display"""
     start_time = time.time()
 

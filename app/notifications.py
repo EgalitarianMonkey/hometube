@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional
 import re
 
 from app.json_utils import safe_load_json, safe_save_json
@@ -36,8 +35,8 @@ class Notification:
     title: str
     message: str
     notification_type: NotificationType = NotificationType.INFO
-    action_label: Optional[str] = None  # Optional button label
-    action_url: Optional[str] = None  # Optional URL for the action
+    action_label: str | None = None  # Optional button label
+    action_url: str | None = None  # Optional URL for the action
     icon: str = "ℹ️"
 
 
@@ -160,7 +159,7 @@ def get_current_version() -> str:
         return "0.0.0"
 
 
-def get_latest_version() -> Optional[str]:
+def get_latest_version() -> str | None:
     """
     Get the latest version from GitHub releases.
 
@@ -177,7 +176,7 @@ def get_latest_version() -> Optional[str]:
 # === NOTIFICATION GENERATORS ===
 
 
-def check_update_notification() -> Optional[Notification]:
+def check_update_notification() -> Notification | None:
     """
     Check if there's a new major/minor version and return a notification.
 
@@ -213,7 +212,7 @@ def check_update_notification() -> Optional[Notification]:
     )
 
 
-def check_cleanup_notification_v260() -> Optional[Notification]:
+def check_cleanup_notification_v260() -> Notification | None:
     """
     One-time notification for v2.6.0 cleanup suggestion.
 
@@ -267,7 +266,7 @@ def check_cleanup_notification_v260() -> Optional[Notification]:
 # === MAIN NOTIFICATION ENGINE ===
 
 
-def get_active_notifications() -> List[Notification]:
+def get_active_notifications() -> list[Notification]:
     """
     Get all active notifications that should be displayed.
 

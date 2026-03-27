@@ -6,12 +6,11 @@ Importing from here ensures consistency and eliminates duplication.
 """
 
 import re
-from typing import List, Pattern, Set
 
 # === AUTHENTICATION ERROR PATTERNS ===
 # Used to detect authentication-related errors in yt-dlp output.
 # Shared between main.py and logs_utils.py
-AUTH_ERROR_PATTERNS: List[str] = [
+AUTH_ERROR_PATTERNS: list[str] = [
     "sign in to confirm",
     "please log in",
     "login required",
@@ -29,12 +28,14 @@ AUTH_ERROR_PATTERNS: List[str] = [
 # === ANSI ESCAPE PATTERN ===
 # Regular expression to strip ANSI color codes and control sequences from logs.
 # Used in main.py and logs_utils.py for log cleaning.
-ANSI_ESCAPE_PATTERN: Pattern = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(
+    r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])"
+)
 
 # === BROWSER SUPPORT ===
 # Valid browsers for cookie extraction (yt-dlp --cookies-from-browser).
 # The set version is for O(1) lookups, the list is for iteration.
-SUPPORTED_BROWSERS_SET: Set[str] = {
+SUPPORTED_BROWSERS_SET: set[str] = {
     "brave",
     "chrome",
     "chromium",
@@ -46,17 +47,17 @@ SUPPORTED_BROWSERS_SET: Set[str] = {
     "whale",
 }
 
-SUPPORTED_BROWSERS: List[str] = sorted(SUPPORTED_BROWSERS_SET)
+SUPPORTED_BROWSERS: list[str] = sorted(SUPPORTED_BROWSERS_SET)
 
 # === FILE VALIDATION ===
 # Minimum size for a valid cookie file (bytes)
 MIN_COOKIE_FILE_SIZE: int = 100
 
 # Video file extensions
-VIDEO_EXTENSIONS: Set[str] = {".mkv", ".mp4", ".webm", ".avi", ".mov"}
+VIDEO_EXTENSIONS: set[str] = {".mkv", ".mp4", ".webm", ".avi", ".mov"}
 
 # Subtitle file extensions
-SUBTITLE_EXTENSIONS: Set[str] = {".srt", ".vtt", ".ass", ".ssa"}
+SUBTITLE_EXTENSIONS: set[str] = {".srt", ".vtt", ".ass", ".ssa"}
 
 # === DOWNLOAD PROFILE CONSTANTS ===
 # Cache expiry for profile resolution (minutes)
@@ -83,13 +84,13 @@ LOGS_CONTAINER_STYLE: str = """
 
 # === PROGRESS REGEX PATTERNS ===
 # Patterns for parsing yt-dlp download progress output
-DOWNLOAD_PROGRESS_PATTERN: Pattern = re.compile(
+DOWNLOAD_PROGRESS_PATTERN: re.Pattern[str] = re.compile(
     r"\[download\]\s+(\d{1,3}\.\d+)%\s+of\s+([\d.]+\w+)\s+at\s+"
     r"([\d.]+\w+/s)\s+ETA\s+(\d{2}:\d{2})"
 )
 
-FRAGMENT_PROGRESS_PATTERN: Pattern = re.compile(
+FRAGMENT_PROGRESS_PATTERN: re.Pattern[str] = re.compile(
     r"\[download\]\s+Got fragment\s+(\d+)\s+of\s+(\d+)"
 )
 
-GENERIC_PERCENTAGE_PATTERN: Pattern = re.compile(r"(\d{1,3}(?:\.\d+)?)%")
+GENERIC_PERCENTAGE_PATTERN: re.Pattern[str] = re.compile(r"(\d{1,3}(?:\.\d+)?)%")
