@@ -11,7 +11,6 @@ import os
 from pathlib import Path
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Optional
 
 
 # === Container Detection ===
@@ -116,7 +115,7 @@ class Settings:
     # Paths
     VIDEOS_FOLDER: Path
     TMP_DOWNLOAD_FOLDER: Path
-    YOUTUBE_COOKIES_FILE_PATH: Optional[str]
+    YOUTUBE_COOKIES_FILE_PATH: str | None
     COOKIES_FROM_BROWSER: str
 
     # Localization

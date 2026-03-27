@@ -6,7 +6,7 @@ segment manipulation, and time remapping for SponsorBlock integration.
 """
 
 from pathlib import Path
-from typing import Dict, List, Callable, Tuple
+from collections.abc import Callable
 
 from app.translations import t
 from app.logs_utils import push_log_generic as push_log
@@ -108,7 +108,7 @@ def find_nearest_keyframes(
 # === SEGMENT MANIPULATION ===
 
 
-def merge_overlaps(segments: List[Dict], margin: float = 0.0) -> List[Dict]:
+def merge_overlaps(segments: list[dict], margin: float = 0.0) -> list[dict]:
     """Merge overlapping segments (keeping main 'sponsor' category as priority)."""
     segs = sorted(
         [
@@ -127,8 +127,8 @@ def merge_overlaps(segments: List[Dict], margin: float = 0.0) -> List[Dict]:
 
 
 def invert_segments(
-    segments: List[Dict], total_duration: float
-) -> List[Tuple[float, float]]:
+    segments: list[dict], total_duration: float
+) -> list[tuple[float, float]]:
     """
     Returns the intervals [start,end) to keep when removing 'segments'.
 
@@ -152,8 +152,8 @@ def invert_segments(
 
 
 def invert_segments_tuples(
-    segments: List[Tuple[int, int]], total_duration: int
-) -> List[Tuple[int, int]]:
+    segments: list[tuple[int, int]], total_duration: int
+) -> list[tuple[int, int]]:
     """
     LEGACY: Invert segments using tuple format (for backward compatibility).
 
@@ -192,8 +192,8 @@ def invert_segments_tuples(
 
 
 def build_time_remap(
-    segments: List[Dict], total_duration: float
-) -> Tuple[Callable[[float], float], List[Tuple[float, float, float]]]:
+    segments: list[dict], total_duration: float
+) -> tuple[Callable[[float], float], list[tuple[float, float, float]]]:
     """
     Builds a mapping original_time -> time_after_cut.
     Returns a `remap(t)` function + a list of cumulative jumps.
@@ -221,7 +221,7 @@ def build_time_remap(
 
 def remap_interval(
     start: float, end: float, remap: Callable[[float], float]
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Helper to recalculate an interval (start,end) after cutting"""
     s2 = remap(start)
     e2 = remap(end)
@@ -239,10 +239,10 @@ def build_cut_command(
     final_tmp: Path,
     actual_start: float,
     duration: float,
-    processed_subtitle_files: List[Tuple[str, Path]],
+    processed_subtitle_files: list[tuple[str, Path]],
     cut_output: Path,
     cut_ext: str,
-) -> List[str]:
+) -> list[str]:
     """
     Build the ffmpeg command for cutting video with subtitles.
 

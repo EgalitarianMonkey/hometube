@@ -5,7 +5,6 @@ This module contains the essential business logic for testing.
 
 import shlex
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
 
 from app.file_system_utils import is_valid_cookie_file
 
@@ -18,8 +17,8 @@ def build_base_ytdlp_command(
     embed_subs: bool,
     force_mp4: bool = False,
     custom_args: str = "",
-    quality_strategy: Optional[Dict] = None,
-) -> List[str]:
+    quality_strategy: dict | None = None,
+) -> list[str]:
     """Build base yt-dlp command with common options and premium quality strategies"""
 
     # Use premium strategy if provided
@@ -99,8 +98,8 @@ def build_base_ytdlp_command(
 
 
 def resolve_ytdlp_argument_conflicts(
-    base_args: List[str], custom_args: List[str]
-) -> List[str]:
+    base_args: list[str], custom_args: list[str]
+) -> list[str]:
     """
     Resolve conflicts between base yt-dlp arguments and custom arguments.
     Custom arguments take precedence over base arguments.
@@ -228,7 +227,7 @@ def build_cookies_params(
     browser_select: str = "chrome",
     browser_profile: str = "",
     cookies_file_path: str = "cookies/youtube_cookies.txt",
-) -> List[str]:
+) -> list[str]:
     """
     Builds cookie parameters based on configuration.
     Simplified version for testing without Streamlit dependencies.
@@ -258,7 +257,7 @@ def build_cookies_params(
         return ["--no-cookies"]
 
 
-def build_sponsorblock_params(sb_choice: str) -> List[str]:
+def build_sponsorblock_params(sb_choice: str) -> list[str]:
     """
     Builds yt-dlp parameters for SponsorBlock based on user choice.
     Simplified version for testing without Streamlit dependencies.
@@ -296,7 +295,7 @@ def build_sponsorblock_params(sb_choice: str) -> List[str]:
     return params
 
 
-def get_sponsorblock_config(sb_choice: str) -> Tuple[List[str], List[str]]:
+def get_sponsorblock_config(sb_choice: str) -> tuple[list[str], list[str]]:
     """
     Returns the SponsorBlock configuration based on user choice.
     Simplified version for testing without Streamlit dependencies.

@@ -5,7 +5,6 @@ This module provides functions to analyze audio and video formats
 from yt-dlp JSON output to optimize download strategies.
 """
 
-from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 import json
 import subprocess
@@ -34,11 +33,11 @@ s = get_settings()
 
 
 def analyze_audio_formats(
-    url_info: Dict,
+    url_info: dict,
     language_primary: str = "",
     languages_secondaries: str = "",
     vo_first: bool = True,
-) -> Tuple[Optional[str], List[Dict], bool]:
+) -> tuple[str | None, list[dict], bool]:
     """
     Analyze audio formats from yt-dlp JSON output to find the best quality audio tracks.
 
@@ -57,7 +56,7 @@ def analyze_audio_formats(
         vo_first: If True, prioritize original voice first
 
     Returns:
-        Tuple[Optional[str], List[Dict], bool]:
+        tuple[str | None, list[dict], bool]:
         - Original voice language code (or None if not detected)
         - List of filtered and ordered audio formats
         - Boolean indicating if multiple languages are available
@@ -248,8 +247,8 @@ YTDLP_FORMATS_SORT_VP9_FIRST_ARG = (
 
 
 def get_profiles_with_formats_id_to_download(
-    url_info_path: Path, multiple_langs: bool, audio_formats: List[Dict] = None
-) -> List[Dict]:
+    url_info_path: Path, multiple_langs: bool, audio_formats: list[dict] = None
+) -> list[dict]:
     """
     Determine optimal download profiles (max 2 profiles: AV1 and VP9).
     Returns complete profile dictionaries ready to use throughout the application.
@@ -404,7 +403,7 @@ def get_profiles_with_formats_id_to_download(
     return unique_profiles[:2]  # Maximum 2 profiles
 
 
-def get_audio_format_summary(audio_format: Dict) -> str:
+def get_audio_format_summary(audio_format: dict) -> str:
     """
     Get a human-readable summary of an audio format.
 
@@ -439,8 +438,8 @@ def get_audio_format_summary(audio_format: Dict) -> str:
 
 
 def analyze_video_formats(
-    url_info: Dict, max_resolution: Optional[int] = None
-) -> List[Dict]:
+    url_info: dict, max_resolution: int | None = None
+) -> list[dict]:
     """
     Analyze video formats from yt-dlp JSON output to find the best quality video tracks.
 
@@ -485,7 +484,7 @@ def analyze_video_formats(
         "h264": 1,  # H.264
     }
 
-    def get_codec_score(fmt: Dict) -> int:
+    def get_codec_score(fmt: dict) -> int:
         vcodec = fmt.get("vcodec", "").lower()
         for codec_prefix, score in codec_scores.items():
             if vcodec.startswith(codec_prefix):
@@ -507,7 +506,7 @@ def analyze_video_formats(
     return sorted_videos
 
 
-def get_format_details(url_info: Dict, format_id: str) -> Optional[Dict]:
+def get_format_details(url_info: dict, format_id: str) -> dict | None:
     """
     Get detailed information about a specific format.
 
@@ -529,7 +528,7 @@ def get_format_details(url_info: Dict, format_id: str) -> Optional[Dict]:
     return None
 
 
-def get_available_formats(url_info: Dict) -> List[Dict]:
+def get_available_formats(url_info: dict) -> list[dict]:
     """
     Extract all available video formats from url_info for user selection.
 
@@ -605,7 +604,7 @@ def get_available_formats(url_info: Dict) -> List[Dict]:
     return video_formats
 
 
-def group_audio_by_language(audio_formats: List[Dict]) -> Dict[str, List[Dict]]:
+def group_audio_by_language(audio_formats: list[dict]) -> dict[str, list[dict]]:
     """
     Group audio formats by language code.
 
@@ -626,7 +625,7 @@ def group_audio_by_language(audio_formats: List[Dict]) -> Dict[str, List[Dict]]:
     return grouped
 
 
-def get_best_audio_for_language(url_info: Dict, language: str = "en") -> Optional[Dict]:
+def get_best_audio_for_language(url_info: dict, language: str = "en") -> dict | None:
     """
     Get the best audio format for a specific language.
 
@@ -655,7 +654,7 @@ def get_best_audio_for_language(url_info: Dict, language: str = "en") -> Optiona
     return max(matching_audios, key=lambda x: x.get("abr", 0))
 
 
-def get_video_title_from_json(json_path: Optional[Path] = None) -> str:
+def get_video_title_from_json(json_path: Path | None = None) -> str:
     """
     Get video title from local url_info.json file.
 
@@ -711,7 +710,7 @@ def get_video_title_from_json(json_path: Optional[Path] = None) -> str:
         return "video"
 
 
-def get_video_title(url: str, cookies_part: List[str] = None) -> str:
+def get_video_title(url: str, cookies_part: list[str] = None) -> str:
     """
     Get video title with fallback strategy.
 
@@ -804,7 +803,7 @@ def get_video_title(url: str, cookies_part: List[str] = None) -> str:
         return "video"
 
 
-def get_video_duration_from_file(video_path: Path) -> Optional[int]:
+def get_video_duration_from_file(video_path: Path) -> int | None:
     """
     Get video duration in seconds from file using ffprobe.
 

@@ -15,7 +15,6 @@ NEW CODE SHOULD USE: medias_utils.get_profiles_with_formats_id_to_download() ins
 # Standard library
 import time
 import streamlit as st
-from typing import Dict, List, Optional, Tuple, Union
 
 from app.config import get_settings
 from app.process_utils import run_subprocess_safe
@@ -42,7 +41,7 @@ def get_cached_video_analysis(url: str):
 # run_subprocess_safe is now imported from logs_utils
 
 
-def parse_format_line(line: str) -> Optional[Dict]:
+def parse_format_line(line: str) -> dict | None:
     """Stub for profile_utils.parse_format_line"""
     from app.profile_utils import parse_format_line as pfl
 
@@ -146,8 +145,8 @@ QUALITY_PROFILES = [
 
 
 def get_video_formats(
-    url: str, cookies_part: List[str] = None
-) -> Tuple[bool, List[Dict], str]:
+    url: str, cookies_part: list[str] = None
+) -> tuple[bool, list[dict], str]:
     """
     Retrieve video format list from yt-dlp.
 
@@ -252,7 +251,7 @@ def get_video_formats(
 # === PROFILE MATCHING SYSTEM ===
 
 
-def extract_format_codecs(formats: List[Dict]) -> Dict:
+def extract_format_codecs(formats: list[dict]) -> dict:
     """
     Extract available codecs and their formats from yt-dlp format list.
 
@@ -309,8 +308,8 @@ def extract_format_codecs(formats: List[Dict]) -> Dict:
 
 
 def match_codec_requirements(
-    available_codecs: Dict, codec_ext_requirements: List[Dict]
-) -> List[Dict]:
+    available_codecs: dict, codec_ext_requirements: list[dict]
+) -> list[dict]:
     """
     Match available codecs against profile requirements.
 
@@ -365,7 +364,7 @@ def match_codec_requirements(
     return matches
 
 
-def match_profiles_to_formats_auto(formats: List[Dict]) -> List[Dict]:
+def match_profiles_to_formats_auto(formats: list[dict]) -> list[dict]:
     """
     Compatibility wrapper - match all QUALITY_PROFILES with available formats.
 
@@ -408,7 +407,7 @@ def match_profiles_to_formats_auto(formats: List[Dict]) -> List[Dict]:
     return combinations
 
 
-def get_optimal_profiles(formats: List[Dict], max_profiles: int = 10) -> List[Dict]:
+def get_optimal_profiles(formats: list[dict], max_profiles: int = 10) -> list[dict]:
     """
     Compatibility function - calls the new match_profiles_to_formats.
 
@@ -423,7 +422,7 @@ def get_optimal_profiles(formats: List[Dict], max_profiles: int = 10) -> List[Di
     return combinations[:max_profiles]
 
 
-def get_profile_availability_summary(formats: List[Dict]) -> Dict:
+def get_profile_availability_summary(formats: list[dict]) -> dict:
     """
     Get a summary of profile availability for UI display.
 
@@ -461,7 +460,7 @@ def get_profile_availability_summary(formats: List[Dict]) -> Dict:
     return summary
 
 
-def format_profile_for_display(combination: Dict) -> str:
+def format_profile_for_display(combination: dict) -> str:
     """
     Format a profile combination for user-friendly display.
 
@@ -487,8 +486,8 @@ def format_profile_for_display(combination: Dict) -> str:
 
 
 def analyze_video_formats_unified(
-    url: str, cookies_part: List[str]
-) -> Tuple[Dict[str, bool], List[Dict]]:
+    url: str, cookies_part: list[str]
+) -> tuple[dict[str, bool], list[dict]]:
     """
     Unified function that analyzes video formats and detects available codecs.
 
@@ -554,8 +553,8 @@ def analyze_video_formats_unified(
 
 
 def filter_viable_profiles(
-    available_codecs: Dict[str, bool], mode: str = "auto"
-) -> List[Dict]:
+    available_codecs: dict[str, bool], mode: str = "auto"
+) -> list[dict]:
     """
     Filter quality profiles based on available codecs.
 
@@ -622,7 +621,7 @@ def filter_viable_profiles(
     return sorted(viable_profiles, key=lambda x: x["priority"])
 
 
-def generate_format_string_from_profile(profile: Dict) -> str:
+def generate_format_string_from_profile(profile: dict) -> str:
     """
     Generate a yt-dlp format string from a modern profile structure.
 
@@ -685,7 +684,7 @@ def generate_format_string_from_profile(profile: Dict) -> str:
     return "/".join(combinations) + "/b*"  # Final fallback to any format
 
 
-def get_profile_by_name(profile_name: str) -> Optional[Dict]:
+def get_profile_by_name(profile_name: str) -> dict | None:
     """
     Get a quality profile by name (case-insensitive).
 
@@ -711,7 +710,7 @@ def get_profile_by_name(profile_name: str) -> Optional[Dict]:
     return None
 
 
-def format_profile_codec_info(profile: Dict) -> str:
+def format_profile_codec_info(profile: dict) -> str:
     """Format profile codec information for display."""
     # Extract video codecs
     video_codecs = []
@@ -758,7 +757,7 @@ def get_default_profile_index() -> int:
     return 0
 
 
-def get_download_configuration() -> Dict:
+def get_download_configuration() -> dict:
     """
     Centralized configuration retrieval from session state.
 
@@ -817,8 +816,8 @@ def show_download_failure_help(cookies_available: bool, profiles_count: int):
 
 
 def _get_video_analysis_cached(
-    url: str, cookies_part: List[str]
-) -> Tuple[Dict[str, bool], List[Dict]]:
+    url: str, cookies_part: list[str]
+) -> tuple[dict[str, bool], list[dict]]:
     """Get video format analysis with intelligent caching."""
     cached_url = st.session_state.get("codecs_detected_for_url", "")
     cache_timestamp = st.session_state.get("formats_detection_timestamp", 0)
@@ -859,10 +858,10 @@ def _get_video_analysis_cached(
 
 def resolve_download_profiles(
     download_mode: str,
-    target_profile: Optional[Union[str, Dict]],
-    available_formats: List[Dict],
-    available_codecs: Dict[str, bool],
-) -> Tuple[str, List[Dict], Optional[str]]:
+    target_profile: str | dict | None,
+    available_formats: list[dict],
+    available_codecs: dict[str, bool],
+) -> tuple[str, list[dict], str | None]:
     """
     Resolve which profiles to try for download based on mode and target.
 
@@ -913,8 +912,8 @@ def resolve_download_profiles(
 
 
 def _resolve_forced_profile(
-    target_profile: Union[str, Dict], available_formats: List[Dict]
-) -> Tuple[str, List[Dict], Optional[str]]:
+    target_profile: str | dict, available_formats: list[dict]
+) -> tuple[str, list[dict], str | None]:
     """Resolve a single forced profile."""
     if isinstance(target_profile, dict):
         # Dynamic profile from UI

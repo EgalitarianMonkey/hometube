@@ -7,7 +7,6 @@ for skipping sponsor segments, introductions, outros, and other video segments.
 
 import json
 import requests
-from typing import Dict, List, Tuple
 from urllib.parse import urlparse
 
 from app.translations import t
@@ -114,8 +113,8 @@ def fetch_sponsorblock_segments(
 
 
 def get_sponsorblock_segments(
-    url: str, cookies_part: List[str], categories: List[str] = None
-) -> List[Dict]:
+    url: str, cookies_part: list[str], categories: list[str] = None
+) -> list[dict]:
     """
     Retrieves SponsorBlock segments from a video via direct API.
     Returns a list of segments with 'start' and 'end' in seconds.
@@ -206,8 +205,8 @@ def get_sponsorblock_segments(
 
 
 def calculate_sponsor_overlap(
-    start_sec: int, end_sec: int, sponsor_segments: List[Dict]
-) -> Tuple[int, int]:
+    start_sec: int, end_sec: int, sponsor_segments: list[dict]
+) -> tuple[int, int]:
     """
     Calculates total sponsor time in the requested section and adjusts the end.
 
@@ -282,7 +281,7 @@ def calculate_sponsor_overlap(
     return int(total_sponsor_time), int(adjusted_end)
 
 
-def get_sponsorblock_config(sb_choice: str) -> Tuple[List[str], List[str]]:
+def get_sponsorblock_config(sb_choice: str) -> tuple[list[str], list[str]]:
     """
     Returns the SponsorBlock configuration based on user choice or dynamic detection.
     Wrapper around core function with UI-specific dynamic sponsor detection.
@@ -317,7 +316,7 @@ def get_sponsorblock_config(sb_choice: str) -> Tuple[List[str], List[str]]:
     return core_get_sponsorblock_config(sb_choice)
 
 
-def build_sponsorblock_params(sb_choice: str) -> List[str]:
+def build_sponsorblock_params(sb_choice: str) -> list[str]:
     """
     Builds yt-dlp parameters for SponsorBlock based on user choice.
 

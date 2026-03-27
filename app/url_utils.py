@@ -8,7 +8,6 @@ without Streamlit dependencies, making them easy to test.
 import json
 import re
 from pathlib import Path
-from typing import Optional, Dict, Tuple
 
 from app.json_utils import safe_load_json, safe_save_json
 from app.logs_utils import safe_push_log
@@ -73,7 +72,7 @@ def video_id_from_url(url: str) -> str:
 # === URL INFO FILE OPERATIONS ===
 
 
-def load_url_info_from_file(file_path: Path) -> Optional[Dict]:
+def load_url_info_from_file(file_path: Path) -> dict | None:
     """
     Load URL info from a JSON file.
 
@@ -86,7 +85,7 @@ def load_url_info_from_file(file_path: Path) -> Optional[Dict]:
     return safe_load_json(file_path, log_errors=True)
 
 
-def save_url_info(json_path: Path, url_info: Dict) -> bool:
+def save_url_info(json_path: Path, url_info: dict) -> bool:
     """
     Save URL info to JSON file.
 
@@ -103,7 +102,7 @@ def save_url_info(json_path: Path, url_info: Dict) -> bool:
     return False
 
 
-def check_url_info_integrity(url_info: Dict) -> bool:
+def check_url_info_integrity(url_info: dict) -> bool:
     """
     Check if url_info contains premium formats (AV1 or VP9).
 
@@ -147,7 +146,7 @@ def check_url_info_integrity(url_info: Dict) -> bool:
 # === INTELLIGENT CACHING ===
 
 
-def is_url_info_complet(json_path: Path) -> Tuple[bool, Optional[Dict]]:
+def is_url_info_complet(json_path: Path) -> tuple[bool, dict | None]:
     """
     Check if existing url_info.json should be reused based on integrity.
 
@@ -163,9 +162,9 @@ def is_url_info_complet(json_path: Path) -> Tuple[bool, Optional[Dict]]:
         json_path: Path to url_info.json file
 
     Returns:
-        Tuple[bool, Optional[Dict]]:
+        tuple[bool, dict | None]:
         - bool: True if should reuse, False if should download
-        - Optional[Dict]: The loaded data if reusable, None otherwise
+        - dict | None: The loaded data if reusable, None otherwise
     """
     # Check if file exists
     if not json_path.exists():
@@ -219,7 +218,7 @@ def build_url_info(
     youtube_cookies_file_path: str = "",
     cookies_from_browser: str = "",
     youtube_clients: list = None,
-) -> Dict:
+) -> dict:
     """
     Download and build url_info.json with integrity checks and smart retries.
 
@@ -513,7 +512,7 @@ def build_url_info(
 
 def _build_bot_detection_error(
     youtube_cookies_file_path: str, cookies_from_browser: str
-) -> Dict:
+) -> dict:
     """Build helpful error message for bot detection."""
     from pathlib import Path
     from app.file_system_utils import is_valid_browser
@@ -559,7 +558,7 @@ def _build_bot_detection_error(
 
 def _build_age_restriction_error(
     youtube_cookies_file_path: str, cookies_from_browser: str
-) -> Dict:
+) -> dict:
     """Build helpful error message for age-restricted content."""
     from pathlib import Path
     from app.file_system_utils import is_valid_browser

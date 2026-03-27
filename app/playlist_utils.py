@@ -11,7 +11,6 @@ This module provides functions for handling YouTube playlists:
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from app.file_system_utils import (
     sanitize_filename,
@@ -55,7 +54,7 @@ def is_playlist_url(url: str) -> bool:
     return False
 
 
-def extract_playlist_id(url: str) -> Optional[str]:
+def extract_playlist_id(url: str) -> str | None:
     """
     Extract playlist ID from YouTube playlist URL.
 
@@ -75,7 +74,7 @@ def extract_playlist_id(url: str) -> Optional[str]:
     return None
 
 
-def is_playlist_info(url_info: Dict) -> bool:
+def is_playlist_info(url_info: dict) -> bool:
     """
     Check if url_info represents a playlist.
 
@@ -96,7 +95,7 @@ def is_playlist_info(url_info: Dict) -> bool:
 # === PLAYLIST ENTRIES ===
 
 
-def get_playlist_entries(url_info: Dict) -> List[Dict]:
+def get_playlist_entries(url_info: dict) -> list[dict]:
     """
     Get list of video entries from playlist info.
 
@@ -120,7 +119,7 @@ def get_playlist_entries(url_info: Dict) -> List[Dict]:
     return result
 
 
-def get_playlist_video_count(url_info: Dict) -> int:
+def get_playlist_video_count(url_info: dict) -> int:
     """
     Get total video count from playlist info.
 
@@ -148,11 +147,11 @@ def get_playlist_video_count(url_info: Dict) -> int:
 
 def check_existing_videos_in_destination(
     dest_dir: Path,
-    playlist_entries: List[Dict],
-    video_extensions: List[str] = None,
-    playlist_workspace: Optional[Path] = None,
-    title_pattern: Optional[str] = None,
-) -> Tuple[List[Dict], List[Dict], int]:
+    playlist_entries: list[dict],
+    video_extensions: list[str] = None,
+    playlist_workspace: Path | None = None,
+    title_pattern: str | None = None,
+) -> tuple[list[dict], list[dict], int]:
     """
     Check which playlist videos already exist in destination folder.
 
@@ -305,8 +304,8 @@ def _normalize_for_comparison(name: str) -> str:
 
 
 def get_download_ratio(
-    already_downloaded: List[Dict],
-    to_download: List[Dict],
+    already_downloaded: list[dict],
+    to_download: list[dict],
 ) -> str:
     """
     Format the download ratio as a readable string.
@@ -324,8 +323,8 @@ def get_download_ratio(
 
 
 def get_download_progress_percent(
-    already_downloaded: List[Dict],
-    to_download: List[Dict],
+    already_downloaded: list[dict],
+    to_download: list[dict],
 ) -> float:
     """
     Calculate download progress as percentage.
@@ -418,8 +417,8 @@ def create_playlist_status(
     url: str,
     playlist_id: str,
     playlist_title: str,
-    entries: List[Dict],
-) -> Dict:
+    entries: list[dict],
+) -> dict:
     """
     Create initial status.json for a playlist.
 
@@ -468,7 +467,7 @@ def create_playlist_status(
     return status_data
 
 
-def load_playlist_status(playlist_workspace: Path) -> Optional[Dict]:
+def load_playlist_status(playlist_workspace: Path) -> dict | None:
     """
     Load playlist status from status.json.
 
@@ -481,7 +480,7 @@ def load_playlist_status(playlist_workspace: Path) -> Optional[Dict]:
     return safe_load_json(playlist_workspace / "status.json")
 
 
-def save_playlist_status(playlist_workspace: Path, status_data: Dict) -> bool:
+def save_playlist_status(playlist_workspace: Path, status_data: dict) -> bool:
     """
     Save playlist status to status.json.
 
@@ -500,8 +499,8 @@ def update_video_status_in_playlist(
     playlist_workspace: Path,
     video_id: str,
     status: str,
-    error: Optional[str] = None,
-    extra_data: Optional[Dict] = None,
+    error: str | None = None,
+    extra_data: dict | None = None,
 ) -> bool:
     """
     Update the status of a specific video in playlist status.
@@ -540,7 +539,7 @@ def update_video_status_in_playlist(
     return save_playlist_status(playlist_workspace, status_data)
 
 
-def get_playlist_progress(playlist_workspace: Path) -> Tuple[int, int, int, int]:
+def get_playlist_progress(playlist_workspace: Path) -> tuple[int, int, int, int]:
     """
     Get playlist download progress from status.json.
 
@@ -566,7 +565,7 @@ def get_playlist_progress(playlist_workspace: Path) -> Tuple[int, int, int, int]
     return completed, pending + skipped, failed, total
 
 
-def get_videos_to_download(playlist_workspace: Path) -> List[str]:
+def get_videos_to_download(playlist_workspace: Path) -> list[str]:
     """
     Get list of video IDs that still need to be downloaded.
 
@@ -622,7 +621,7 @@ def add_playlist_download_attempt(
     playlist_workspace: Path,
     custom_title: str,
     playlist_location: str,
-    title_pattern: Optional[str] = None,
+    title_pattern: str | None = None,
 ) -> bool:
     """
     Update playlist preferences in status.json.
@@ -664,7 +663,7 @@ def add_playlist_download_attempt(
     return save_playlist_status(playlist_workspace, status_data)
 
 
-def get_last_playlist_download_attempt(playlist_workspace: Path) -> Optional[Dict]:
+def get_last_playlist_download_attempt(playlist_workspace: Path) -> dict | None:
     """
     Get the current playlist preferences from status.json.
 
@@ -704,8 +703,8 @@ def copy_playlist_to_destination(
     playlist_workspace: Path,
     dest_dir: Path,
     playlist_name: str,
-    video_extensions: List[str] = None,
-) -> Tuple[int, int]:
+    video_extensions: list[str] = None,
+) -> tuple[int, int]:
     """
     Move all completed videos from their workspaces to destination folder.
 

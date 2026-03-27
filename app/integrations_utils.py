@@ -5,7 +5,7 @@ Post-download integrations (e.g., Jellyfin refresh hooks).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import requests
 
@@ -20,14 +20,14 @@ class JellyfinScanResult:
 
     success: bool
     message: str
-    status_code: Optional[int] = None
+    status_code: int | None = None
 
 
 def trigger_jellyfin_library_scan(
     base_url: str,
     api_key: str,
-    session: Optional[requests.Session] = None,
-    log: Optional[Callable[[str], None]] = None,
+    session: requests.Session | None = None,
+    log: Callable[[str], None] | None = None,
 ) -> JellyfinScanResult:
     """
     Trigger a Jellyfin library scan (all libraries).

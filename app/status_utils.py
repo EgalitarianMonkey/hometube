@@ -7,7 +7,6 @@ and completion status for each video.
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from app.json_utils import safe_load_json, safe_save_json
 from app.logs_utils import safe_push_log
@@ -19,7 +18,7 @@ def create_initial_status(
     title: str,
     content_type: str,
     tmp_url_workspace: Path,
-) -> Dict:
+) -> dict:
     """
     Create initial status.json file for a video.
 
@@ -50,7 +49,7 @@ def create_initial_status(
     return status_data
 
 
-def load_status(tmp_url_workspace: Path) -> Optional[Dict]:
+def load_status(tmp_url_workspace: Path) -> dict | None:
     """
     Load status.json from the URL workspace directory.
 
@@ -63,7 +62,7 @@ def load_status(tmp_url_workspace: Path) -> Optional[Dict]:
     return safe_load_json(tmp_url_workspace / "status.json")
 
 
-def save_status(tmp_url_workspace: Path, status_data: Dict) -> bool:
+def save_status(tmp_url_workspace: Path, status_data: dict) -> bool:
     """
     Save status data to status.json.
 
@@ -83,7 +82,7 @@ def save_status(tmp_url_workspace: Path, status_data: Dict) -> bool:
 def add_selected_format(
     tmp_url_workspace: Path,
     video_format: str,
-    subtitles: List[str],
+    subtitles: list[str],
     filesize_approx: int,
 ) -> bool:
     """
@@ -203,7 +202,7 @@ def update_format_status(
     return save_status(tmp_url_workspace, status_data)
 
 
-def get_format_status(tmp_url_workspace: Path, video_format: str) -> Optional[str]:
+def get_format_status(tmp_url_workspace: Path, video_format: str) -> str | None:
     """
     Get the status of a specific format.
 
@@ -287,7 +286,7 @@ def mark_format_error(
     return save_status(tmp_url_workspace, status_data)
 
 
-def get_first_completed_format(tmp_url_workspace: Path) -> Optional[str]:
+def get_first_completed_format(tmp_url_workspace: Path) -> str | None:
     """
     Get the format ID of the first completed download.
 
@@ -331,7 +330,7 @@ def add_download_attempt(
     tmp_url_workspace: Path,
     custom_title: str,
     video_location: str,
-    requested_format_id: Optional[str] = None,
+    requested_format_id: str | None = None,
 ) -> bool:
     """
     Record a download attempt in status.json.
@@ -384,7 +383,7 @@ def add_download_attempt(
     return save_status(tmp_url_workspace, status_data)
 
 
-def get_last_download_attempt(tmp_url_workspace: Path) -> Optional[Dict]:
+def get_last_download_attempt(tmp_url_workspace: Path) -> dict | None:
     """
     Get the most recent download attempt from status.json.
 
@@ -410,8 +409,8 @@ def get_last_download_attempt(tmp_url_workspace: Path) -> Optional[Dict]:
 
 def get_profiles_cached(
     tmp_url_workspace: Path,
-    optimal_format_profiles: List[Dict],
-) -> List[Dict]:
+    optimal_format_profiles: list[dict],
+) -> list[dict]:
     """
     Get the list of optimal profiles that are cached (status = "completed").
 

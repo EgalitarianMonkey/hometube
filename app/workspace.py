@@ -33,7 +33,6 @@ import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple
 
 
 @dataclass
@@ -250,7 +249,7 @@ def ensure_playlist_workspace(tmp_base: Path, platform: str, playlist_id: str) -
     return workspace
 
 
-def ensure_workspace_from_url(tmp_base: Path, url: str) -> Tuple[Path, UrlInfo]:
+def ensure_workspace_from_url(tmp_base: Path, url: str) -> tuple[Path, UrlInfo]:
     """
     Create and return workspace for a URL.
 
@@ -305,7 +304,7 @@ def get_legacy_folder_name(url: str) -> str:
     return f"{info.platform}-{info.id}"
 
 
-def extract_platform_and_id(folder_name: str) -> Optional[Tuple[str, str, str]]:
+def extract_platform_and_id(folder_name: str) -> tuple[str, str, str] | None:
     """
     Extract platform, ID and type from a legacy folder name.
 
