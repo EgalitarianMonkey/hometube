@@ -56,6 +56,9 @@ MIN_COOKIE_FILE_SIZE: int = 100
 # Video file extensions
 VIDEO_EXTENSIONS: set[str] = {".mkv", ".mp4", ".webm", ".avi", ".mov"}
 
+# Audio file extensions
+AUDIO_EXTENSIONS: set[str] = {".opus", ".mp3", ".m4a", ".aac", ".flac", ".wav"}
+
 # Subtitle file extensions
 SUBTITLE_EXTENSIONS: set[str] = {".srt", ".vtt", ".ass", ".ssa"}
 

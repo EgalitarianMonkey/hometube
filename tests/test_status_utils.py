@@ -16,6 +16,12 @@ from app.status_utils import (
     is_format_completed,
     mark_format_error,
     get_first_completed_format,
+    add_download_attempt,
+    add_audio_download,
+    update_audio_status,
+    get_completed_audio,
+    is_audio_completed,
+    mark_audio_error,
 )
 
 
@@ -492,3 +498,281 @@ def test_get_first_completed_format_no_status_file():
         # No status.json file
         result = get_first_completed_format(tmp_url_workspace)
         assert result is None
+
+
+# ─── Audio status tracking tests ──────────────────────────────────────────
+
+
+def _create_workspace_with_status(temp_dir: str) -> Path:
+    """Helper: create a workspace with initial status.json."""
+    workspace = Path(temp_dir) / "youtube-abc123"
+    workspace.mkdir()
+    create_initial_status(
+        url="https://www.youtube.com/watch?v=abc123",
+        video_id="abc123",
+        title="Test Video",
+        content_type="video",
+        tmp_url_workspace=workspace,
+    )
+    return workspace
+
+
+def test_add_audio_download():
+    """Test marking audio format as downloading."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        success = add_audio_download(workspace, "opus")
+        assert success is True
+
+        status = load_status(workspace)
+        assert "downloaded_audio" in status
+        assert "opus" in status["downloaded_audio"]
+        assert status["downloaded_audio"]["opus"]["status"] == "downloading"
+
+
+def test_add_audio_download_duplicate_updates():
+    """Test that re-adding the same audio format overwrites the entry."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        add_audio_download(workspace, "opus", filesize_approx=1000)
+        add_audio_download(workspace, "opus", filesize_approx=2000)
+
+        status = load_status(workspace)
+        assert len(status["downloaded_audio"]) == 1
+        assert status["downloaded_audio"]["opus"]["filesize_approx"] == 2000
+
+
+def test_update_audio_status_completed():
+    """Test marking audio as completed after download."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        add_audio_download(workspace, "opus")
+
+        # Create audio file
+        audio_file = workspace / "audio-best.opus"
+        audio_file.write_bytes(b"x" * 5000)
+
+        success = update_audio_status(workspace, "opus", audio_file)
+        assert success is True
+
+        status = load_status(workspace)
+        entry = status["downloaded_audio"]["opus"]
+        assert entry["status"] == "completed"
+        assert entry["actual_filesize"] == 5000
+
+
+def test_update_audio_status_file_not_found():
+    """Test marking audio as incomplete when file doesn't exist."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        add_audio_download(workspace, "mp3")
+
+        missing_file = workspace / "nonexistent.mp3"
+        success = update_audio_status(workspace, "mp3", missing_file)
+        assert success is True
+
+        status = load_status(workspace)
+        entry = status["downloaded_audio"]["mp3"]
+        assert entry["status"] == "incomplete"
+        assert entry["error"] == "File not found"
+
+
+def test_update_audio_status_auto_creates_entry():
+    """Test that update_audio_status creates entry if it doesn't exist."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        audio_file = workspace / "audio-best.opus"
+        audio_file.write_bytes(b"x" * 3000)
+
+        # No prior add_audio_download — should auto-create
+        success = update_audio_status(workspace, "opus", audio_file)
+        assert success is True
+
+        status = load_status(workspace)
+        assert status["downloaded_audio"]["opus"]["status"] == "completed"
+
+
+def test_get_completed_audio():
+    """Test finding first completed audio format."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        # No audio yet
+        assert get_completed_audio(workspace) is None
+
+        # Add downloading audio
+        add_audio_download(workspace, "opus")
+        assert get_completed_audio(workspace) is None
+
+        # Mark as completed
+        audio_file = workspace / "audio-best.opus"
+        audio_file.write_bytes(b"x" * 5000)
+        update_audio_status(workspace, "opus", audio_file)
+
+        result = get_completed_audio(workspace)
+        assert result == "opus"
+
+
+def test_get_completed_audio_multiple_formats():
+    """Test finding first completed audio when multiple formats exist."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        # Add two formats: mp3 is error, opus is completed
+        add_audio_download(workspace, "mp3")
+        mark_audio_error(workspace, "mp3", "Failed")
+
+        add_audio_download(workspace, "opus")
+        audio_file = workspace / "audio-best.opus"
+        audio_file.write_bytes(b"x" * 5000)
+        update_audio_status(workspace, "opus", audio_file)
+
+        result = get_completed_audio(workspace)
+        assert result == "opus"
+
+
+def test_is_audio_completed():
+    """Test checking if specific audio format is completed."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        assert is_audio_completed(workspace, "opus") is False
+
+        add_audio_download(workspace, "opus")
+        assert is_audio_completed(workspace, "opus") is False
+
+        audio_file = workspace / "audio-best.opus"
+        audio_file.write_bytes(b"x" * 5000)
+        update_audio_status(workspace, "opus", audio_file)
+
+        assert is_audio_completed(workspace, "opus") is True
+        assert is_audio_completed(workspace, "mp3") is False
+
+
+def test_mark_audio_error():
+    """Test marking audio as error."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        add_audio_download(workspace, "opus")
+        success = mark_audio_error(workspace, "opus", "Connection timeout")
+        assert success is True
+
+        status = load_status(workspace)
+        entry = status["downloaded_audio"]["opus"]
+        assert entry["status"] == "error"
+        assert entry["error"] == "Connection timeout"
+
+
+def test_mark_audio_error_nonexistent():
+    """Test marking error on audio format that doesn't exist."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        success = mark_audio_error(workspace, "flac", "Some error")
+        assert success is False
+
+
+def test_audio_and_video_coexist_in_status():
+    """Test that audio and video status coexist independently in status.json."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        # Add video format (existing workflow)
+        add_selected_format(
+            tmp_url_workspace=workspace,
+            video_format="399+251",
+            subtitles=["subtitles.en.srt"],
+            filesize_approx=41943040,
+        )
+
+        # Add audio format (new workflow)
+        add_audio_download(workspace, "opus")
+
+        # Both should exist independently
+        status = load_status(workspace)
+        assert "downloaded_formats" in status
+        assert "downloaded_audio" in status
+        assert "399+251" in status["downloaded_formats"]
+        assert "opus" in status["downloaded_audio"]
+
+        # Video completed
+        video_file = workspace / "video-399+251.mp4"
+        video_file.write_bytes(b"x" * 41943040)
+        update_format_status(workspace, "399+251", video_file)
+
+        # Audio completed
+        audio_file = workspace / "audio-best.opus"
+        audio_file.write_bytes(b"x" * 5000)
+        update_audio_status(workspace, "opus", audio_file)
+
+        # Verify both are completed
+        status = load_status(workspace)
+        assert status["downloaded_formats"]["399+251"]["status"] == "completed"
+        assert status["downloaded_audio"]["opus"]["status"] == "completed"
+
+        # Both lookup functions should work independently
+        assert get_first_completed_format(workspace) == "399+251"
+        assert get_completed_audio(workspace) == "opus"
+
+
+def test_download_attempt_with_media_type():
+    """Test that download attempts record media_type."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        # Video download attempt
+        add_download_attempt(
+            tmp_url_workspace=workspace,
+            custom_title="My Video",
+            video_location="Tech",
+            media_type="video",
+        )
+
+        status = load_status(workspace)
+        assert status["download_attempts"][0]["media_type"] == "video"
+
+        # Audio download attempt
+        add_download_attempt(
+            tmp_url_workspace=workspace,
+            custom_title="My Audio",
+            video_location="Music",
+            media_type="audio",
+        )
+
+        status = load_status(workspace)
+        assert status["download_attempts"][0]["media_type"] == "audio"
+        assert status["download_attempts"][1]["media_type"] == "video"
+
+
+def test_download_attempt_default_media_type():
+    """Test that media_type defaults to 'video' for backward compat."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = _create_workspace_with_status(temp_dir)
+
+        add_download_attempt(
+            tmp_url_workspace=workspace,
+            custom_title="My Video",
+            video_location="Tech",
+        )
+
+        status = load_status(workspace)
+        assert status["download_attempts"][0]["media_type"] == "video"
+
+
+def test_audio_resilience_no_status_file():
+    """Test audio functions handle missing status.json gracefully."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = Path(temp_dir) / "youtube-xyz"
+        workspace.mkdir()
+
+        # All should return gracefully without status.json
+        assert get_completed_audio(workspace) is None
+        assert is_audio_completed(workspace, "opus") is False
+        assert add_audio_download(workspace, "opus") is False
+        assert mark_audio_error(workspace, "opus") is False

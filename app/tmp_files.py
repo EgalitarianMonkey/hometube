@@ -184,7 +184,7 @@ def find_subtitles(tmp_dir: Path, is_cut: bool = False) -> list[Path]:
 def find_final_file(tmp_dir: Path) -> Path | None:
     """
     Find the final processed file in the temporary directory.
-    Prioritizes MKV over other formats.
+    Prioritizes MKV over other formats, then checks audio formats.
 
     Args:
         tmp_dir: Temporary directory for the video
@@ -200,6 +200,56 @@ def find_final_file(tmp_dir: Path) -> Path | None:
         candidate = tmp_dir / f"final.{ext}"
         if candidate.exists():
             return candidate
+
+    # Also check audio formats
+    for ext in AUDIO_EXTENSIONS:
+        candidate = tmp_dir / f"final.{ext}"
+        if candidate.exists():
+            return candidate
+
+    return None
+
+
+def find_downloaded_audio(tmp_dir: Path) -> Path | None:
+    """
+    Find ANY downloaded audio file in the temporary directory.
+
+    Priority order:
+    1. final.{ext} with audio extension
+    2. audio-*.{ext} (downloaded audio tracks)
+    3. Any audio file in the directory
+
+    Args:
+        tmp_dir: Temporary directory
+
+    Returns:
+        Path to any audio file found, or None
+    """
+    if not tmp_dir.exists():
+        return None
+
+    # Priority 1: Look for final.{ext} with audio extension
+    for ext in AUDIO_EXTENSIONS:
+        candidate = tmp_dir / f"final.{ext}"
+        if candidate.exists():
+            return candidate
+
+    # Priority 2: Look for audio-*.{ext} (downloaded audio tracks)
+    for ext in AUDIO_EXTENSIONS:
+        matches = list(tmp_dir.glob(f"audio-*.{ext}"))
+        if matches:
+            return max(matches, key=lambda p: p.stat().st_size)
+
+    # Priority 3: Any audio file in the directory
+    for ext in AUDIO_EXTENSIONS:
+        matches = list(tmp_dir.glob(f"*.{ext}"))
+        matches = [
+            m
+            for m in matches
+            if not m.name.startswith("video-") and not m.name.startswith("subtitles")
+        ]
+        if matches:
+            return max(matches, key=lambda p: p.stat().st_size)
 
     return None
 

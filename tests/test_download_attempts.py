@@ -251,9 +251,15 @@ def test_download_attempt_json_structure(tmp_path):
     assert len(raw_json["download_attempts"]) == 1
 
     attempt = raw_json["download_attempts"][0]
-    assert set(attempt.keys()) == {"custom_title", "video_location", "date"}
+    assert set(attempt.keys()) == {
+        "custom_title",
+        "video_location",
+        "media_type",
+        "date",
+    }
     assert attempt["custom_title"] == "Stress"
     assert attempt["video_location"] == "Clip"
+    assert attempt["media_type"] == "video"
 
     # Verify date format (ISO 8601 with timezone)
     date_str = attempt["date"]

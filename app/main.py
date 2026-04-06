@@ -21,7 +21,9 @@ from app.constants import (
 from app.translations import t, configure_language
 from app.core import (
     build_base_ytdlp_command,
+    build_base_ytdlp_audio_command,
     build_cookies_params as core_build_cookies_params,
+    VALID_AUDIO_FORMATS,
 )
 from app.file_system_utils import (
     is_valid_cookie_file,
@@ -102,6 +104,10 @@ from app.status_utils import (
     get_last_download_attempt,
     is_format_completed,
     get_profiles_cached,
+    add_audio_download,
+    update_audio_status,
+    get_completed_audio,
+    mark_audio_error,
 )
 from app.playlist_utils import (
     save_playlist_status,
@@ -1266,6 +1272,139 @@ def check_existing_video_file(
     return existing_generic_file, completed_format_id
 
 
+def download_single_audio(
+    audio_url: str,
+    audio_workspace: Path,
+    base_output: str,
+    audio_format: str = "opus",
+    embed_chapters: bool = False,
+    ytdlp_custom_args: str = "",
+    progress_placeholder=None,
+    status_placeholder=None,
+    info_placeholder=None,
+) -> tuple[int, Path | None, str | None]:
+    """
+    Download a single audio track using yt-dlp audio extraction.
+
+    This function downloads only the audio track (no video, no subtitles).
+    Used for both single audio downloads and audio playlist entries.
+    Integrates with status.json to track audio downloads and avoid duplicates.
+
+    Args:
+        audio_url: URL to download audio from
+        audio_workspace: Path to workspace directory
+        base_output: Base output filename (without extension)
+        audio_format: Target audio format (opus, mp3, m4a, etc.)
+        embed_chapters: Whether to embed chapters
+        ytdlp_custom_args: Custom yt-dlp arguments
+        progress_placeholder: Streamlit progress placeholder
+        status_placeholder: Streamlit status placeholder
+        info_placeholder: Streamlit info placeholder
+
+    Returns:
+        tuple[int, Path | None, str | None]: (return_code, final_file_path, error_message)
+    """
+    # 1. Check status.json for completed audio download
+    completed_audio_fmt = get_completed_audio(audio_workspace)
+    if completed_audio_fmt:
+        # Status says audio is completed — verify the file still exists
+        existing_audio = tmp_files.find_downloaded_audio(audio_workspace)
+        if existing_audio:
+            safe_push_log(
+                f"⚡ Audio already completed in status ({completed_audio_fmt}): "
+                f"{existing_audio.name}"
+            )
+            return 0, existing_audio, None
+        safe_push_log(
+            f"⚠️ Status shows audio completed ({completed_audio_fmt}) "
+            "but file not found, will re-download"
+        )
+
+    # 2. Fallback: check for audio file without status entry (legacy / untracked)
+    existing_audio = tmp_files.find_downloaded_audio(audio_workspace)
+    if existing_audio:
+        safe_push_log(f"⚡ Found cached audio (no status entry): {existing_audio.name}")
+        # Backfill status.json with this existing file
+        ext = existing_audio.suffix.lstrip(".")
+        update_audio_status(audio_workspace, ext, existing_audio)
+        return 0, existing_audio, None
+
+    safe_push_log(f"🎵 Downloading audio: {base_output}")
+
+    # 3. Mark audio as downloading in status.json
+    add_audio_download(audio_workspace, audio_format)
+
+    # Setup cookies
+    cookies_part = build_cookies_params()
+    cookies_available = len(cookies_part) > 0
+
+    # Build audio command
+    cmd_base = build_base_ytdlp_audio_command(
+        base_output,
+        audio_workspace,
+        audio_format=audio_format,
+        embed_chapters=embed_chapters,
+        custom_args=ytdlp_custom_args,
+    )
+
+    # Try download with client fallbacks
+    success = _try_profile_with_clients(
+        cmd_base,
+        audio_url,
+        cookies_part,
+        cookies_available,
+        status_placeholder,
+        progress_placeholder,
+        info_placeholder,
+    )
+
+    if not success:
+        mark_audio_error(
+            audio_workspace,
+            audio_format,
+            "Audio download failed - all clients exhausted",
+        )
+        return 1, None, "Audio download failed after all client attempts"
+
+    # Find the downloaded audio file
+    final_audio = None
+    for ext in [audio_format] + list(VALID_AUDIO_FORMATS):
+        candidate = audio_workspace / f"{base_output}.{ext}"
+        if candidate.exists():
+            final_audio = candidate
+            break
+
+    if not final_audio:
+        final_audio = tmp_files.find_downloaded_audio(audio_workspace)
+
+    if not final_audio:
+        mark_audio_error(
+            audio_workspace, audio_format, "Audio file not found after download"
+        )
+        return 1, None, "Audio file not found after download"
+
+    safe_push_log(f"✅ Audio downloaded: {final_audio.name}")
+
+    # Rename to generic audio name
+    audio_generic = tmp_files.get_audio_track_path(
+        audio_workspace, "best", final_audio.suffix.lstrip(".")
+    )
+    if final_audio != audio_generic:
+        try:
+            if audio_generic.exists():
+                audio_generic.unlink()
+            final_audio.rename(audio_generic)
+            safe_push_log(f"📦 Renamed: {final_audio.name} → {audio_generic.name}")
+            final_audio = audio_generic
+        except Exception as e:
+            safe_push_log(f"⚠️ Could not rename audio: {e}")
+
+    # 4. Mark audio as completed in status.json
+    update_audio_status(audio_workspace, audio_format, final_audio)
+
+    return 0, final_audio, None
+
+
 def download_single_video(
     video_url: str,
     video_id: str,
@@ -2095,6 +2234,53 @@ if url and url.strip():
             if json_output_path.exists():
                 compute_optimal_profiles(url_info, json_output_path)
 
+# === MEDIA TYPE SELECTOR ===
+# Discreet toggle on a single line, pushed to the right
+_default_audio = settings.DEFAULT_MEDIA_TYPE == "audio"
+st.markdown(
+    """<style>
+    /* Keep audio toggle label on a single line */
+    [data-testid="stHorizontalBlock"]:has([key="media_type_selector"])
+    label[data-testid="stWidgetLabel"] p {
+        white-space: nowrap;
+    }
+    /* Reduce vertical footprint */
+    [data-testid="stHorizontalBlock"]:has([key="media_type_selector"]) {
+        margin-top: -0.5rem; margin-bottom: -0.8rem;
+    }
+    </style>""",
+    unsafe_allow_html=True,
+)
+_spacer, _toggle_col = st.columns([5, 2])
+with _toggle_col:
+    is_audio_mode = st.toggle(
+        t("audio_only_toggle"),
+        value=_default_audio,
+        help=t("media_type_help"),
+        key="media_type_selector",
+    )
+
+# Audio format selector (only visible in audio mode)
+audio_format = settings.AUDIO_FORMAT
+if is_audio_mode:
+    _af_spacer, _af_col = st.columns([3, 2])
+    with _af_col:
+        audio_format = st.selectbox(
+            t("audio_format_label"),
+            options=sorted(VALID_AUDIO_FORMATS),
+            index=(
+                sorted(VALID_AUDIO_FORMATS).index(settings.AUDIO_FORMAT)
+                if settings.AUDIO_FORMAT in VALID_AUDIO_FORMATS
+                else sorted(VALID_AUDIO_FORMATS).index("opus")
+            ),
+            help=t("audio_format_help"),
+            key="audio_format_selector",
+        )
+
+# Store in session state for access in download logic
+st.session_state["is_audio_mode"] = is_audio_mode
+st.session_state["audio_format"] = audio_format
+
 # Try to get last download attempt to pre-fill fields
 default_filename = None  # Use None to distinguish "not set" from "empty string"
 default_folder = None
@@ -2204,13 +2390,13 @@ if is_playlist_mode:
     # Store in session state for use in download logic
     st.session_state["playlist_title_pattern"] = playlist_title_pattern
 else:
-    # Regular video mode
+    # Regular video/audio mode
     # Ensure default_filename is a string for st.text_input
     if default_filename is None:
         default_filename = ""
-    filename = st.text_input(
-        t("video_name"), value=default_filename or "", help=t("video_name_help")
-    )
+    _name_label = t("audio_name") if is_audio_mode else t("video_name")
+    _name_help = t("audio_name_help") if is_audio_mode else t("video_name_help")
+    filename = st.text_input(_name_label, value=default_filename or "", help=_name_help)
 
 # === FOLDER SELECTION ===
 # Handle cancel action - reset to root folder
@@ -2663,10 +2849,15 @@ if (
                 st.info(t("playlist_to_download", count=len(playlist_to_download)))
 
     else:
-        # === SINGLE VIDEO FILE EXISTENCE WARNING ===
-        # Check for existing files with all common video extensions
+        # === SINGLE VIDEO/AUDIO FILE EXISTENCE WARNING ===
+        # Check for existing files with all common extensions
         existing_files = []
-        for ext in [".mkv", ".mp4", ".webm", ".avi", ".mov"]:
+        _check_extensions = (
+            [f".{ext}" for ext in sorted(VALID_AUDIO_FORMATS)]
+            if is_audio_mode
+            else [".mkv", ".mp4", ".webm", ".avi", ".mov"]
+        )
+        for ext in _check_extensions:
             potential_file = check_dest_dir / f"{filename}{ext}"
             if potential_file.exists():
                 existing_files.append(potential_file)
@@ -2692,348 +2883,360 @@ if (
                     f"💡 To allow overwrites, set `ALLOW_OVERWRITE_EXISTING_VIDEO=true` in your `.env` file."
                 )
 
-# subtitles multiselect from env
-# Default subtitles are determined by audio language preferences (LANGUAGE_PRIMARY, LANGUAGES_SECONDARIES)
-default_subtitle_languages = get_default_subtitle_languages()
-subs_selected = st.multiselect(
-    t("subtitles_to_embed"),
-    options=default_subtitle_languages,
-    default=default_subtitle_languages,  # Pre-select subtitles based on audio preferences
-    help=t("subtitles_help"),
-)
+# === VIDEO-ONLY SECTIONS (hidden in audio mode) ===
+# Subtitles, sponsors, cutting, quality profiles, embedding options
+subs_selected = []
+sb_choice = t("sb_option_6")  # Disabled by default for audio
+start_text = ""
+end_text = ""
+embed_subs = False
+embed_chapters = settings.EMBED_CHAPTERS
+
+if not is_audio_mode:
+    # subtitles multiselect from env
+    # Default subtitles are determined by audio language preferences (LANGUAGE_PRIMARY, LANGUAGES_SECONDARIES)
+    default_subtitle_languages = get_default_subtitle_languages()
+    subs_selected = st.multiselect(
+        t("subtitles_to_embed"),
+        options=default_subtitle_languages,
+        default=default_subtitle_languages,  # Pre-select subtitles based on audio preferences
+        help=t("subtitles_help"),
+    )
 
 # st.markdown(f"### {t('options')}")
 st.markdown("\n")
 
 # === DYNAMIC SECTIONS (OUTSIDE FORM) ===
 
-# Optional cutting section with dynamic behavior
-with st.expander(f"{t('ads_sponsors_title')}", expanded=False):
-    # st.markdown(f"### {t('optional_cutting')}")
+if not is_audio_mode:
+    # Optional sponsor section with dynamic behavior
+    with st.expander(f"{t('ads_sponsors_title')}", expanded=False):
+        st.info(t("ads_sponsors_presentation"))
 
-    st.info(t("ads_sponsors_presentation"))
+        # Initialize session state for detected sponsors
+        if "detected_sponsors" not in st.session_state:
+            st.session_state.detected_sponsors = []
+        if "sponsors_to_remove" not in st.session_state:
+            st.session_state.sponsors_to_remove = []
+        if "sponsors_to_mark" not in st.session_state:
+            st.session_state.sponsors_to_mark = []
 
-    # Initialize session state for detected sponsors
-    if "detected_sponsors" not in st.session_state:
-        st.session_state.detected_sponsors = []
-    if "sponsors_to_remove" not in st.session_state:
-        st.session_state.sponsors_to_remove = []
-    if "sponsors_to_mark" not in st.session_state:
-        st.session_state.sponsors_to_mark = []
-
-    # SponsorBlock presets first
-    preset_help = "These are preset configurations."
-    if st.session_state.detected_sponsors:
-        preset_help += (
-            " ⚡ Dynamic configuration is active and will override these presets."
-        )
-    else:
-        preset_help += " Use 'Detect Sponsors' below for dynamic configuration."
-
-    sb_choice = st.selectbox(
-        f"### {t('ads_sponsors_label')} (Presets)",
-        options=[
-            t("sb_option_1"),  # Default
-            t("sb_option_2"),  # Moderate
-            t("sb_option_3"),  # Aggressive
-            t("sb_option_4"),  # Conservative
-            t("sb_option_5"),  # Minimal
-            t("sb_option_6"),  # Disabled
-        ],
-        index=0,
-        key="sb_choice",
-        help=preset_help,
-    )
-
-    # Dynamic sponsor detection section
-    st.markdown("---")
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        detect_btn = st.button(
-            t("detect_sponsors_button"),
-            help=t("detect_sponsors_help"),
-            key="detect_sponsors_btn",
-        )
-
-    # Reset button if dynamic detection is active
-    if st.session_state.detected_sponsors:
-        with col2:
-            if st.button("🔄 Reset Dynamic Detection", key="reset_detection"):
-                st.session_state.detected_sponsors = []
-                st.session_state.sponsors_to_remove = []
-                st.session_state.sponsors_to_mark = []
-                st.rerun()
-
-    # Handle sponsor detection
-    if detect_btn and url.strip():
-        with st.spinner("🔍 Analyzing video for sponsor segments..."):
-            try:
-                # Get cookies for yt-dlp - use centralized function
-                cookies_part = build_cookies_params()
-
-                # Detect all sponsor segments
-                clean_url = sanitize_url(url)
-                segments = fetch_sponsorblock_segments(clean_url)
-
-                if segments:
-                    st.session_state.detected_sponsors = segments
-                    st.success(f"✅ {len(segments)} sponsor segments detected!")
-                else:
-                    st.session_state.detected_sponsors = []
-                    st.info("ℹ️ No sponsor segments found in this video")
-
-            except Exception as e:
-                st.error(f"❌ Error detecting sponsors: {e}")
-                st.session_state.detected_sponsors = []
-
-    # Display detected sponsors if any
-    if st.session_state.detected_sponsors:
-        st.markdown("---")
-        st.markdown(f"### {t('sponsors_detected_title')}")
-
-        # Summary
-        total_duration = sum(
-            seg["end"] - seg["start"] for seg in st.session_state.detected_sponsors
-        )
-        category_counts = {}
-        for seg in st.session_state.detected_sponsors:
-            cat = seg["category"]
-            category_counts[cat] = category_counts.get(cat, 0) + 1
-
-        summary_parts = [
-            f"{cat}: {count}" for cat, count in sorted(category_counts.items())
-        ]
-        duration_str = fmt_hhmmss(int(total_duration))
-
-        st.info(
-            t(
-                "sponsors_detected_summary",
-                count=len(st.session_state.detected_sponsors),
-                duration=duration_str,
+        # SponsorBlock presets first
+        preset_help = "These are preset configurations."
+        if st.session_state.detected_sponsors:
+            preset_help += (
+                " ⚡ Dynamic configuration is active and will override these presets."
             )
+        else:
+            preset_help += " Use 'Detect Sponsors' below for dynamic configuration."
+
+        sb_choice = st.selectbox(
+            f"### {t('ads_sponsors_label')} (Presets)",
+            options=[
+                t("sb_option_1"),  # Default
+                t("sb_option_2"),  # Moderate
+                t("sb_option_3"),  # Aggressive
+                t("sb_option_4"),  # Conservative
+                t("sb_option_5"),  # Minimal
+                t("sb_option_6"),  # Disabled
+            ],
+            index=0,
+            key="sb_choice",
+            help=preset_help,
         )
-        st.text(f"Categories: {', '.join(summary_parts)}")
 
-        # Configuration section
-        st.markdown(f"### {t('sponsors_config_title')}")
+        # Dynamic sponsor detection section
+        st.markdown("---")
+        col1, col2 = st.columns([2, 1])
 
-        # Group segments by category to avoid duplicates
-        categories_with_segments = {}
-        for seg in st.session_state.detected_sponsors:
-            cat = seg["category"]
-            if cat not in categories_with_segments:
-                categories_with_segments[cat] = []
-            categories_with_segments[cat].append(seg)
+        with col1:
+            detect_btn = st.button(
+                t("detect_sponsors_button"),
+                help=t("detect_sponsors_help"),
+                key="detect_sponsors_btn",
+            )
 
-        col_remove, col_mark = st.columns(2)
+        # Reset button if dynamic detection is active
+        if st.session_state.detected_sponsors:
+            with col2:
+                if st.button("🔄 Reset Dynamic Detection", key="reset_detection"):
+                    st.session_state.detected_sponsors = []
+                    st.session_state.sponsors_to_remove = []
+                    st.session_state.sponsors_to_mark = []
+                    st.rerun()
 
-        with col_remove:
-            st.markdown(f"**{t('sponsors_remove_label')}**")
-            remove_options = []
-            for cat, segments in categories_with_segments.items():
-                total_duration = sum(seg["end"] - seg["start"] for seg in segments)
-                count = len(segments)
-                duration_str = fmt_hhmmss(int(total_duration))
-                label = f"{cat} ({count} segments, {duration_str})"
-                if st.checkbox(
-                    label,
-                    key=f"remove_{cat}",
-                    value=(cat in ["sponsor", "selfpromo", "interaction"]),
-                ):
-                    remove_options.append(cat)
+        # Handle sponsor detection
+        if detect_btn and url.strip():
+            with st.spinner("🔍 Analyzing video for sponsor segments..."):
+                try:
+                    # Get cookies for yt-dlp - use centralized function
+                    cookies_part = build_cookies_params()
 
-            st.session_state.sponsors_to_remove = remove_options
+                    # Detect all sponsor segments
+                    clean_url = sanitize_url(url)
+                    segments = fetch_sponsorblock_segments(clean_url)
 
-        with col_mark:
-            st.markdown(f"**{t('sponsors_mark_label')}**")
-            mark_options = []
-            for cat, segments in categories_with_segments.items():
-                # Don't mark if it's being removed
-                if cat not in st.session_state.sponsors_to_remove:
+                    if segments:
+                        st.session_state.detected_sponsors = segments
+                        st.success(f"✅ {len(segments)} sponsor segments detected!")
+                    else:
+                        st.session_state.detected_sponsors = []
+                        st.info("ℹ️ No sponsor segments found in this video")
+
+                except Exception as e:
+                    st.error(f"❌ Error detecting sponsors: {e}")
+                    st.session_state.detected_sponsors = []
+
+        # Display detected sponsors if any
+        if st.session_state.detected_sponsors:
+            st.markdown("---")
+            st.markdown(f"### {t('sponsors_detected_title')}")
+
+            # Summary
+            total_duration = sum(
+                seg["end"] - seg["start"] for seg in st.session_state.detected_sponsors
+            )
+            category_counts = {}
+            for seg in st.session_state.detected_sponsors:
+                cat = seg["category"]
+                category_counts[cat] = category_counts.get(cat, 0) + 1
+
+            summary_parts = [
+                f"{cat}: {count}" for cat, count in sorted(category_counts.items())
+            ]
+            duration_str = fmt_hhmmss(int(total_duration))
+
+            st.info(
+                t(
+                    "sponsors_detected_summary",
+                    count=len(st.session_state.detected_sponsors),
+                    duration=duration_str,
+                )
+            )
+            st.text(f"Categories: {', '.join(summary_parts)}")
+
+            # Configuration section
+            st.markdown(f"### {t('sponsors_config_title')}")
+
+            # Group segments by category to avoid duplicates
+            categories_with_segments = {}
+            for seg in st.session_state.detected_sponsors:
+                cat = seg["category"]
+                if cat not in categories_with_segments:
+                    categories_with_segments[cat] = []
+                categories_with_segments[cat].append(seg)
+
+            col_remove, col_mark = st.columns(2)
+
+            with col_remove:
+                st.markdown(f"**{t('sponsors_remove_label')}**")
+                remove_options = []
+                for cat, segments in categories_with_segments.items():
                     total_duration = sum(seg["end"] - seg["start"] for seg in segments)
                     count = len(segments)
                     duration_str = fmt_hhmmss(int(total_duration))
                     label = f"{cat} ({count} segments, {duration_str})"
                     if st.checkbox(
                         label,
-                        key=f"mark_{cat}",
-                        value=(cat in ["intro", "preview", "outro"]),
+                        key=f"remove_{cat}",
+                        value=(cat in ["sponsor", "selfpromo", "interaction"]),
                     ):
-                        mark_options.append(cat)
-                else:
-                    # Show disabled checkbox for removed categories
-                    total_duration = sum(seg["end"] - seg["start"] for seg in segments)
-                    count = len(segments)
-                    duration_str = fmt_hhmmss(int(total_duration))
-                    st.text(
-                        f"🚫 {cat} ({count} segments, {duration_str}) - Will be removed"
-                    )
+                        remove_options.append(cat)
 
-            st.session_state.sponsors_to_mark = mark_options
+                st.session_state.sponsors_to_remove = remove_options
 
-# Optional cutting section with dynamic behavior
-if is_playlist_mode:
-    # Cutting controls are irrelevant for playlists
-    start_text = ""
-    end_text = ""
-else:
-    with st.expander(f"{t('cutting_title')}", expanded=False):
-        # st.markdown(f"### {t('optional_cutting')}")
+            with col_mark:
+                st.markdown(f"**{t('sponsors_mark_label')}**")
+                mark_options = []
+                for cat, segments in categories_with_segments.items():
+                    # Don't mark if it's being removed
+                    if cat not in st.session_state.sponsors_to_remove:
+                        total_duration = sum(
+                            seg["end"] - seg["start"] for seg in segments
+                        )
+                        count = len(segments)
+                        duration_str = fmt_hhmmss(int(total_duration))
+                        label = f"{cat} ({count} segments, {duration_str})"
+                        if st.checkbox(
+                            label,
+                            key=f"mark_{cat}",
+                            value=(cat in ["intro", "preview", "outro"]),
+                        ):
+                            mark_options.append(cat)
+                    else:
+                        # Show disabled checkbox for removed categories
+                        total_duration = sum(
+                            seg["end"] - seg["start"] for seg in segments
+                        )
+                        count = len(segments)
+                        duration_str = fmt_hhmmss(int(total_duration))
+                        st.text(
+                            f"🚫 {cat} ({count} segments, {duration_str}) - Will be removed"
+                        )
 
-        st.info(t("cutting_modes_presentation"))
+                st.session_state.sponsors_to_mark = mark_options
 
-        # Cutting mode selection
-        # st.markdown(f"**{t('cutting_mode_title')}**")
-        default_cutting_mode = settings.CUTTING_MODE
-        cutting_mode_options = ["keyframes", "precise"]
-        default_index = (
-            cutting_mode_options.index(default_cutting_mode)
-            if default_cutting_mode in cutting_mode_options
-            else 0
-        )
+    # Optional cutting section with dynamic behavior
+    if is_playlist_mode:
+        # Cutting controls are irrelevant for playlists
+        start_text = ""
+        end_text = ""
+    else:
+        with st.expander(f"{t('cutting_title')}", expanded=False):
 
-        cutting_mode = st.radio(
-            t("cutting_mode_prompt"),
-            options=cutting_mode_options,
-            format_func=lambda x: {
-                "keyframes": t("cutting_mode_keyframes"),
-                "precise": t("cutting_mode_precise"),
-            }[x],
-            index=default_index,
-            help=t("cutting_mode_help"),
-            key="cutting_mode",
-        )
+            st.info(t("cutting_modes_presentation"))
 
-        if cutting_mode == "keyframes":
-            st.info(t("cutting_mode_keyframes_info"))
-        else:
-            st.warning(t("cutting_mode_precise_info"))
-
-            # Re-encoding options for precise mode (DYNAMIC!)
-            st.markdown(f"**{t('advanced_encoding_options')}**")
-
-            # Codec selection
-            codec_choice = st.radio(
-                t("codec_video"),
-                options=["h264", "h265"],
-                format_func=lambda x: {
-                    "h264": t("codec_h264"),
-                    "h265": t("codec_h265"),
-                }[x],
-                index=0,
-                help=t("codec_help"),
-                key="codec_choice",
+            # Cutting mode selection
+            default_cutting_mode = settings.CUTTING_MODE
+            cutting_mode_options = ["keyframes", "precise"]
+            default_index = (
+                cutting_mode_options.index(default_cutting_mode)
+                if default_cutting_mode in cutting_mode_options
+                else 0
             )
 
-            # Quality preset
-            quality_preset = st.radio(
-                t("encoding_quality"),
-                options=["balanced", "high_quality"],
+            cutting_mode = st.radio(
+                t("cutting_mode_prompt"),
+                options=cutting_mode_options,
                 format_func=lambda x: {
-                    "balanced": t("quality_balanced"),
-                    "high_quality": t("quality_high"),
+                    "keyframes": t("cutting_mode_keyframes"),
+                    "precise": t("cutting_mode_precise"),
                 }[x],
-                index=0,
-                help=t("quality_help"),
-                key="quality_preset",
+                index=default_index,
+                help=t("cutting_mode_help"),
+                key="cutting_mode",
             )
 
-            # Show current settings DYNAMICALLY
-            if codec_choice == "h264":
-                crf_value = "16" if quality_preset == "balanced" else "14"
-                preset_value = "slow" if quality_preset == "balanced" else "slower"
-                st.info(t("h264_settings", preset=preset_value, crf=crf_value))
+            if cutting_mode == "keyframes":
+                st.info(t("cutting_mode_keyframes_info"))
             else:
-                crf_value = "16" if quality_preset == "balanced" else "14"
-                preset_value = "slow" if quality_preset == "balanced" else "slower"
-                st.info(t("h265_settings", preset=preset_value, crf=crf_value))
+                st.warning(t("cutting_mode_precise_info"))
 
-        c1, c2 = st.columns([1, 1])
-        with c1:
-            start_text = st.text_input(
-                t("start_time"),
-                value="",
-                help=t("time_format_help"),
-                placeholder="0:11",
-                key="start_text",
+                # Re-encoding options for precise mode (DYNAMIC!)
+                st.markdown(f"**{t('advanced_encoding_options')}**")
+
+                # Codec selection
+                codec_choice = st.radio(
+                    t("codec_video"),
+                    options=["h264", "h265"],
+                    format_func=lambda x: {
+                        "h264": t("codec_h264"),
+                        "h265": t("codec_h265"),
+                    }[x],
+                    index=0,
+                    help=t("codec_help"),
+                    key="codec_choice",
+                )
+
+                # Quality preset
+                quality_preset = st.radio(
+                    t("encoding_quality"),
+                    options=["balanced", "high_quality"],
+                    format_func=lambda x: {
+                        "balanced": t("quality_balanced"),
+                        "high_quality": t("quality_high"),
+                    }[x],
+                    index=0,
+                    help=t("quality_help"),
+                    key="quality_preset",
+                )
+
+                # Show current settings DYNAMICALLY
+                if codec_choice == "h264":
+                    crf_value = "16" if quality_preset == "balanced" else "14"
+                    preset_value = "slow" if quality_preset == "balanced" else "slower"
+                    st.info(t("h264_settings", preset=preset_value, crf=crf_value))
+                else:
+                    crf_value = "16" if quality_preset == "balanced" else "14"
+                    preset_value = "slow" if quality_preset == "balanced" else "slower"
+                    st.info(t("h265_settings", preset=preset_value, crf=crf_value))
+
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                start_text = st.text_input(
+                    t("start_time"),
+                    value="",
+                    help=t("time_format_help"),
+                    placeholder="0:11",
+                    key="start_text",
+                )
+            with c2:
+                end_text = st.text_input(
+                    t("end_time"),
+                    value="",
+                    help=t("time_format_help"),
+                    placeholder="6:55",
+                    key="end_text",
+                )
+
+            st.info(t("sponsorblock_sections_info"))
+
+    # Video quality selection with new strategy
+    if not is_audio_mode:
+        with st.expander(f"{t('quality_title')}", expanded=False):
+            # Initialize session state for quality management
+            if "optimal_format_profiles" not in st.session_state:
+                st.session_state.optimal_format_profiles = []
+            if "chosen_format_profiles" not in st.session_state:
+                st.session_state.chosen_format_profiles = []
+            if "available_formats_list" not in st.session_state:
+                st.session_state.available_formats_list = []
+
+            # Determine default strategy based on QUALITY_DOWNGRADE setting
+            # If QUALITY_DOWNGRADE=false, default to "best_no_fallback" (no fallback on failure)
+            # If QUALITY_DOWNGRADE=true, default to "auto_best" (try multiple profiles)
+            default_strategy_index = 0 if settings.QUALITY_DOWNGRADE else 1
+
+            # Quality strategy selection
+            quality_strategy = st.radio(
+                t("quality_strategy_prompt"),
+                options=[
+                    "auto_best",
+                    "best_no_fallback",
+                    "choose_profile",
+                    "choose_available",
+                ],
+                format_func=lambda x: {
+                    "auto_best": t("quality_strategy_auto_best"),
+                    "best_no_fallback": t("quality_strategy_best_no_fallback"),
+                    "choose_profile": t("quality_strategy_choose_profile"),
+                    "choose_available": t("quality_strategy_choose_available"),
+                }[x],
+                index=default_strategy_index,
+                help=t("quality_strategy_help"),
+                key="quality_strategy",
+                horizontal=False,
             )
-        with c2:
-            end_text = st.text_input(
-                t("end_time"),
-                value="",
-                help=t("time_format_help"),
-                placeholder="6:55",
-                key="end_text",
+
+            # Display strategy-specific content (also sets chosen_format_profiles)
+            _display_strategy_content(quality_strategy)
+
+            # Store final configuration in session state for download
+            st.session_state["download_quality_strategy"] = quality_strategy
+
+        # Optional embedding section for chapter and subs
+        with st.expander(f"{t('embedding_title')}", expanded=False):
+            # === SUBTITLES SECTION ===
+            st.markdown(f"### {t('subtitles_section_title')}")
+            st.info(t("subtitles_info"))
+
+            embed_subs = st.checkbox(
+                t("embed_subs"),
+                value=settings.EMBED_SUBTITLES,
+                key="embed_subs",
+                help=t("embed_subs_help"),
             )
 
-        st.info(t("sponsorblock_sections_info"))
+            # === CHAPTERS SECTION ===
+            st.markdown(f"### {t('chapters_section_title')}")
+            st.info(t("chapters_info"))
 
-# Video quality selection with new strategy
-with st.expander(f"{t('quality_title')}", expanded=False):
-    # Initialize session state for quality management
-    if "optimal_format_profiles" not in st.session_state:
-        st.session_state.optimal_format_profiles = []
-    if "chosen_format_profiles" not in st.session_state:
-        st.session_state.chosen_format_profiles = []
-    if "available_formats_list" not in st.session_state:
-        st.session_state.available_formats_list = []
-
-    # st.info(
-    #     "🏆 **Smart quality selection** - Choose your strategy for optimal video quality and compatibility."
-    # )
-
-    # Determine default strategy based on QUALITY_DOWNGRADE setting
-    # If QUALITY_DOWNGRADE=false, default to "best_no_fallback" (no fallback on failure)
-    # If QUALITY_DOWNGRADE=true, default to "auto_best" (try multiple profiles)
-    default_strategy_index = 0 if settings.QUALITY_DOWNGRADE else 1
-
-    # Quality strategy selection
-    quality_strategy = st.radio(
-        t("quality_strategy_prompt"),
-        options=["auto_best", "best_no_fallback", "choose_profile", "choose_available"],
-        format_func=lambda x: {
-            "auto_best": t("quality_strategy_auto_best"),
-            "best_no_fallback": t("quality_strategy_best_no_fallback"),
-            "choose_profile": t("quality_strategy_choose_profile"),
-            "choose_available": t("quality_strategy_choose_available"),
-        }[x],
-        index=default_strategy_index,
-        help=t("quality_strategy_help"),
-        key="quality_strategy",
-        horizontal=False,
-    )
-
-    # Display strategy-specific content (also sets chosen_format_profiles)
-    _display_strategy_content(quality_strategy)
-
-    # Store final configuration in session state for download
-    st.session_state["download_quality_strategy"] = quality_strategy
-
-
-# Optional embedding section for chapter and subs
-with st.expander(f"{t('embedding_title')}", expanded=False):
-    # === SUBTITLES SECTION ===
-    st.markdown(f"### {t('subtitles_section_title')}")
-    st.info(t("subtitles_info"))
-
-    embed_subs = st.checkbox(
-        t("embed_subs"),
-        value=settings.EMBED_SUBTITLES,
-        key="embed_subs",
-        help=t("embed_subs_help"),
-    )
-
-    # === CHAPTERS SECTION ===
-    st.markdown(f"### {t('chapters_section_title')}")
-    st.info(t("chapters_info"))
-
-    embed_chapters = st.checkbox(
-        t("embed_chapters"),
-        value=settings.EMBED_CHAPTERS,
-        key="embed_chapters",
-        help=t("embed_chapters_help"),
-    )
+            embed_chapters = st.checkbox(
+                t("embed_chapters"),
+                value=settings.EMBED_CHAPTERS,
+                key="embed_chapters",
+                help=t("embed_chapters_help"),
+            )
 
 # === COOKIES MANAGEMENT ===
 with st.expander(t("cookies_title"), expanded=False):
@@ -3280,10 +3483,21 @@ with col2:
             len(playlist_to_download_list) == 0 and not has_pending_sync_changes
         )
 
+        # Choose label based on media type
+        _playlist_btn_label = (
+            t("playlist_audio_download_button")
+            if is_audio_mode
+            else t("playlist_download_button")
+        )
+        _playlist_btn_help = (
+            t("playlist_audio_download_help")
+            if is_audio_mode
+            else t("playlist_download_help")
+        )
+
         if playlist_is_up_to_date:
-            # Playlist is completely up to date - button disabled (message already shown above)
             submitted = st.button(
-                f"{t('playlist_download_button')}",
+                f"{_playlist_btn_label}",
                 type="secondary",
                 use_container_width=True,
                 help=t(
@@ -3293,7 +3507,6 @@ with col2:
                 disabled=True,
             )
         elif has_pending_sync_changes:
-            # Has changes to apply first - show warning
             st.warning(
                 t(
                     "playlist_sync_required",
@@ -3301,26 +3514,33 @@ with col2:
                 )
             )
             submitted = st.button(
-                f"{t('playlist_download_button')}",
+                f"{_playlist_btn_label}",
                 type="secondary",
                 use_container_width=True,
                 help=t("playlist_sync_required"),
                 disabled=True,
             )
         else:
-            # Ready to download
             submitted = st.button(
-                f"{t('playlist_download_button')}",
+                f"{_playlist_btn_label}",
                 type="primary",
                 use_container_width=True,
-                help=t("playlist_download_help"),
+                help=_playlist_btn_help,
             )
     else:
+        _single_btn_label = (
+            t("audio_download_button") if is_audio_mode else t("download_button")
+        )
+        _single_btn_help = (
+            t("audio_download_button_help")
+            if is_audio_mode
+            else t("download_button_help")
+        )
         submitted = st.button(
-            f"{t('download_button')}",
+            f"{_single_btn_label}",
             type="primary",
             use_container_width=True,
-            help=t("download_button_help"),
+            help=_single_btn_help,
         )
 
 st.markdown("\n")
@@ -3916,6 +4136,7 @@ if submitted:
             custom_title=playlist_name,
             playlist_location=video_subfolder,
             title_pattern=title_pattern,
+            media_type="audio" if is_audio_mode else "video",
         )
 
         # Mark already downloaded videos as skipped
@@ -3994,25 +4215,48 @@ if submitted:
             force_mp4_video = False
             ytdlp_custom_args_video = st.session_state.get("ytdlp_custom_args", "")
 
-            # Download the video using the reusable function
-            ret_dl, final_tmp, error_msg = download_single_video(
-                video_url=video_url,
-                video_id=video_id,
-                video_title=video_title,
-                video_workspace=video_workspace,
-                base_output=base_output,
-                embed_chapters=embed_chapters,
-                embed_subs=embed_subs,
-                force_mp4=force_mp4_video,
-                ytdlp_custom_args=ytdlp_custom_args_video,
-                do_cut=do_cut_video,
-                subs_selected=subs_selected_video,
-                sb_choice=sb_choice,
-                requested_format_id=None,  # Auto mode for playlists
-                progress_placeholder=progress_placeholder,
-                status_placeholder=status_placeholder,
-                info_placeholder=info_placeholder,
-            )
+            # Download the video/audio using the reusable function
+            if is_audio_mode:
+                # Ensure status.json exists for audio tracking
+                status_file = video_workspace / "status.json"
+                if not status_file.exists():
+                    create_initial_status(
+                        url=video_url,
+                        video_id=video_id,
+                        title=video_title,
+                        content_type="video",
+                        tmp_url_workspace=video_workspace,
+                    )
+                ret_dl, final_tmp, error_msg = download_single_audio(
+                    audio_url=video_url,
+                    audio_workspace=video_workspace,
+                    base_output=base_output,
+                    audio_format=audio_format,
+                    embed_chapters=embed_chapters,
+                    ytdlp_custom_args=ytdlp_custom_args_video,
+                    progress_placeholder=progress_placeholder,
+                    status_placeholder=status_placeholder,
+                    info_placeholder=info_placeholder,
+                )
+            else:
+                ret_dl, final_tmp, error_msg = download_single_video(
+                    video_url=video_url,
+                    video_id=video_id,
+                    video_title=video_title,
+                    video_workspace=video_workspace,
+                    base_output=base_output,
+                    embed_chapters=embed_chapters,
+                    embed_subs=embed_subs,
+                    force_mp4=force_mp4_video,
+                    ytdlp_custom_args=ytdlp_custom_args_video,
+                    do_cut=do_cut_video,
+                    subs_selected=subs_selected_video,
+                    sb_choice=sb_choice,
+                    requested_format_id=None,  # Auto mode for playlists
+                    progress_placeholder=progress_placeholder,
+                    status_placeholder=status_placeholder,
+                    info_placeholder=info_placeholder,
+                )
 
             # Handle cancellation
             if ret_dl == -1:
@@ -4118,6 +4362,156 @@ if submitted:
         st.session_state.download_finished = True
         st.stop()
 
+    # === SINGLE AUDIO DOWNLOAD MODE ===
+    if is_audio_mode:
+        # Check if audio already exists in destination
+        if filename:
+            existing_files = []
+            for ext in sorted(VALID_AUDIO_FORMATS):
+                potential_file = dest_dir / f"{filename}.{ext}"
+                if potential_file.exists():
+                    existing_files.append(potential_file)
+
+            if existing_files and not settings.ALLOW_OVERWRITE_EXISTING_VIDEO:
+                log_title("⚠️ AUDIO ALREADY EXISTS - SKIPPING DOWNLOAD")
+                push_log(f"📁 Existing file: {existing_files[0].name}")
+                push_log(
+                    f"📊 File size: {existing_files[0].stat().st_size / (1024 * 1024):.2f}MiB"
+                )
+                push_log("🛡️ Protection active: ALLOW_OVERWRITE_EXISTING_VIDEO=false")
+                status_placeholder.warning(
+                    f"⚠️ File already exists: {existing_files[0].name}\n\n"
+                    "Download skipped to protect existing file."
+                )
+                st.session_state.download_finished = True
+                st.stop()
+
+        clean_url = sanitize_url(url)
+        tmp_url_workspace = st.session_state.get("tmp_url_workspace")
+        if not tmp_url_workspace:
+            st.error("❌ Workspace not initialized. Please re-enter the URL.")
+            st.stop()
+
+        tmp_audio_dir = tmp_url_workspace
+
+        # Setup cookies
+        cookies_part = build_cookies_params()
+
+        # If no filename provided, get title
+        if filename is None:
+            filename = get_video_title(clean_url, cookies_part)
+
+        base_output = filename
+
+        push_log("")
+        log_title("🎵 AUDIO DOWNLOAD MODE")
+        push_log(f"📝 Target filename: {base_output}")
+        push_log(f"🎵 Audio format: {audio_format}")
+
+        # Ensure status.json exists (create if needed, same as video workflow)
+        status_file = tmp_audio_dir / "status.json"
+        if not status_file.exists():
+            url_info = st.session_state.get("url_info", {})
+            create_initial_status(
+                url=clean_url,
+                video_id=url_info.get("id", ""),
+                title=url_info.get("title", base_output),
+                content_type="video",
+                tmp_url_workspace=tmp_audio_dir,
+            )
+
+        progress_placeholder.progress(0, text=t("audio_downloading"))
+
+        # Use reusable download function (handles status.json + caching)
+        ytdlp_custom_args = st.session_state.get("ytdlp_custom_args", "")
+        ret_dl, final_audio, error_msg = download_single_audio(
+            audio_url=clean_url,
+            audio_workspace=tmp_audio_dir,
+            base_output=base_output,
+            audio_format=audio_format,
+            embed_chapters=embed_chapters,
+            ytdlp_custom_args=ytdlp_custom_args,
+            progress_placeholder=progress_placeholder,
+            status_placeholder=status_placeholder,
+            info_placeholder=info_placeholder,
+        )
+
+        if ret_dl != 0 or not final_audio:
+            status_placeholder.error(f"❌ {error_msg or 'Audio download failed'}")
+            push_log(f"❌ {error_msg or 'Audio download failed'}")
+            st.session_state.download_finished = True
+            st.stop()
+
+        # Record download attempt with media_type
+        add_download_attempt(
+            tmp_url_workspace=tmp_audio_dir,
+            custom_title=base_output,
+            video_location=video_subfolder,
+            requested_format_id=None,
+            media_type="audio",
+        )
+
+        # Copy to final.{ext}
+        final_path = tmp_files.get_final_path(
+            tmp_audio_dir, final_audio.suffix.lstrip(".")
+        )
+        if final_audio != final_path:
+            try:
+                import shutil
+
+                if final_path.exists():
+                    final_path.unlink()
+                shutil.copy2(str(final_audio), str(final_path))
+                push_log(f"📦 Copied: {final_audio.name} → {final_path.name}")
+                final_source = final_path
+            except Exception as e:
+                push_log(f"⚠️ Could not copy to final: {e}")
+                final_source = final_audio
+        else:
+            final_source = final_audio
+
+        # Move to destination
+        final_ext = final_source.suffix
+        final_destination = dest_dir / f"{base_output}{final_ext}"
+        move_final_to_destination(final_source, final_destination, push_log)
+
+        progress_placeholder.progress(100, text=t("status_completed"))
+
+        # Final metrics
+        if final_destination.exists():
+            final_size_mb = final_destination.stat().st_size / (1024 * 1024)
+            push_log(f"📊 Final audio size: {final_size_mb:.2f}MiB")
+            if info_placeholder:
+                update_download_metrics(
+                    info_placeholder,
+                    speed="✅ Complete",
+                    eta="",
+                    size=f"{final_size_mb:.2f}MiB",
+                    show_fragments=False,
+                )
+
+        # Trigger media-server integrations
+        post_download_actions(safe_push_log, log_title)
+
+        if video_subfolder == "/":
+            display_path = f"Downloads/{final_destination.name}"
+        else:
+            display_path = f"Downloads/{video_subfolder}/{final_destination.name}"
+
+        status_placeholder.success(t("audio_download_success"))
+        st.toast(t("toast_download_completed"), icon="✅")
+
+        # Cleanup
+        if should_remove_tmp_files():
+            try:
+                cleanup_tmp_files(base_output, tmp_audio_dir, "all")
+                push_log("🧹 Temporary files removed")
+            except Exception as e:
+                push_log(f"⚠️ Cleanup skipped: {e}")
+
+        st.session_state.download_finished = True
+        st.stop()
+
     # === SINGLE VIDEO DOWNLOAD MODE (existing logic continues below) ===
 
     # Check if video already exists in destination (safety check)
@@ -4197,6 +4591,7 @@ if submitted:
         custom_title=filename,
         video_location=video_subfolder,
         requested_format_id=requested_format_id,
+        media_type="video",
     )
 
     # Log download strategy

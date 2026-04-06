@@ -412,6 +412,24 @@ Exemple : `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`"
     "playlist_apply_changes": "✅ Appliquer les Changements",
     "playlist_apply_changes_help": "Appliquer tous les changements de synchronisation en attente",
     "playlist_already_up_to_date": "✅ La playlist est déjà à jour !",
+    # === MODE AUDIO ===
+    "media_type_label": "Type de média",
+    "media_type_video": "🎬 Vidéo",
+    "media_type_audio": "🎵 Audio",
+    "audio_only_toggle": "🎵 &nbsp; Audio only",
+    "media_type_help": "Choisir entre télécharger la vidéo+audio ou l'audio uniquement. La valeur par défaut peut être définie avec la variable d'environnement DEFAULT_MEDIA_TYPE.",
+    "audio_format_label": "Format audio",
+    "audio_format_help": "Format de sortie audio. La valeur par défaut peut être définie avec la variable d'environnement AUDIO_FORMAT.",
+    "audio_name": "Nom de l'audio",
+    "audio_name_help": "Nom du fichier audio de sortie (sans extension). Si vide, le titre par défaut sera utilisé.",
+    "audio_mode_info": "🎵 **Mode audio** — Seule la piste audio sera téléchargée. Pas de vidéo, pas de sous-titres.",
+    "audio_download_button": "🎵 &nbsp; Télécharger l'Audio",
+    "audio_download_button_help": "Démarrer le téléchargement audio uniquement",
+    "playlist_audio_download_button": "🎵 &nbsp; Télécharger la Playlist (Audio)",
+    "playlist_audio_download_help": "Télécharger toutes les pistes audio de cette playlist",
+    "audio_downloading": "Téléchargement de l'audio...",
+    "audio_download_success": "✅ Audio téléchargé avec succès !",
+    "audio_file_exists": "Le fichier audio existe déjà",
 }
 
 # Accès direct aux valeurs de traduction (pour la compatibilité ascendante)

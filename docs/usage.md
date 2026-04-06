@@ -252,13 +252,32 @@ Auto-generated subtitles have significant limitations that users should be aware
 3. **Consider post-processing** - You may want to edit auto-generated subtitles for better readability
 4. **Test playback** - Verify subtitle quality in your preferred video player
 
-### Audio Processing
+### Audio-Only Download Mode
 
-**Quality Options**:
-- Best available audio quality
-- Specific bitrate selection
-- Audio-only downloads
-- Audio format conversion
+HomeTube supports a dedicated **audio-only download mode** to extract and save just the audio track from any supported URL.
+
+**How to use:**
+1. Paste any URL as usual
+2. Switch the **Media type** selector from "Video" to "Audio"
+3. Choose your preferred audio format (Opus, MP3, M4A, AAC, FLAC, WAV)
+4. Click Download — only the audio is fetched, no video or subtitles
+
+**Supported formats**: `opus` (default, best quality/size ratio), `mp3`, `m4a`, `aac`, `flac`, `wav`
+
+**Key features:**
+- Works with single URLs and playlists
+- Metadata and thumbnail are embedded automatically
+- Smart caching: if the audio is already downloaded, it is reused instantly
+- Coexists with video downloads — the same URL can have both a video and an audio download tracked independently in `status.json`
+- Default mode is configurable via `DEFAULT_MEDIA_TYPE` environment variable (`video` or `audio`)
+- Default audio format is configurable via `AUDIO_FORMAT` environment variable
+
+**Environment variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEFAULT_MEDIA_TYPE` | `video` | Default download mode (`video` or `audio`) |
+| `AUDIO_FORMAT` | `opus` | Default audio format for audio-only downloads |
 
 ## 🚫 SponsorBlock Integration (YouTube)
 
@@ -499,6 +518,13 @@ HomeTube supports comprehensive environment variable configuration for all its f
 | `EMBED_CHAPTERS` | `true` | Embed chapters by default | `true`, `false` |  
 | `EMBED_SUBTITLES` | `true` | Embed subtitles by default | `true`, `false` |
 | `CUTTING_MODE` | `keyframes` | Video cutting precision | `keyframes`, `precise` |
+
+#### 🎵 Audio-Only Mode
+
+| Variable | Default | Description | Options |
+|----------|---------|-------------|---------|
+| `DEFAULT_MEDIA_TYPE` | `video` | Default download mode | `video`, `audio` |
+| `AUDIO_FORMAT` | `opus` | Default audio format for audio-only downloads | `opus`, `mp3`, `m4a`, `aac`, `flac`, `wav` |
 
 #### 🎵 Audio Language Preferences
 

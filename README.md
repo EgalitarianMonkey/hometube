@@ -17,9 +17,9 @@
 
 <br/>
 
-**🏡 Universal Video Downloader for Your Media Server**
+**🏡 Universal Video & Audio Downloader for Your Media Server**
 
-Download, process, and organize ads-free best-quality videos at Home.
+Download, process, and organize ads-free best-quality videos and audio at Home.
 
 <br/>
 
@@ -33,7 +33,7 @@ Download, process, and organize ads-free best-quality videos at Home.
 <!-- ## 🎯 What is HomeTube? -->
 
 
-🎬 HomeTube is a simple web UI for downloading single videos and playlists from the internet with the highest quality available and moving them to specific local locations automatically managed and integrated by media server such as Plex or Jellyfin.
+🎬 HomeTube is a simple web UI for downloading single videos, audio, and playlists from the internet with the highest quality available and moving them to specific local locations automatically managed and integrated by media server such as Plex or Jellyfin.
 
 A simple friendly solution for easily integrating preferred videos from Youtube and others platforms to local media server:
 
@@ -48,7 +48,8 @@ A simple friendly solution for easily integrating preferred videos from Youtube 
 - **📱 Network Access**: Web interface videos download accessible from any device on your network
 - **🎯 One-Click Downloads**: Paste URL → Get perfectly organized video
 - **🔐 Cookies Authentication**: Essential for reliable downloads - unlocks restricted content and prevents signature errors
-- **🎬 Advanced Processing**: Cut clips, embed subtitles, convert formats
+- **� Audio-Only Mode**: Download audio tracks in high quality (Opus, MP3, M4A, AAC, FLAC, WAV) with a simple toggle
+- **�🎬 Advanced Processing**: Cut clips, embed subtitles, convert formats
 - **⚙️ Advanced Configurations**: Organized advanced options including any custom yt-dlp arguments (proxy, max-filesize, etc.)
 - **🎥 Video Sources**: **YouTube**, Reddit, Vimeo, Dailymotion, TikTok, Twitch, Facebook, Instagram, etc. [See complete list (1800+)](docs/supported-platforms.md)
 
@@ -154,7 +155,7 @@ Transform your downloads with **powerful built-in video processing tools**:
 - **🎬 Clip Extraction**: Cut specific segments from videos with precision timing
 - **📝 Subtitle Embedding**: Automatically embed subtitles in multiple languages
 - **🔄 Format Conversion**: Convert between video formats (MP4, MKV, WebM, etc.)
-- **🎵 Audio Extraction**: Extract audio-only versions in high quality
+- **🎵 Audio-Only Mode**: Dedicated audio download mode with format selection (Opus, MP3, M4A, AAC, FLAC, WAV)
 - **📱 Mobile Optimization**: Optimize videos for mobile devices
 
 [Explore all processing options](docs/usage.md#-video-processing).
@@ -541,6 +542,9 @@ HomeTube configuration is managed through the `.env` file:
 |`EMBED_CHAPTERS`|Embed chapters by default|`true`|`true,false`|
 |`EMBED_SUBTITLES`|Embed subtitles by default|`true`|`true,false`|
 |`CUTTING_MODE`|Video cutting precision|`keyframes`|`keyframes,precise`|
+|**Audio Mode**||||
+|`DEFAULT_MEDIA_TYPE`|Default download mode|`video`|`video,audio`|
+|`AUDIO_FORMAT`|Default audio format for audio-only downloads|`opus`|`opus,mp3,m4a,aac,flac,wav`|
 |**Playlist Sync**||||
 |`PLAYLIST_KEEP_OLD_VIDEOS`|Archive playlist videos removed upstream instead of deleting them (moved to `Archives/`)|`false`|`true,false`|
 |**Safety Options**||||

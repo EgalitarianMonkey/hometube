@@ -405,6 +405,24 @@ Examples:
     "playlist_apply_changes": "✅ Apply Changes",
     "playlist_apply_changes_help": "Apply all pending synchronization changes",
     "playlist_already_up_to_date": "✅ Playlist is already up to date!",
+    # === AUDIO MODE ===
+    "media_type_label": "Media type",
+    "media_type_video": "🎬 Video",
+    "media_type_audio": "🎵 Audio",
+    "audio_only_toggle": "🎵 &nbsp; Audio only",
+    "media_type_help": "Choose whether to download video+audio or audio only. Default can be set with DEFAULT_MEDIA_TYPE environment variable.",
+    "audio_format_label": "Audio format",
+    "audio_format_help": "Output audio format. Default can be set with AUDIO_FORMAT environment variable.",
+    "audio_name": "Audio name",
+    "audio_name_help": "Name of the output audio file (without extension). If left empty, the default title will be used.",
+    "audio_mode_info": "🎵 **Audio mode** — Only the audio track will be downloaded. No video, no subtitles.",
+    "audio_download_button": "🎵 &nbsp; Download Audio",
+    "audio_download_button_help": "Start audio-only download",
+    "playlist_audio_download_button": "🎵 &nbsp; Download Playlist (Audio)",
+    "playlist_audio_download_help": "Download all audio tracks from this playlist",
+    "audio_downloading": "Downloading audio...",
+    "audio_download_success": "✅ Audio downloaded successfully!",
+    "audio_file_exists": "Audio file already exists",
 }
 
 # Direct access to translation values (for backward compatibility)

@@ -79,6 +79,9 @@ _DEFAULTS = {
     # === Playlist Options ===
     "PLAYLIST_VIDEOS_TITLES_PATTERN": "",  # Pattern for playlist video titles (empty = uses default: {idx} - {pretty(title)}.{ext})
     "PLAYLIST_KEEP_OLD_VIDEOS": "false",  # Keep videos removed from playlist (archive instead of delete)
+    # === Media Type ===
+    "DEFAULT_MEDIA_TYPE": "video",  # Default media type: "video" or "audio"
+    "AUDIO_FORMAT": "opus",  # Preferred audio format: "opus", "mp3", "m4a", "aac"
     # === System ===
     "DEBUG": "false",
     # === Jellyfin Integration ===
@@ -141,6 +144,10 @@ class Settings:
     CUTTING_MODE: str
     BROWSER_SELECT: str
     DEBUG: bool
+
+    # Media Type
+    DEFAULT_MEDIA_TYPE: str  # "video" or "audio"
+    AUDIO_FORMAT: str  # "opus", "mp3", "m4a", "aac"
 
     # Playlist Options
     PLAYLIST_VIDEOS_TITLES_PATTERN: str
@@ -221,6 +228,8 @@ def get_settings() -> Settings:
         CUTTING_MODE=config["CUTTING_MODE"],
         BROWSER_SELECT=config["BROWSER_SELECT"],
         DEBUG=_to_bool(config["DEBUG"], False),
+        DEFAULT_MEDIA_TYPE=config["DEFAULT_MEDIA_TYPE"].strip().lower(),
+        AUDIO_FORMAT=config["AUDIO_FORMAT"].strip().lower(),
         PLAYLIST_VIDEOS_TITLES_PATTERN=config["PLAYLIST_VIDEOS_TITLES_PATTERN"].strip(),
         PLAYLIST_KEEP_OLD_VIDEOS=_to_bool(config["PLAYLIST_KEEP_OLD_VIDEOS"], False),
         JELLYFIN_BASE_URL=config["JELLYFIN_BASE_URL"].strip(),
@@ -374,6 +383,11 @@ def print_config_summary() -> None:
     print(f"   Quality downgrade allowed: {s.QUALITY_DOWNGRADE}")
     print(f"   Embed chapters: {s.EMBED_CHAPTERS}")
     print(f"   Embed subtitles: {s.EMBED_SUBTITLES}")
+
+    # Media Type
+    print("\n🎵 Media Type:")
+    print(f"   Default media type: {s.DEFAULT_MEDIA_TYPE}")
+    print(f"   Audio format: {s.AUDIO_FORMAT}")
 
     # Advanced
     print("\n⚙️ Advanced:")

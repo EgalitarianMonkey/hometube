@@ -331,6 +331,7 @@ def add_download_attempt(
     custom_title: str,
     video_location: str,
     requested_format_id: str | None = None,
+    media_type: str = "video",
 ) -> bool:
     """
     Record a download attempt in status.json.
@@ -339,6 +340,7 @@ def add_download_attempt(
     - custom_title: The filename/title entered by the user
     - video_location: The subfolder/category selected
     - requested_format_id: The format ID that the user wants to download (if specified)
+    - media_type: "video" or "audio"
     - date: ISO timestamp of the download attempt
 
     New attempts are added at the beginning of the list (index 0) for easy access.
@@ -348,6 +350,7 @@ def add_download_attempt(
         custom_title: User-provided filename/title
         video_location: Destination subfolder path
         requested_format_id: Optional format ID requested by user (e.g., from Choose Quality Available)
+        media_type: "video" or "audio" (default: "video")
 
     Returns:
         bool: True if recorded successfully, False otherwise
@@ -361,6 +364,7 @@ def add_download_attempt(
     attempt_entry = {
         "custom_title": custom_title,
         "video_location": video_location,
+        "media_type": media_type,
         "date": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -377,7 +381,7 @@ def add_download_attempt(
 
     safe_push_log(
         f"📊 Recorded download attempt: title='{custom_title}', "
-        f"location='{video_location}'"
+        f"location='{video_location}', type='{media_type}'"
     )
 
     return save_status(tmp_url_workspace, status_data)
@@ -446,3 +450,178 @@ def get_profiles_cached(
             cached_profiles.append(profile)
 
     return cached_profiles
+
+
+# ─── Audio status tracking ─────────────────────────────────────────────────
+
+
+def _ensure_downloaded_audio(status_data: dict) -> dict:
+    """Ensure downloaded_audio dict exists in status_data."""
+    if "downloaded_audio" not in status_data:
+        status_data["downloaded_audio"] = {}
+    return status_data["downloaded_audio"]
+
+
+def add_audio_download(
+    tmp_url_workspace: Path,
+    audio_format: str,
+    filesize_approx: int = 0,
+) -> bool:
+    """
+    Mark an audio format as 'downloading' in status.json.
+
+    Args:
+        tmp_url_workspace: Path to the URL's temporary workspace directory
+        audio_format: Audio format (e.g., "opus", "mp3", "m4a")
+        filesize_approx: Approximate file size in bytes (0 if unknown)
+
+    Returns:
+        bool: True if saved successfully
+    """
+    status_data = load_status(tmp_url_workspace)
+    if not status_data:
+        safe_push_log("⚠️ Status file not found, cannot add audio download")
+        return False
+
+    downloaded_audio = _ensure_downloaded_audio(status_data)
+
+    action = "Updated" if audio_format in downloaded_audio else "Added"
+
+    downloaded_audio[audio_format] = {
+        "status": "downloading",
+        "filesize_approx": filesize_approx,
+    }
+
+    safe_push_log(f"🎵 {action} audio format {audio_format} with status 'downloading'")
+    return save_status(tmp_url_workspace, status_data)
+
+
+def update_audio_status(
+    tmp_url_workspace: Path,
+    audio_format: str,
+    final_file: Path,
+) -> bool:
+    """
+    Update audio status to 'completed' or 'incomplete' based on file verification.
+
+    Args:
+        tmp_url_workspace: Path to the URL's temporary workspace directory
+        audio_format: Audio format key (e.g., "opus")
+        final_file: Path to the downloaded audio file
+
+    Returns:
+        bool: True if updated successfully
+    """
+    status_data = load_status(tmp_url_workspace)
+    if not status_data:
+        safe_push_log("⚠️ Status file not found, cannot update audio status")
+        return False
+
+    downloaded_audio = _ensure_downloaded_audio(status_data)
+    entry = downloaded_audio.get(audio_format)
+
+    if not entry:
+        # Auto-create entry if file exists (handles legacy / untracked downloads)
+        entry = {"status": "downloading", "filesize_approx": 0}
+        downloaded_audio[audio_format] = entry
+
+    if not final_file.exists():
+        entry["status"] = "incomplete"
+        entry["error"] = "File not found"
+        safe_push_log(
+            f"❌ Audio {audio_format} marked as 'incomplete' - file not found"
+        )
+        return save_status(tmp_url_workspace, status_data)
+
+    actual_size = final_file.stat().st_size
+    entry["status"] = "completed"
+    entry["actual_filesize"] = actual_size
+    safe_push_log(
+        f"✅ Audio {audio_format} marked as 'completed' "
+        f"({actual_size / (1024*1024):.2f}MiB)"
+    )
+    return save_status(tmp_url_workspace, status_data)
+
+
+def get_completed_audio(tmp_url_workspace: Path) -> str | None:
+    """
+    Get the format key of the first completed audio download.
+
+    Args:
+        tmp_url_workspace: Path to the URL's temporary workspace directory
+
+    Returns:
+        str: Audio format key (e.g., "opus") or None
+    """
+    status_data = load_status(tmp_url_workspace)
+    if not status_data:
+        return None
+
+    downloaded_audio = status_data.get("downloaded_audio", {})
+    if not isinstance(downloaded_audio, dict):
+        return None
+
+    for fmt, entry in downloaded_audio.items():
+        if entry.get("status") == "completed":
+            safe_push_log(
+                f"✅ Found completed audio in status: {fmt} "
+                f"({entry.get('actual_filesize', 0) / (1024*1024):.2f}MiB)"
+            )
+            return fmt
+
+    return None
+
+
+def is_audio_completed(tmp_url_workspace: Path, audio_format: str) -> bool:
+    """
+    Check if a specific audio format download is completed.
+
+    Args:
+        tmp_url_workspace: Path to the URL's temporary workspace directory
+        audio_format: Audio format to check (e.g., "opus")
+
+    Returns:
+        bool: True if completed
+    """
+    status_data = load_status(tmp_url_workspace)
+    if not status_data:
+        return False
+
+    downloaded_audio = status_data.get("downloaded_audio", {})
+    if not isinstance(downloaded_audio, dict):
+        return False
+
+    entry = downloaded_audio.get(audio_format)
+    return entry is not None and entry.get("status") == "completed"
+
+
+def mark_audio_error(
+    tmp_url_workspace: Path,
+    audio_format: str,
+    error_message: str = "Audio download failed",
+) -> bool:
+    """
+    Mark an audio format as failed/error in status.json.
+
+    Args:
+        tmp_url_workspace: Path to the URL's temporary workspace directory
+        audio_format: Audio format to mark
+        error_message: Error description
+
+    Returns:
+        bool: True if updated successfully
+    """
+    status_data = load_status(tmp_url_workspace)
+    if not status_data:
+        return False
+
+    downloaded_audio = _ensure_downloaded_audio(status_data)
+    entry = downloaded_audio.get(audio_format)
+
+    if not entry:
+        return False
+
+    entry["status"] = "error"
+    entry["error"] = error_message
+    safe_push_log(f"❌ Audio {audio_format} marked as 'error': {error_message}")
+    return save_status(tmp_url_workspace, status_data)

@@ -8,6 +8,85 @@ from pathlib import Path
 
 from app.file_system_utils import is_valid_cookie_file
 
+# Valid audio output formats for audio-only mode
+VALID_AUDIO_FORMATS = {"opus", "mp3", "m4a", "aac", "flac", "wav"}
+
+
+def build_base_ytdlp_audio_command(
+    base_filename: str,
+    temp_dir: Path,
+    audio_format: str = "opus",
+    embed_chapters: bool = False,
+    custom_args: str = "",
+) -> list[str]:
+    """
+    Build yt-dlp command for audio-only download.
+
+    Downloads the best available audio track and converts to the specified format.
+    Embeds metadata and thumbnail but skips subtitles and video tracks entirely.
+
+    Args:
+        base_filename: Output filename (without extension)
+        temp_dir: Temporary directory for download
+        audio_format: Target audio format (opus, mp3, m4a, aac, flac, wav)
+        embed_chapters: Whether to embed chapters in the audio file
+        custom_args: Custom yt-dlp arguments from user
+
+    Returns:
+        list[str]: yt-dlp command arguments
+    """
+    # Validate audio format
+    if audio_format not in VALID_AUDIO_FORMATS:
+        audio_format = "opus"
+
+    base_cmd = [
+        "yt-dlp",
+        "--newline",
+        "-o",
+        f"{base_filename}.%(ext)s",
+        "--paths",
+        f"home:{temp_dir}",
+        "-f",
+        "ba/b",  # Best audio, fallback to best combined
+        "-x",  # Extract audio
+        "--audio-format",
+        audio_format,
+        "--audio-quality",
+        "0",  # Best quality
+        "--embed-metadata",
+        "--embed-thumbnail",
+        "--no-write-thumbnail",
+        "--convert-thumbnails",
+        "jpg",
+        "--ignore-errors",
+        "--force-overwrites",
+        "--no-write-subs",
+        "--no-embed-subs",
+        "--sleep-requests",
+        "1",
+        "--retries",
+        "10",
+        "--retry-sleep",
+        "2",
+    ]
+
+    # Add chapters option
+    if embed_chapters:
+        base_cmd.append("--embed-chapters")
+    else:
+        base_cmd.append("--no-embed-chapters")
+
+    # Parse and resolve custom arguments if provided
+    if custom_args and custom_args.strip():
+        try:
+            parsed_custom_args = shlex.split(custom_args.strip())
+            final_cmd = resolve_ytdlp_argument_conflicts(base_cmd, parsed_custom_args)
+            return final_cmd
+        except ValueError:
+            return base_cmd
+
+    return base_cmd
+
 
 def build_base_ytdlp_command(
     base_filename: str,

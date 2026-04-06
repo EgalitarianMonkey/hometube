@@ -622,6 +622,7 @@ def add_playlist_download_attempt(
     custom_title: str,
     playlist_location: str,
     title_pattern: str | None = None,
+    media_type: str = "video",
 ) -> bool:
     """
     Update playlist preferences in status.json.
@@ -630,6 +631,7 @@ def add_playlist_download_attempt(
     - custom_title: The playlist folder name entered by the user
     - playlist_location: The subfolder/category selected
     - title_pattern: The pattern used for naming videos
+    - media_type: "video" or "audio"
 
     These values are overwritten each time (only the latest matters).
 
@@ -638,6 +640,7 @@ def add_playlist_download_attempt(
         custom_title: User-provided playlist folder name
         playlist_location: Destination subfolder path
         title_pattern: Pattern used for naming videos (optional)
+        media_type: "video" or "audio" (default: "video")
 
     Returns:
         bool: True if recorded successfully, False otherwise
@@ -652,6 +655,7 @@ def add_playlist_download_attempt(
     # Update root-level preferences (overwrite previous values)
     status_data["custom_title"] = custom_title
     status_data["playlist_location"] = playlist_location
+    status_data["media_type"] = media_type
     if title_pattern:
         status_data["title_pattern"] = title_pattern
 
