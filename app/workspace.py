@@ -7,12 +7,13 @@ are downloaded individually or as part of a playlist.
 
 Directory structure:
     TMP_DOWNLOAD_FOLDER/
-    ├── videos/
+    ├── medias/
     │   └── {platform}/
     │       └── {video_id}/
     │           ├── url_info.json
     │           ├── status.json
     │           ├── video-{FORMAT_ID}.{ext}
+    │           ├── audio-best.{ext}
     │           ├── subtitles.{lang}.srt
     │           └── final.{ext}
     └── playlists/
@@ -20,7 +21,7 @@ Directory structure:
             └── {playlist_id}/
                 ├── url_info.json
                 ├── status.json
-                └── (no video files - references videos/ folder)
+                └── (no media files - references medias/ folder)
 
 Benefits:
 - A video is never downloaded twice (even if in playlist AND downloaded individually)
@@ -172,9 +173,9 @@ def get_video_workspace(tmp_base: Path, platform: str, video_id: str) -> Path:
         video_id: Video ID
 
     Returns:
-        Path to video workspace (e.g., tmp/videos/youtube/dQw4w9WgXcQ/)
+        Path to video workspace (e.g., tmp/medias/youtube/dQw4w9WgXcQ/)
     """
-    return tmp_base / "videos" / platform / video_id
+    return tmp_base / "medias" / platform / video_id
 
 
 def get_playlist_workspace(tmp_base: Path, platform: str, playlist_id: str) -> Path:

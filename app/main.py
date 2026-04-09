@@ -1707,7 +1707,7 @@ def url_analysis(url: str) -> dict | None:
     6. For VIDEOS only: computes optimal format profiles
 
     New folder structure:
-    - Videos: tmp/videos/{platform}/{id}/
+    - Medias: tmp/medias/{platform}/{id}/
     - Playlists: tmp/playlists/{platform}/{id}/
 
     Args:
@@ -2167,7 +2167,7 @@ st.markdown("\n")
 # === MAIN INPUTS (OUTSIDE FORM FOR DYNAMIC BEHAVIOR) ===
 # URL input + discreet audio toggle on the same line, bottom-aligned
 _default_audio = settings.DEFAULT_MEDIA_TYPE == "audio"
-_url_col, _toggle_col = st.columns([5, 1], gap="large", vertical_alignment="bottom")
+_url_col, _toggle_col = st.columns([4, 1], gap="large", vertical_alignment="bottom")
 with _url_col:
     url = st.text_input(
         t("video_or_playlist_url"),
@@ -2179,6 +2179,7 @@ with _toggle_col:
     is_audio_mode = st.toggle(
         t("audio_only_toggle"),
         value=_default_audio,
+        help=t("audio_only_toggle_help"),
         key="media_type_selector",
     )
 

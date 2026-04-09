@@ -93,7 +93,7 @@ class TestWorkspacePaths:
     def test_video_workspace_path(self, tmp_path):
         """Test video workspace path generation."""
         workspace = get_video_workspace(tmp_path, "youtube", "abc123")
-        expected = tmp_path / "videos" / "youtube" / "abc123"
+        expected = tmp_path / "medias" / "youtube" / "abc123"
         assert workspace == expected
 
     def test_playlist_workspace_path(self, tmp_path):
@@ -106,7 +106,7 @@ class TestWorkspacePaths:
         """Test getting workspace from video URL."""
         url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         workspace = get_workspace_from_url(tmp_path, url)
-        expected = tmp_path / "videos" / "youtube" / "dQw4w9WgXcQ"
+        expected = tmp_path / "medias" / "youtube" / "dQw4w9WgXcQ"
         assert workspace == expected
 
     def test_workspace_from_playlist_url(self, tmp_path):
@@ -125,7 +125,7 @@ class TestEnsureWorkspace:
         workspace = ensure_video_workspace(tmp_path, "youtube", "abc123")
         assert workspace.exists()
         assert workspace.is_dir()
-        assert workspace == tmp_path / "videos" / "youtube" / "abc123"
+        assert workspace == tmp_path / "medias" / "youtube" / "abc123"
 
     def test_ensure_playlist_workspace_creates_directory(self, tmp_path):
         """Test that ensure_playlist_workspace creates the directory."""
@@ -167,13 +167,13 @@ class TestVideoSharing:
         # They should be the same path
         assert individual_workspace == playlist_workspace
 
-    def test_video_in_playlist_uses_videos_folder(self, tmp_path):
-        """Test that videos in playlists are stored in videos/ not playlists/."""
+    def test_video_in_playlist_uses_medias_folder(self, tmp_path):
+        """Test that videos in playlists are stored in medias/ not playlists/."""
         video_id = "dQw4w9WgXcQ"
         workspace = ensure_video_workspace(tmp_path, "youtube", video_id)
 
-        # Should be in videos/, not playlists/
-        assert "videos" in str(workspace)
+        # Should be in medias/, not playlists/
+        assert "medias" in str(workspace)
         assert "playlists" not in str(workspace)
 
 

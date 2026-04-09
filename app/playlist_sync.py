@@ -746,7 +746,7 @@ def sync_playlist(
         ]
 
     # === PHASE 5: Check tmp workspace for already downloaded files ===
-    # Files may exist in tmp/videos/{platform}/{video_id}/
+    # Files may exist in tmp/medias/{platform}/{video_id}/
     # These should NOT be re-downloaded, they just need to be MOVED to destination
     videos_still_to_download = []
 

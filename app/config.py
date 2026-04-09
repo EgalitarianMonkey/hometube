@@ -279,6 +279,20 @@ def ensure_folders_exist() -> tuple[Path, Path]:
         tmp_folder = videos_folder / "tmp"
         tmp_folder.mkdir(parents=True, exist_ok=True)
 
+    # Migrate legacy tmp/videos/ → tmp/medias/ (one-time rename)
+    _old_videos_dir = tmp_folder / "videos"
+    _new_medias_dir = tmp_folder / "medias"
+    if (
+        _old_videos_dir.exists()
+        and _old_videos_dir.is_dir()
+        and not _new_medias_dir.exists()
+    ):
+        try:
+            _old_videos_dir.rename(_new_medias_dir)
+            print("✅ Migrated tmp/videos/ → tmp/medias/")
+        except Exception as e:
+            print(f"⚠️ Could not migrate tmp/videos/ → tmp/medias/: {e}")
+
     return videos_folder, tmp_folder
 
 
