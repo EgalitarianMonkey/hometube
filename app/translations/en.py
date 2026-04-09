@@ -409,7 +409,7 @@ Examples:
     "media_type_label": "Media type",
     "media_type_video": "🎬 Video",
     "media_type_audio": "🎵 Audio",
-    "audio_only_toggle": "🎵 &nbsp; Audio only",
+    "audio_only_toggle": "🎵",
     "media_type_help": "Choose whether to download video+audio or audio only. Default can be set with DEFAULT_MEDIA_TYPE environment variable.",
     "audio_format_label": "Audio format",
     "audio_format_help": "Output audio format. Default can be set with AUDIO_FORMAT environment variable.",

@@ -20,7 +20,12 @@ from app.config import get_settings
 from app.file_system_utils import sanitize_filename, ensure_dir
 from app.logs_utils import safe_push_log
 from app.text_utils import render_title
-from app.tmp_files import find_downloaded_video, VIDEO_EXTENSIONS
+from app.tmp_files import (
+    find_downloaded_video,
+    find_downloaded_audio,
+    VIDEO_EXTENSIONS,
+    AUDIO_EXTENSIONS,
+)
 from app.workspace import get_video_workspace
 
 # === HELPER FUNCTIONS ===
@@ -208,9 +213,11 @@ def get_video_metadata_from_file(video_path: Path) -> dict | None:
         return None
 
 
-def scan_destination_videos(dest_dir: Path) -> dict[str, dict]:
+def scan_destination_videos(
+    dest_dir: Path, media_type: str = "video"
+) -> dict[str, dict]:
     """
-    Scan destination directory and extract metadata from all video files.
+    Scan destination directory and extract metadata from all video/audio files.
 
     Returns dict mapping video_id -> metadata dict
     """
@@ -220,15 +227,16 @@ def scan_destination_videos(dest_dir: Path) -> dict[str, dict]:
     if not dest_dir.exists():
         return videos_by_id
 
-    for ext in VIDEO_EXTENSIONS:
-        for video_file in dest_dir.glob(f"*.{ext}"):
-            metadata = get_video_metadata_from_file(video_file)
+    extensions = AUDIO_EXTENSIONS if media_type == "audio" else VIDEO_EXTENSIONS
+    for ext in extensions:
+        for media_file in dest_dir.glob(f"*.{ext}"):
+            metadata = get_video_metadata_from_file(media_file)
             if metadata:
                 video_id = metadata.get("video_id")
                 if video_id:
                     videos_by_id[video_id] = metadata
                 # Also index by filename for fallback matching
-                videos_by_filename[video_file.name] = metadata
+                videos_by_filename[media_file.name] = metadata
 
     return videos_by_id
 
@@ -375,6 +383,7 @@ def sync_playlist(
     new_pattern: str,
     dry_run: bool = True,
     keep_old_videos: bool | None = None,
+    media_type: str = "video",
 ) -> PlaylistSyncPlan:
     """
     Generate a synchronization plan for a playlist.
@@ -476,7 +485,7 @@ def sync_playlist(
     safe_push_log(f"📥 New playlist has {len(new_video_ids)} videos")
 
     # Scan destination folder for actual files (use existing location)
-    dest_videos_by_id = scan_destination_videos(scan_dest_dir)
+    dest_videos_by_id = scan_destination_videos(scan_dest_dir, media_type=media_type)
 
     safe_push_log(f"📊 Found {len(dest_videos_by_id)} videos in {scan_dest_dir}")
     if dest_videos_by_id:
@@ -534,7 +543,12 @@ def sync_playlist(
     for video_id in common_video_ids:
         video_data = existing_videos.get(video_id, {})
         old_status = video_data.get("status", "pending")
+        entry_media_type = video_data.get("media_type", "video")
         title = video_data.get("title", video_id)
+
+        # If the entry was completed for a different media_type, treat as pending
+        if old_status in completed_statuses and entry_media_type != media_type:
+            old_status = "pending"
 
         safe_push_log(f"🔍 Processing {video_id[:11]}... | Status: {old_status}")
 
@@ -623,6 +637,7 @@ def sync_playlist(
                     new_pattern,
                     new_index,
                     total_videos,
+                    media_type=media_type,
                 )
 
                 if found_video:
@@ -730,8 +745,8 @@ def sync_playlist(
             if action.video_id not in videos_to_relocate_set
         ]
 
-    # === PHASE 5: Check tmp workspace for already downloaded videos ===
-    # Videos may exist in tmp/videos/{platform}/{video_id}/
+    # === PHASE 5: Check tmp workspace for already downloaded files ===
+    # Files may exist in tmp/videos/{platform}/{video_id}/
     # These should NOT be re-downloaded, they just need to be MOVED to destination
     videos_still_to_download = []
 
@@ -740,7 +755,10 @@ def sync_playlist(
             settings.TMP_DOWNLOAD_FOLDER, "youtube", action.video_id
         )
         if video_workspace.exists():
-            downloaded_file = find_downloaded_video(video_workspace)
+            if media_type == "audio":
+                downloaded_file = find_downloaded_audio(video_workspace)
+            else:
+                downloaded_file = find_downloaded_video(video_workspace)
             if downloaded_file:
                 safe_push_log(
                     f"📦 Found in tmp (ready to move): {action.video_id} ({downloaded_file.name})"
@@ -779,17 +797,19 @@ def _find_renamed_video(
     pattern: str,
     expected_index: int,
     total: int,
+    media_type: str = "video",
 ) -> dict | None:
     """
-    Try to find a video that was renamed by the user.
+    Try to find a video/audio file that was renamed by the user.
 
-    Scans all videos in dest_dir and checks their metadata for matching video_id.
+    Scans all files in dest_dir and checks their metadata for matching video_id.
     Also performs approximate duration check.
     """
     # Get expected duration from video_data if available
     expected_duration = video_data.get("duration")
 
-    for ext in VIDEO_EXTENSIONS:
+    extensions = AUDIO_EXTENSIONS if media_type == "audio" else VIDEO_EXTENSIONS
+    for ext in extensions:
         for video_file in dest_dir.glob(f"*.{ext}"):
             metadata = get_video_metadata_from_file(video_file)
             if not metadata:
@@ -823,6 +843,7 @@ def apply_sync_plan(
     new_pattern: str,
     new_url_info: dict,
     keep_old_videos: bool | None = None,
+    media_type: str = "video",
 ) -> bool:
     """
     Apply a synchronization plan to the filesystem and status.json.

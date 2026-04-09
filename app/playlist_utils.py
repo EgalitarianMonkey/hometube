@@ -151,6 +151,7 @@ def check_existing_videos_in_destination(
     video_extensions: list[str] = None,
     playlist_workspace: Path | None = None,
     title_pattern: str | None = None,
+    media_type: str = "video",
 ) -> tuple[list[dict], list[dict], int]:
     """
     Check which playlist videos already exist in destination folder.
@@ -166,9 +167,10 @@ def check_existing_videos_in_destination(
     Args:
         dest_dir: Destination directory to check
         playlist_entries: List of video entries from get_playlist_entries()
-        video_extensions: List of video extensions to check (default: [".mkv", ".mp4", ".webm"])
+        video_extensions: List of extensions to check (default depends on media_type)
         playlist_workspace: Optional path to playlist workspace to check status.json
         title_pattern: Optional title pattern for filename matching
+        media_type: "video" or "audio" - determines which file types to look for
 
     Returns:
         Tuple of:
@@ -177,7 +179,10 @@ def check_existing_videos_in_destination(
         - Total count for ratio display
     """
     if video_extensions is None:
-        video_extensions = [".mkv", ".mp4", ".webm", ".avi", ".mov"]
+        if media_type == "audio":
+            video_extensions = [".opus", ".m4a", ".mp3", ".aac", ".webm"]
+        else:
+            video_extensions = [".mkv", ".mp4", ".webm", ".avi", ".mov"]
 
     # First, check status.json if playlist workspace is provided
     status_completed_videos = {}  # video_id -> video_data (for resolved_title)
@@ -186,8 +191,11 @@ def check_existing_videos_in_destination(
         if status_data:
             videos = status_data.get("videos", {})
             for video_id, video_data in videos.items():
+                # Only consider entries completed for the SAME media_type
                 if video_data.get("status") == "completed":
-                    status_completed_videos[video_id] = video_data
+                    entry_media_type = video_data.get("media_type", "video")
+                    if entry_media_type == media_type:
+                        status_completed_videos[video_id] = video_data
 
     # Build set of existing filenames in destination
     existing_files_set = set()

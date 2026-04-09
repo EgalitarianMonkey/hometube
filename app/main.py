@@ -2165,12 +2165,22 @@ def parse_generic_percentage(line: str) -> float | None:
 st.markdown("\n")
 
 # === MAIN INPUTS (OUTSIDE FORM FOR DYNAMIC BEHAVIOR) ===
-url = st.text_input(
-    t("video_or_playlist_url"),
-    value="",
-    placeholder="https://www.youtube.com/watch?v=...",
-    key="main_url",
-)
+# URL input + discreet audio toggle on the same line, bottom-aligned
+_default_audio = settings.DEFAULT_MEDIA_TYPE == "audio"
+_url_col, _toggle_col = st.columns([5, 1], gap="large", vertical_alignment="bottom")
+with _url_col:
+    url = st.text_input(
+        t("video_or_playlist_url"),
+        value="",
+        placeholder="https://www.youtube.com/watch?v=...",
+        key="main_url",
+    )
+with _toggle_col:
+    is_audio_mode = st.toggle(
+        t("audio_only_toggle"),
+        value=_default_audio,
+        key="media_type_selector",
+    )
 
 # Analyze URL and display information
 url_info = None
@@ -2233,32 +2243,6 @@ if url and url.strip():
             json_output_path = Path(url_info_path)
             if json_output_path.exists():
                 compute_optimal_profiles(url_info, json_output_path)
-
-# === MEDIA TYPE SELECTOR ===
-# Discreet toggle on a single line, pushed to the right
-_default_audio = settings.DEFAULT_MEDIA_TYPE == "audio"
-st.markdown(
-    """<style>
-    /* Keep audio toggle label on a single line */
-    [data-testid="stHorizontalBlock"]:has([key="media_type_selector"])
-    label[data-testid="stWidgetLabel"] p {
-        white-space: nowrap;
-    }
-    /* Reduce vertical footprint */
-    [data-testid="stHorizontalBlock"]:has([key="media_type_selector"]) {
-        margin-top: -0.5rem; margin-bottom: -0.8rem;
-    }
-    </style>""",
-    unsafe_allow_html=True,
-)
-_spacer, _toggle_col = st.columns([5, 2])
-with _toggle_col:
-    is_audio_mode = st.toggle(
-        t("audio_only_toggle"),
-        value=_default_audio,
-        help=t("media_type_help"),
-        key="media_type_selector",
-    )
 
 # Audio format selector (only visible in audio mode)
 audio_format = settings.AUDIO_FORMAT
@@ -2598,12 +2582,14 @@ if (
                 "playlist_title_pattern", DEFAULT_PLAYLIST_TITLE_PATTERN
             )
 
+            _media_type = "audio" if is_audio_mode else "video"
             playlist_already_downloaded, playlist_to_download, total = (
                 check_existing_videos_in_destination(
                     playlist_dest_dir,
                     playlist_entries,
                     playlist_workspace=tmp_url_workspace,
                     title_pattern=check_title_pattern,
+                    media_type=_media_type,
                 )
             )
 
@@ -2671,6 +2657,7 @@ if (
                     new_pattern=current_pattern,
                     dry_run=True,
                     keep_old_videos=keep_old_videos_val,
+                    media_type="audio" if is_audio_mode else "video",
                 )
 
                 # Store sync plan in session state
@@ -2807,6 +2794,7 @@ if (
                             new_pattern=apply_pattern,
                             new_url_info=apply_url_info,
                             keep_old_videos=keep_old_videos_pref,
+                            media_type="audio" if is_audio_mode else "video",
                         )
 
                         if success:
@@ -4279,12 +4267,32 @@ if submitted:
                     channel=playlist_channel,
                 )
 
-                # Move to playlist destination with rendered title (saves disk space)
+                # Copy to final.{ext} for move, keeping the original in tmp for cache
+                # For audio: audio-best.opus stays, final.opus gets moved
+                # For video: video-{FORMAT_ID}.mkv stays, final.mkv gets moved
+                final_source = final_tmp
+                if is_audio_mode:
+                    final_path = tmp_files.get_final_path(
+                        video_workspace, final_tmp.suffix.lstrip(".")
+                    )
+                    if final_tmp != final_path:
+                        try:
+                            import shutil as _shutil
+
+                            if final_path.exists():
+                                final_path.unlink()
+                            _shutil.copy2(str(final_tmp), str(final_path))
+                            push_log(f"💾 Cached audio: {final_tmp.name} (kept in tmp)")
+                            final_source = final_path
+                        except Exception as e:
+                            push_log(f"⚠️ Could not copy to final: {e}")
+
+                # Move final to playlist destination with rendered title
                 dest_file = playlist_dest / resolved_title
-                move_final_to_destination(final_tmp, dest_file, push_log)
+                move_final_to_destination(final_source, dest_file, push_log)
 
                 # Update playlist status to mark video as completed
-                # Include pattern info for future reference
+                # Include pattern info and media_type for future reference
                 update_video_status_in_playlist(
                     playlist_workspace,
                     video_id,
@@ -4293,6 +4301,7 @@ if submitted:
                         "title_pattern": title_pattern,
                         "resolved_title": resolved_title,
                         "playlist_index": playlist_index,
+                        "media_type": "audio" if is_audio_mode else "video",
                     },
                 )
                 push_log(

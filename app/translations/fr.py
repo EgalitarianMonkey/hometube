@@ -416,7 +416,7 @@ Exemple : `{idx} - {pretty(title)}.{ext}` → `01 - Je Regarde Vos Vidéos.mkv`"
     "media_type_label": "Type de média",
     "media_type_video": "🎬 Vidéo",
     "media_type_audio": "🎵 Audio",
-    "audio_only_toggle": "🎵 &nbsp; Audio only",
+    "audio_only_toggle": "🎵",
     "media_type_help": "Choisir entre télécharger la vidéo+audio ou l'audio uniquement. La valeur par défaut peut être définie avec la variable d'environnement DEFAULT_MEDIA_TYPE.",
     "audio_format_label": "Format audio",
     "audio_format_help": "Format de sortie audio. La valeur par défaut peut être définie avec la variable d'environnement AUDIO_FORMAT.",
