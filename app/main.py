@@ -3352,6 +3352,9 @@ logs_placeholder = st.empty()  # black scrollable window (bottom)
 download_btn_placeholder = st.empty()  # "Download logs" button (bottom)
 
 ALL_LOGS: list[str] = []  # global buffer (complete log content)
+# Fragmented (HLS) downloads emit one progress line per fragment, so the buffer
+# must stay bounded or memory grows for the whole download (issue #82)
+MAX_LOG_LINES = 10000
 run_unique_key = (
     f"download_logs_btn_{st.session_state.run_seq}"  # unique key per execution
 )
@@ -3383,6 +3386,9 @@ def push_log(line: str):
     )
 
     ALL_LOGS.append(clean_line)
+    if len(ALL_LOGS) > MAX_LOG_LINES:
+        del ALL_LOGS[: len(ALL_LOGS) - MAX_LOG_LINES]
+        ALL_LOGS[0] = "… (older log lines truncated)"
 
     # Update logs display
     with logs_placeholder.container():
@@ -3400,8 +3406,13 @@ def push_log(line: str):
             unsafe_allow_html=True,
         )
 
-    # Update the download button with current logs
-    render_download_button()
+    # Update the download button with current logs — but not on every progress
+    # line: each refresh copies the full log into a new widget payload that
+    # Streamlit retains until the run ends, which used to grow quadratically on
+    # fragment-by-fragment downloads (issue #82)
+    is_progress_flood = clean_line.startswith(("[download]", "frame=", "size="))
+    if not is_progress_flood or len(ALL_LOGS) % 200 == 0:
+        render_download_button()
 
 
 # Register this push_log function for use by other modules
