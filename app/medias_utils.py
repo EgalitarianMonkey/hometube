@@ -132,13 +132,19 @@ def analyze_audio_formats(
         return None, [], False
 
     # STEP 5: Detect original voice (VO) language
-    # Look for formats with "original" or "default" in format_note
+    # YouTube marks the true original track with "original" and the locale-based
+    # pick with "(default)", which can be a dub listed before the original.
+    # Prefer "original"; only fall back to "default" when no "original" exists.
     vo_lang = None
     for fmt in best_group:
-        format_note = fmt.get("format_note", "").lower()
-        if "original" in format_note or "default" in format_note:
+        if "original" in fmt.get("format_note", "").lower():
             vo_lang = fmt.get("language")
             break
+    if vo_lang is None:
+        for fmt in best_group:
+            if "default" in fmt.get("format_note", "").lower():
+                vo_lang = fmt.get("language")
+                break
 
     # STEP 6: Filter and order by language preferences
     multiple_langs = len(best_group) > 1

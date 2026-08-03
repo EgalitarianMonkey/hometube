@@ -440,6 +440,69 @@ class TestLanguagePreferences:
         assert multiple_langs is True
 
 
+class TestVoDetectionOriginalVsDefault:
+    """Regression tests for VO detection when "(default)" and "original" are split
+    across two different tracks (issue #69).
+
+    YouTube can serve a locale-based dub marked "(default)" listed BEFORE the true
+    original track marked "original". VO detection must pick the "original" track,
+    not the first track carrying a "default" note.
+    """
+
+    def _make_url_info(self) -> Dict:
+        """Video where the EN dub "(default)" is listed before the ES "original"."""
+        return {
+            "formats": [
+                {
+                    "format_id": "251-0",
+                    "vcodec": "none",
+                    "acodec": "opus",
+                    "abr": 150,
+                    "language": "en-US",
+                    "format_note": "English (US) (default), medium",
+                },
+                {
+                    "format_id": "251-1",
+                    "vcodec": "none",
+                    "acodec": "opus",
+                    "abr": 131,
+                    "language": "es-US",
+                    "format_note": "Spanish (US) original, medium",
+                },
+            ]
+        }
+
+    def test_vo_is_original_not_default(self):
+        """VO must be the "original" track even when a "(default)" dub comes first"""
+        vo_lang, ordered_audios, multiple_langs = analyze_audio_formats(
+            self._make_url_info(),
+            language_primary="",
+            languages_secondaries="",
+            vo_first=True,
+        )
+
+        assert vo_lang == "es-US", f"VO should be 'es-US' (original), got {vo_lang}"
+        assert multiple_langs is True
+        assert (
+            ordered_audios[0].get("language") == "es-US"
+        ), "First audio track should be the original (es-US), not the default dub"
+
+    def test_default_used_as_fallback_when_no_original(self):
+        """Without any "original" note, the "default" track still identifies the VO"""
+        url_info = self._make_url_info()
+        for fmt in url_info["formats"]:
+            fmt["format_note"] = fmt["format_note"].replace("original", "").strip()
+
+        vo_lang, _, _ = analyze_audio_formats(
+            url_info,
+            language_primary="",
+            languages_secondaries="",
+            vo_first=True,
+        )
+
+        assert vo_lang == "en-US", f"VO should fall back to 'en-US', got {vo_lang}"
+
+
 def run_tests():
     """Run all tests with simple reporting"""
     import traceback
@@ -449,6 +512,7 @@ def run_tests():
         TestMonoLanguageVideo,
         TestMultiLanguageVideo,
         TestLanguagePreferences,
+        TestVoDetectionOriginalVsDefault,
     ]
 
     total_tests = 0
