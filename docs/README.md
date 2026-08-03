@@ -29,6 +29,7 @@ Welcome to the HomeTube documentation! This guide helps you install, use, and co
 ### For Contributors
 
 - **[Contributing Guide](contributing.md)** - Development setup, testing, and workflow
+- **[Release Process](releasing.md)** - Versioning, tagging, and curated release notes
 
 ### Architecture Reference
 

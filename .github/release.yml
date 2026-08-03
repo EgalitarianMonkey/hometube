@@ -1,16 +1,19 @@
+# A PR lands in the FIRST category whose label it carries, so change-type
+# categories (breaking, feature, fix, perf) come before file-based ones
+# (docs, chore) — a fix PR that also touches docs/ must stay under Fixes.
 changelog:
   categories:
+    - title: "💥 Breaking changes"
+      labels: [breaking]
     - title: "🚀 Features"
       labels: [feature, enhancement, feat]
     - title: "🐛 Fixes"
       labels: [bug, fix]
-    - title: "📚 Docs"
-      labels: [docs]
     - title: "⚙️ Performance"
       labels: [perf]
+    - title: "📚 Docs"
+      labels: [docs]
     - title: "🧹 Maintenance"
       labels: [chore, deps, maintenance]
-    - title: "💥 Breaking changes"
-      labels: [breaking]
     - title: "Other changes"
       labels: ["*"]

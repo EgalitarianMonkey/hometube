@@ -38,6 +38,34 @@ class TestJellyfinSettings:
         assert settings.JELLYFIN_API_KEY == "super-secret"
 
 
+class TestEnvAliases:
+    """Tests for misspelled environment variable aliases (issue #69 thread)."""
+
+    def test_misspelled_secondaries_is_honored(self, monkeypatch):
+        """LANGUAGE_SECONDARIES (typo) is used when LANGUAGES_SECONDARIES is unset."""
+        monkeypatch.delenv("LANGUAGES_SECONDARIES", raising=False)
+        monkeypatch.setenv("LANGUAGE_SECONDARIES", "en,fr")
+
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+        settings = get_settings()
+
+        assert settings.LANGUAGES_SECONDARIES == ["en", "fr"]
+
+    def test_canonical_variable_wins_over_alias(self, monkeypatch):
+        """LANGUAGES_SECONDARIES takes precedence over the misspelled alias."""
+        monkeypatch.setenv("LANGUAGES_SECONDARIES", "es,de")
+        monkeypatch.setenv("LANGUAGE_SECONDARIES", "en,fr")
+
+        from app.config import get_settings
+
+        get_settings.cache_clear()
+        settings = get_settings()
+
+        assert settings.LANGUAGES_SECONDARIES == ["es", "de"]
+
+
 class TestSubtitleLanguageConfiguration:
     """Test get_default_subtitle_languages() function."""
 

@@ -1,62 +1,67 @@
+# Labels drive the release-notes categories in .github/release.yml, so the
+# change-type labels (feature, fix, perf, breaking) come from the branch name
+# rather than from changed files — a bugfix touching app/ is not a "feature".
+
 feature:
-  - changed-files:
-      - any-glob-to-any-file:
-          - 'app/**'
-          - 'hometube/**'
+  - head-branch: ["^feat/", "^feature/"]
+
+fix:
+  - head-branch: ["^fix/", "^bugfix/", "^hotfix/"]
+
+perf:
+  - head-branch: ["^perf/"]
+
+breaking:
+  - head-branch: ["^breaking/"]
 
 docs:
   - changed-files:
       - any-glob-to-any-file:
-          - 'README.md'
-          - 'docs/**'
+          - "README.md"
+          - "docs/**"
 
 test:
   - changed-files:
       - any-glob-to-any-file:
-          - 'tests/**'
-
-perf:
-  - changed-files:
-      - any-glob-to-any-file:
-          - '**/*.py'
+          - "tests/**"
 
 chore:
   - changed-files:
       - any-glob-to-any-file:
-          - '.github/**'
-          - '.devcontainer/**'
+          - ".github/**"
+          - ".devcontainer/**"
 
 deps:
   - changed-files:
       - any-glob-to-any-file:
-          - 'pyproject.toml'
-          - 'uv.lock'
-          - 'requirements/**'
+          - "pyproject.toml"
+          - "uv.lock"
+          - "requirements/**"
 
 docker:
   - changed-files:
       - any-glob-to-any-file:
-          - 'Dockerfile'
-          - 'docker-compose*.yml'
-          - '.dockerignore'
+          - "Dockerfile"
+          - "docker-compose*.yml"
+          - ".dockerignore"
 
 config:
   - changed-files:
       - any-glob-to-any-file:
-          - '*.env*'
-          - '*.ini'
-          - '*.toml'
-          - '*.yaml'
-          - '*.yml'
+          - "*.env*"
+          - "*.ini"
+          - "*.toml"
+          - "*.yaml"
+          - "*.yml"
 
 ui:
   - changed-files:
       - any-glob-to-any-file:
-          - 'app/translations/**'
-          - 'app/main.py'
+          - "app/translations/**"
+          - "app/main.py"
 
 scripts:
   - changed-files:
       - any-glob-to-any-file:
-          - 'scripts/**'
-          - '*.sh'
+          - "scripts/**"
+          - "*.sh"

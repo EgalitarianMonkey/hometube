@@ -86,6 +86,13 @@ _DEFAULTS = {
     "JELLYFIN_API_KEY": "",
 }
 
+# Common misspellings of environment variables, mapped to their canonical name.
+# An alias is honored (with a warning) only when the canonical variable is not
+# set, so a typo in the configuration is no longer silently ignored.
+_ENV_ALIASES = {
+    "LANGUAGE_SECONDARIES": "LANGUAGES_SECONDARIES",
+}
+
 
 # === Helper Functions ===
 def _to_bool(v: str | None, default: bool = False) -> bool:
@@ -173,6 +180,16 @@ def get_settings() -> Settings:
         env_value = os.getenv(key)
         if env_value is not None:
             config[key] = env_value
+
+    # 1️⃣b Accept known misspellings when the canonical variable is unset
+    for alias, canonical in _ENV_ALIASES.items():
+        alias_value = os.getenv(alias)
+        if alias_value is not None and os.getenv(canonical) is None:
+            config[canonical] = alias_value
+            print(
+                f"⚠️ Environment variable {alias} is misspelled — "
+                f"using its value for {canonical}. Please rename it in your configuration."
+            )
 
     # 2️⃣ Normalize paths
     videos_folder = Path(config["VIDEOS_FOLDER"])
