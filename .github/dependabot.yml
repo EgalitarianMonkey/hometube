@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Python dependencies managed by uv (pyproject.toml + uv.lock).
+  # The requirements/*.txt files are compiled artifacts of uv and are
+  # deliberately not tracked by a separate pip ecosystem entry.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Zurich"
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Actions used in .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Zurich"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Base image in Dockerfile (pinned to "latest" today, so PRs will be rare)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Zurich"
