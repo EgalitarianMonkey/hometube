@@ -52,7 +52,7 @@ packaging==25.0
     #   streamlit
 pandas==2.3.2
     # via streamlit
-pathspec==0.12.1
+pathspec==1.1.1
     # via black
 pillow==11.3.0
     # via streamlit
