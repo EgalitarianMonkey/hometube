@@ -43,7 +43,7 @@ packaging==25.0
     # via
     #   altair
     #   streamlit
-pandas==2.3.2
+pandas==3.0.5
     # via streamlit
 pillow==11.3.0
     # via streamlit

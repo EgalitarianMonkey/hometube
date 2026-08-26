@@ -50,7 +50,7 @@ packaging==25.0
     #   altair
     #   black
     #   streamlit
-pandas==2.3.2
+pandas==3.0.5
     # via streamlit
 pathspec==1.1.1
     # via black
