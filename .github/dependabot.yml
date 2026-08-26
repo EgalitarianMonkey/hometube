@@ -11,6 +11,16 @@ updates:
       time: "06:00"
       timezone: "Europe/Zurich"
     open-pull-requests-limit: 5
+    ignore:
+      # Transitive deps of streamlit, which pins "pandas<3" and "numpy<3".
+      # Dependabot proposes their major bumps anyway and CI stays green
+      # (nothing imports them directly), but the resulting environment
+      # violates streamlit's own constraints. Revisit when the streamlit
+      # pin in pyproject.toml moves past a release that allows 3.x.
+      - dependency-name: "pandas"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "numpy"
+        update-types: ["version-update:semver-major"]
     groups:
       python-minor-patch:
         update-types:
