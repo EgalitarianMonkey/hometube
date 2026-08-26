@@ -2,7 +2,7 @@
 #    uv pip compile pyproject.toml --extra dev -o requirements/requirements-dev.txt
 altair==5.5.0
     # via streamlit
-attrs==25.3.0
+attrs==26.1.0
     # via
     #   jsonschema
     #   referencing
