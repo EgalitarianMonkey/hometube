@@ -13,6 +13,8 @@ from app.notifications import (
     dismiss_notification,
     check_update_notification,
     check_cleanup_notification_v260,
+    check_content_announcement,
+    CONTENT_REPO_URL,
 )
 
 
@@ -238,6 +240,48 @@ class TestCleanupNotification:
 
                 notif = check_cleanup_notification_v260()
                 assert notif is None
+
+
+class TestContentAnnouncement:
+    """Tests for the Content announcement."""
+
+    def test_announcement_shown_by_default(self, tmp_path):
+        """The announcement is offered until the user dismisses it."""
+        state_file = tmp_path / "notifications.json"
+
+        with patch(
+            "app.notifications.get_notifications_file_path", return_value=state_file
+        ):
+            notif = check_content_announcement()
+
+            assert notif is not None
+            assert notif.id == "content_announcement"
+            assert notif.action_url == CONTENT_REPO_URL
+            assert notif.notification_type == NotificationType.INFO
+
+    def test_no_announcement_when_dismissed(self, tmp_path):
+        """Dismissing the announcement keeps it hidden."""
+        state_file = tmp_path / "notifications.json"
+
+        with patch(
+            "app.notifications.get_notifications_file_path", return_value=state_file
+        ):
+            dismiss_notification("content_announcement")
+
+            assert check_content_announcement() is None
+
+    def test_announcement_does_not_deprecate_hometube(self, tmp_path):
+        """HomeTube stays maintained, so the wording must not read as an EOL notice."""
+        state_file = tmp_path / "notifications.json"
+
+        with patch(
+            "app.notifications.get_notifications_file_path", return_value=state_file
+        ):
+            notif = check_content_announcement()
+
+            assert "keeps running" in notif.message
+            for word in ("deprecated", "end of life", "sunset", "discontinued"):
+                assert word not in notif.message.lower()
 
 
 class TestNotificationDataclass:
