@@ -265,14 +265,29 @@ def check_cleanup_notification_v260() -> Notification | None:
     )
 
 
+def get_content_announcement_id(version: str | None = None) -> str:
+    """
+    Build the announcement id for a given HomeTube version.
+
+    The id carries only major.minor, so dismissing the announcement silences it
+    for the release at hand and every patch on top of it, and the next feature
+    release brings it back under a new id. That mirrors the rule the update
+    notification already follows: patch releases stay silent.
+    """
+    parts = (version or get_current_version()).split(".")
+    return f"content_announcement_v{'.'.join(parts[:2])}"
+
+
 def check_content_announcement() -> Notification | None:
     """
-    Announcement for Content, the next generation of HomeTube.
+    Announcement for Content, the platform HomeTube grew into.
 
-    Shown once per user until dismissed. HomeTube keeps running and being
-    maintained, so this stays an invitation rather than a deprecation warning.
+    Re-offered once per feature release rather than once ever: someone who
+    dismissed it a year ago should still hear about what Content became. It
+    stays a single, dismissible line — an invitation, never a deprecation
+    warning, since HomeTube keeps being developed.
     """
-    notification_id = "content_announcement"
+    notification_id = get_content_announcement_id()
 
     if is_notification_dismissed(notification_id):
         return None
@@ -285,7 +300,7 @@ def check_content_announcement() -> Notification | None:
             "media, transcripts, summaries, translations and documents out. "
             "It ships a HomeTube app of its own, plus Content Studio, a REST API, "
             "a Python SDK and CLI, a browser extension, and an MCP server your AI "
-            "agents can drive. **This HomeTube keeps running, and stays maintained.**"
+            "agents can drive. **HomeTube keeps running, and keeps being developed.**"
         ),
         notification_type=NotificationType.INFO,
         action_label="Discover Content",
