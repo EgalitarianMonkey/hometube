@@ -6,7 +6,7 @@ attrs==25.3.0
     # via
     #   jsonschema
     #   referencing
-black==25.1.0
+black==26.3.1
     # via hometube (pyproject.toml)
 blinker==1.9.0
     # via streamlit
