@@ -45,7 +45,7 @@ packaging==25.0
     #   streamlit
 pandas==2.3.3
     # via streamlit
-pillow==11.3.0
+pillow==12.3.0
     # via streamlit
 protobuf==6.32.0
     # via streamlit
