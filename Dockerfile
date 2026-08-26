@@ -1,4 +1,7 @@
-# Pin base by digest for reproducibility (arm64 digest shown)
+# Deliberately unpinned: refresh-ytdlp.yml rebuilds daily off this tag so a new
+# yt-dlp release reaches users without a manual bump. The trade-off is that the
+# base can change under us (it dropped a preinstalled pip and moved to Python
+# 3.14), so the install step below must not assume anything beyond python3.
 FROM jauderho/yt-dlp:latest
 
 # Static labels (common to all builds)
@@ -31,12 +34,14 @@ COPY pyproject.toml ./
 # One single RUN via Dockerfile heredoc (requires BuildKit)
 RUN <<'BASH'
 set -eux
-# Temporary build deps (watchdog may need a build on musllinux/aarch64)
-apk add --no-cache --virtual .build-deps build-base python3-dev
+# Temporary build deps (watchdog may need a build on musllinux/aarch64).
+# py3-pip is one of them: the base image ships python3 without pip.
+apk add --no-cache --virtual .build-deps build-base python3-dev py3-pip
 
-# Upgrade pip and install runtime deps
-pip install --no-cache-dir --upgrade pip --break-system-packages
-pip install --no-cache-dir --only-binary=:all: --no-binary=watchdog --no-compile ".[docker]" --break-system-packages
+# Upgrade pip and install runtime deps. Always go through "python3 -m pip":
+# the base provides no "pip" executable on PATH.
+python3 -m pip install --no-cache-dir --upgrade pip --break-system-packages
+python3 -m pip install --no-cache-dir --only-binary=:all: --no-binary=watchdog --no-compile ".[docker]" --break-system-packages
 
 # Remove heavy optional deps not needed by HomeTube
 python - <<'PY'
