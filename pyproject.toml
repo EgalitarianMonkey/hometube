@@ -30,7 +30,7 @@ test = [
 ]
 
 dev = [
-    "black==26.3.1",
+    "black==26.5.1",
     "ruff==0.14.13",
     "watchdog>=6.0.0",
 ]
@@ -53,7 +53,7 @@ dev-dependencies = [
     "pytest-cov>=7.0.0",
     "pytest-mock>=3.15.1",
     "pytest-xdist>=3.8.0",
-    "black==26.3.1",
+    "black==26.5.1",
     "ruff==0.14.13",
     "watchdog>=6.0.0",
 ]
