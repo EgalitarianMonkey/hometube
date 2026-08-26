@@ -50,3 +50,43 @@ jobs:
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
+
+  # The image is only ever built by release.yml (on a v* tag) and by the daily
+  # refresh-ytdlp.yml, and that refresh skips the build whenever the yt-dlp
+  # version is unchanged. A broken Dockerfile could therefore sit on main for
+  # weeks and only surface at release time — which is exactly what happened when
+  # the unpinned base image dropped its preinstalled pip. Build and smoke-test
+  # it on every PR instead. Single-arch here for speed; release.yml still does
+  # the full amd64+arm64 build.
+  docker-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: hometube:ci
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the image
+        run: |
+          docker run -d --name hometube-ci hometube:ci
+          for i in $(seq 1 24); do
+            status=$(docker inspect hometube-ci --format '{{.State.Health.Status}}')
+            [ "$status" = "healthy" ] && break
+            [ "$(docker inspect hometube-ci --format '{{.State.Status}}')" != "running" ] && break
+            sleep 5
+          done
+          docker logs hometube-ci
+          test "$(docker inspect hometube-ci --format '{{.State.Health.Status}}')" = "healthy"
