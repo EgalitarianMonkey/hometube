@@ -17,6 +17,8 @@ import re
 
 from app.json_utils import safe_load_json, safe_save_json
 
+CONTENT_REPO_URL = "https://github.com/LatentNoise/content"
+
 
 class NotificationType(Enum):
     """Types of notifications with associated styling."""
@@ -263,6 +265,35 @@ def check_cleanup_notification_v260() -> Notification | None:
     )
 
 
+def check_content_announcement() -> Notification | None:
+    """
+    Announcement for Content, the next generation of HomeTube.
+
+    Shown once per user until dismissed. HomeTube keeps running and being
+    maintained, so this stays an invitation rather than a deprecation warning.
+    """
+    notification_id = "content_announcement"
+
+    if is_notification_dismissed(notification_id):
+        return None
+
+    return Notification(
+        id=notification_id,
+        title="HomeTube has grown into a platform: Content",
+        message=(
+            "The same self-hosted idea, taken further — URLs, files and text in; "
+            "media, transcripts, summaries, translations and documents out. "
+            "It ships a HomeTube app of its own, plus Content Studio, a REST API, "
+            "a Python SDK and CLI, a browser extension, and an MCP server your AI "
+            "agents can drive. **This HomeTube keeps running, and stays maintained.**"
+        ),
+        notification_type=NotificationType.INFO,
+        action_label="Discover Content",
+        action_url=CONTENT_REPO_URL,
+        icon="🌱",
+    )
+
+
 # === MAIN NOTIFICATION ENGINE ===
 
 
@@ -284,6 +315,11 @@ def get_active_notifications() -> list[Notification]:
     cleanup_notif = check_cleanup_notification_v260()
     if cleanup_notif:
         notifications.append(cleanup_notif)
+
+    # Announce Content, the next generation of HomeTube
+    content_notif = check_content_announcement()
+    if content_notif:
+        notifications.append(content_notif)
 
     return notifications
 
