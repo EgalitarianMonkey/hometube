@@ -23,6 +23,12 @@ Download, process, and organize ads-free best-quality videos at Home.
 
 <br/>
 
+**✨ HomeTube's workflow has grown into a platform: [Content](https://github.com/LatentNoise/content)**
+
+A new self-hosted engine built on the same idea, taken further: URLs, files and text in — media, transcripts, summaries, translations and documents out. It ships a HomeTube app of its own, plus Content Studio, a REST API, a Python SDK and CLI, a browser extension, and an MCP server your AI agents can drive. **HomeTube keeps being developed and maintained** — Content is where the idea goes next.
+
+<br/>
+
 </div>
 
 <br/>
@@ -591,8 +597,8 @@ DEBUG=1 python -c "import app.main" 2>/dev/null
 
 ### Development & Operations
 
-- **[Development Setup](docs/development-setup.md)** - Multi-environment development guide
-- **[UV Workflow Guide](docs/uv-workflow.md)** - Modern dependency management
+- **[Development Guide](docs/development.md)** - Multi-environment setup (pip, conda, uv)
+- **[Contributing Guide](docs/contributing.md)** - Workflow, standards, pull requests
 - **[Testing Documentation](docs/testing.md)** - Test framework and guidelines
 - **[Deployment Guide](docs/deployment.md)** - Production deployment strategies
 
@@ -620,16 +626,47 @@ DEBUG=1 python -c "import app.main" 2>/dev/null
 ## 📈 Project Status
 
 - ✅ **Stable**: Core functionality tested and reliable
-- 🔄 **Active Development**: Regular updates and improvements
+- 🔄 **Active Development**: Regular updates, fixes and fresh yt-dlp releases
 - 🧪 **Test Coverage**: 84% on testable modules ([details](docs/testing.md))
 - 📦 **Production Ready**: Docker images available on GHCR
 - 🏠 **HomeLab Optimized**: Designed for self-hosted environments
+- 🌱 **Next generation**: The platform it grew into is [Content](#-what-comes-next-content)
 
-## 📆 Coming Features
+## 🌱 What comes next: Content
 
-Check out the roadmap for upcoming features and enhancements:
+HomeTube does one job well: getting videos from the internet into a clean, self-hosted library. That workflow has grown into a platform.
 
-**📋 See the complete roadmap**: [docs/todo.md](docs/todo.md)
+**[Content](https://github.com/LatentNoise/content)** is a new self-hosted engine built on the same idea, taken further — URLs, files and text in; media, transcripts, summaries, translations, images, Markdown and PDF out. One backend, several independent front doors:
+
+|Client|What it is for|
+|------|--------------|
+|**HomeTube for Content**|The focused YouTube video and playlist app, rebuilt on the engine (`:8501`)|
+|**Content Studio**|The general-purpose web app for any source (`:8502`)|
+|**Chromium extension**|Send the tab you are already on (unpacked, from the release zip)|
+|**[MCP server](https://pypi.org/project/content-mcp/)**|`uv tool install content-mcp` — Claude, your IDE, or any MCP-compatible agent|
+|**[CLI](https://pypi.org/project/content-cli/)** · **[Python SDK](https://pypi.org/project/content-sdk/)**|`uv tool install content-cli` · `pip install content-sdk`|
+|**REST API**|Any language that speaks HTTP (`:8010/docs`)|
+
+**Where things stand.** HomeTube is the mature one and **keeps being developed** — this release is one of them. Content is the newer, broader engine, and it is where the most ambitious capabilities are being built: everything above is available today, and the two run happily side by side. Try it whenever you are curious.
+
+Two honest caveats before you do:
+
+- **Playlist *synchronization* has not made the trip yet.** Content downloads playlists — every item analyzed and planned on its own, named per item, delivered as its own artifact — but the plan/apply sync that keeps a local folder in step with a playlist over time (rename detection, archiving removed videos, relocation) is HomeTube-only for now. It is on [Content's roadmap](https://github.com/LatentNoise/content/blob/main/docs/roadmap/roadmap.md). If that is your main use, stay here for it.
+- **Both default to port `8501`.** Change one of them if you want to run the two side by side.
+
+<details>
+<summary><b>Try Content in four lines</b></summary>
+
+```bash
+mkdir content && cd content
+curl -fsSLO https://raw.githubusercontent.com/LatentNoise/content/main/deploy/docker-compose.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/LatentNoise/content/main/.env.example
+docker compose up -d
+```
+
+HomeTube for Content on <http://localhost:8501>, Content Studio on <http://localhost:8502>. Point `CONTENT_DELIVERY_DIR_HOST` at your media library in `.env` and its sub-folders become the destination choices.
+
+</details>
 
 ---
 
@@ -637,8 +674,8 @@ Check out the roadmap for upcoming features and enhancements:
 
 **For developers and contributors**, comprehensive guides are available:
 
-📖 **[Development Setup Guide](docs/development-setup.md)** - Environment setup  
-🔄 **[Contributing Guidelines](docs/development.md)** - Workflow and best practices
+📖 **[Development Guide](docs/development.md)** - Environment setup  
+🔄 **[Contributing Guidelines](docs/contributing.md)** - Workflow and best practices
 
 **Quick Setup Options:**
 
