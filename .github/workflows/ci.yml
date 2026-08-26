@@ -77,7 +77,10 @@ jobs:
           tags: hometube:ci
           platforms: linux/amd64
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # ignore-error keeps a cache-export race from failing the build: when a
+          # PR run and the main run export at the same time, one of them loses the
+          # reservation and buildx would otherwise abort an image that built fine.
+          cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Smoke-test the image
         run: |
