@@ -2,26 +2,34 @@
 #    uv pip compile pyproject.toml -o requirements/requirements.txt
 altair==6.2.2
     # via streamlit
+anyio==4.14.2
+    # via
+    #   starlette
+    #   streamlit
 attrs==26.1.0
     # via
     #   jsonschema
     #   referencing
 blinker==1.9.0
     # via streamlit
-cachetools==7.1.7
-    # via streamlit
 certifi==2026.7.22
     # via requests
 charset-normalizer==3.5.1
     # via requests
 click==8.4.2
-    # via streamlit
-gitdb==4.0.12
-    # via gitpython
-gitpython==3.1.59
+    # via
+    #   streamlit
+    #   uvicorn
+h11==0.16.0
+    # via uvicorn
+httptools==0.8.0
     # via streamlit
 idna==3.19
-    # via requests
+    # via
+    #   anyio
+    #   requests
+itsdangerous==2.2.0
+    # via streamlit
 jinja2==3.1.6
     # via
     #   altair
@@ -47,9 +55,9 @@ pandas==2.3.3
     # via streamlit
 pillow==12.3.0
     # via streamlit
-protobuf==6.32.0
+protobuf==7.36.0
     # via streamlit
-pyarrow==21.0.0
+pyarrow==25.0.1
     # via streamlit
 pydeck==0.9.3
     # via streamlit
@@ -57,6 +65,8 @@ python-dateutil==2.9.0.post0
     # via pandas
 python-dotenv==1.2.3
     # via hometube (pyproject.toml)
+python-multipart==0.0.32
+    # via streamlit
 pytz==2025.2
     # via pandas
 referencing==0.37.0
@@ -73,22 +83,26 @@ rpds-py==0.27.1
     #   referencing
 six==1.17.0
     # via python-dateutil
-smmap==5.0.3
-    # via gitdb
+starlette==1.6.0
+    # via streamlit
 streamlit==1.62.0
     # via hometube (pyproject.toml)
-tenacity==9.1.4
-    # via streamlit
 toml==0.10.2
-    # via streamlit
-tornado==6.5.8
     # via streamlit
 typing-extensions==4.16.0
     # via
     #   altair
+    #   anyio
     #   referencing
+    #   starlette
     #   streamlit
 tzdata==2025.2
     # via pandas
 urllib3==2.7.0
     # via requests
+uvicorn==0.52.4
+    # via streamlit
+watchdog==6.0.0
+    # via streamlit
+websockets==16.1.1
+    # via streamlit
