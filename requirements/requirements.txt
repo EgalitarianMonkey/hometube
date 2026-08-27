@@ -49,7 +49,7 @@ pillow==12.3.0
     # via streamlit
 protobuf==6.32.0
     # via streamlit
-pyarrow==21.0.0
+pyarrow==23.0.1
     # via streamlit
 pydeck==0.9.3
     # via streamlit
