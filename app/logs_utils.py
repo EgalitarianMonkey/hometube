@@ -5,12 +5,27 @@ Provides centralized logging functionality and error message analysis
 for better user experience and debugging.
 """
 
+import itertools
+
 import streamlit as st
 
 from app.constants import AUTH_ERROR_PATTERNS
 from app.file_system_utils import is_valid_cookie_file
 
 # === LOGGING FUNCTIONS ===
+
+
+# Streamlit refuses a widget key it has already seen during the same script run.
+# The "download logs" button used to discriminate on len(ALL_LOGS), which worked
+# only while that number kept climbing — the buffer is capped at MAX_LOG_LINES,
+# so on a long fragmented download the count sticks and every later render asks
+# for the same key (issue #123). A counter that only ever goes up cannot stick.
+_download_button_renders = itertools.count()
+
+
+def next_download_button_key(run_seq: int) -> str:
+    """Return a key no earlier render of the download-logs button has used."""
+    return f"download_logs_btn_{run_seq}_{next(_download_button_renders)}"
 
 
 def safe_push_log(message: str):
