@@ -47,7 +47,7 @@ pandas==2.3.3
     # via streamlit
 pillow==12.3.0
     # via streamlit
-protobuf==6.32.0
+protobuf==6.33.5
     # via streamlit
 pyarrow==21.0.0
     # via streamlit
