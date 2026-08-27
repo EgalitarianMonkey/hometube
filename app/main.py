@@ -78,6 +78,7 @@ from app.logs_utils import (
     log_authentication_error_hint,
     log_format_unavailable_error_hint,
     register_main_push_log,
+    next_download_button_key,
 )
 from app.cut_utils import (
     get_keyframes,
@@ -3355,9 +3356,6 @@ ALL_LOGS: list[str] = []  # global buffer (complete log content)
 # Fragmented (HLS) downloads emit one progress line per fragment, so the buffer
 # must stay bounded or memory grows for the whole download (issue #82)
 MAX_LOG_LINES = 10000
-run_unique_key = (
-    f"download_logs_btn_{st.session_state.run_seq}"  # unique key per execution
-)
 
 
 def render_download_button():
@@ -3368,8 +3366,8 @@ def render_download_button():
             data="\n".join(ALL_LOGS),
             file_name="logs.txt",
             mime="text/plain",
-            # Unique key with log count
-            key=f"download_logs_btn_{st.session_state.run_seq}_{len(ALL_LOGS)}",
+            # Fresh key every render — see next_download_button_key (issue #123)
+            key=next_download_button_key(st.session_state.run_seq),
         )
 
 
