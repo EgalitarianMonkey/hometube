@@ -278,14 +278,33 @@ def get_content_announcement_id(version: str | None = None) -> str:
     return f"content_announcement_v{'.'.join(parts[:2])}"
 
 
+# One concrete capability per release rather than the same pitch every time.
+# These are written for people who already run their own containers: a specific
+# thing the engine does, in one line, with no adjectives to sell it. The angle
+# rotates with the minor version, so a returning user meets a new detail instead
+# of a banner they have already read and ignored.
+CONTENT_ANGLES = (
+    "It speaks MCP, so Claude, your IDE or any agent can drive your library.",
+    "REST API, CLI and a typed Python SDK — scriptable from anything that speaks HTTP.",
+    "Beyond video: transcripts, summaries, translations and documents, from URLs, files or plain text.",
+)
+
+
+def get_content_angle(version: str | None = None) -> str:
+    """Pick this release's angle, deterministically, from the minor version."""
+    minor = parse_version(version or get_current_version())[1]
+    return CONTENT_ANGLES[minor % len(CONTENT_ANGLES)]
+
+
 def check_content_announcement() -> Notification | None:
     """
-    Announcement for Content, the platform HomeTube grew into.
+    A one-line note about Content, the engine HomeTube grew into.
 
-    Re-offered once per feature release rather than once ever: someone who
-    dismissed it a year ago should still hear about what Content became. It
-    stays a single, dismissible line — an invitation, never a deprecation
-    warning, since HomeTube keeps being developed.
+    Deliberately shaped like the update notice rather than like an ad: same
+    length, same weight, one concrete fact and a link. It is offered once per
+    feature release — someone who dismissed it a year ago should still hear
+    what Content became — and never alongside another notification, see
+    get_active_notifications().
     """
     notification_id = get_content_announcement_id()
 
@@ -294,16 +313,10 @@ def check_content_announcement() -> Notification | None:
 
     return Notification(
         id=notification_id,
-        title="HomeTube has grown into a platform: Content",
-        message=(
-            "The same self-hosted idea, taken further — URLs, files and text in; "
-            "media, transcripts, summaries, translations and documents out. "
-            "It ships a HomeTube app of its own, plus Content Studio, a REST API, "
-            "a Python SDK and CLI, a browser extension, and an MCP server your AI "
-            "agents can drive. **HomeTube keeps running, and keeps being developed.**"
-        ),
+        title="Content — where HomeTube goes next",
+        message=get_content_angle(),
         notification_type=NotificationType.INFO,
-        action_label="Discover Content",
+        action_label="Take a look",
         action_url=CONTENT_REPO_URL,
         icon="🌱",
     )
@@ -314,29 +327,31 @@ def check_content_announcement() -> Notification | None:
 
 def get_active_notifications() -> list[Notification]:
     """
-    Get all active notifications that should be displayed.
+    Return at most one notification, the most useful one right now.
 
-    This function checks all notification sources and returns
-    only the ones that haven't been dismissed.
+    Stacking is what makes a header feel invasive: two banners at once read as
+    clutter no matter how politely each is worded. So the sources are ranked and
+    the first match wins.
+
+    The order is by what the user gains from acting on it. A pending update is
+    time-sensitive and about the thing they are already running, so it outranks
+    everything. The Content note is an invitation with no deadline, so it waits
+    its turn — and lands naturally on the visit *after* an upgrade, when there
+    is no update left to report. Housekeeping comes last; it is never urgent.
+
+    Anything skipped is not lost: it surfaces once whatever outranked it is
+    dismissed or no longer applies.
     """
-    notifications = []
+    for check in (
+        check_update_notification,
+        check_content_announcement,
+        check_cleanup_notification_v260,
+    ):
+        notification = check()
+        if notification:
+            return [notification]
 
-    # Check for update notification
-    update_notif = check_update_notification()
-    if update_notif:
-        notifications.append(update_notif)
-
-    # Check for v2.6.0 cleanup notification
-    cleanup_notif = check_cleanup_notification_v260()
-    if cleanup_notif:
-        notifications.append(cleanup_notif)
-
-    # Announce Content, the next generation of HomeTube
-    content_notif = check_content_announcement()
-    if content_notif:
-        notifications.append(content_notif)
-
-    return notifications
+    return []
 
 
 def render_notifications_streamlit() -> None:

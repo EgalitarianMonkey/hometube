@@ -1,5 +1,6 @@
 """Tests for the notification engine."""
 
+from contextlib import contextmanager
 from unittest.mock import patch
 
 from app.notifications import (
@@ -15,6 +16,9 @@ from app.notifications import (
     check_cleanup_notification_v260,
     check_content_announcement,
     get_content_announcement_id,
+    get_content_angle,
+    get_active_notifications,
+    CONTENT_ANGLES,
     CONTENT_REPO_URL,
 )
 
@@ -305,18 +309,108 @@ class TestContentAnnouncement:
                 assert notif is not None
                 assert notif.id == "content_announcement_v2.12"
 
-    def test_announcement_does_not_deprecate_hometube(self, tmp_path):
-        """HomeTube stays maintained, so the wording must not read as an EOL notice."""
-        state_file = tmp_path / "notifications.json"
+    def test_no_angle_deprecates_hometube(self):
+        """HomeTube stays maintained, so no angle may read as an EOL notice."""
+        for angle in CONTENT_ANGLES:
+            lowered = angle.lower()
+            for word in (
+                "deprecated",
+                "end of life",
+                "sunset",
+                "discontinued",
+                "migrate",
+                "instead of hometube",
+                "replaces",
+            ):
+                assert word not in lowered, f"{word!r} in {angle!r}"
+
+    def test_angles_stay_one_line(self):
+        """The note earns its subtlety by being as short as the update notice."""
+        for angle in CONTENT_ANGLES:
+            assert len(angle) <= 110, f"{len(angle)} chars: {angle!r}"
+            assert angle.count(".") <= 2
+
+    def test_angle_rotates_with_the_release(self):
+        """A returning user meets a new detail, not the banner they already read."""
+        seen = [get_content_angle(f"2.{minor}.0") for minor in range(11, 17)]
+
+        assert len(set(seen)) == len(CONTENT_ANGLES)
+        assert get_content_angle("2.11.0") == get_content_angle("2.11.9")
+        assert get_content_angle("2.11.0") != get_content_angle("2.12.0")
+
+
+class TestOneNotificationAtATime:
+    """Stacked banners are what makes a header invasive — only one may show."""
+
+    @contextmanager
+    def _state(self, tmp_path):
+        """Isolate both the dismissal file and the tmp folder.
+
+        The cleanup notification inspects the real configured tmp folder, so
+        without pinning it here this suite would see whatever other tests left
+        behind and the ranking assertions would depend on execution order.
+        """
+        tmp_folder = tmp_path / "tmp"
+        tmp_folder.mkdir()
 
         with patch(
-            "app.notifications.get_notifications_file_path", return_value=state_file
+            "app.notifications.get_notifications_file_path",
+            return_value=tmp_path / "notifications.json",
         ):
-            notif = check_content_announcement()
+            with patch(
+                "app.config.ensure_folders_exist",
+                return_value=(tmp_path / "videos", tmp_folder),
+            ):
+                yield
 
-            assert "keeps running" in notif.message
-            for word in ("deprecated", "end of life", "sunset", "discontinued"):
-                assert word not in notif.message.lower()
+    def test_update_outranks_the_content_note(self, tmp_path):
+        """A pending update is time-sensitive, so it wins and Content waits."""
+        with self._state(tmp_path):
+            with patch("app.notifications.get_current_version", return_value="2.11.0"):
+                with patch(
+                    "app.notifications.get_latest_version", return_value="2.12.0"
+                ):
+                    active = get_active_notifications()
+
+                    assert len(active) == 1
+                    assert active[0].id == "update_2.12.0"
+
+    def test_content_note_surfaces_once_the_update_is_dismissed(self, tmp_path):
+        """Nothing is lost — what was outranked appears next."""
+        with self._state(tmp_path):
+            with patch("app.notifications.get_current_version", return_value="2.11.0"):
+                with patch(
+                    "app.notifications.get_latest_version", return_value="2.12.0"
+                ):
+                    dismiss_notification("update_2.12.0")
+
+                    active = get_active_notifications()
+
+                    assert len(active) == 1
+                    assert active[0].id == "content_announcement_v2.11"
+
+    def test_content_note_after_upgrading(self, tmp_path):
+        """On the visit after an upgrade there is no update left, so Content shows."""
+        with self._state(tmp_path):
+            with patch("app.notifications.get_current_version", return_value="2.12.0"):
+                with patch(
+                    "app.notifications.get_latest_version", return_value="2.12.0"
+                ):
+                    active = get_active_notifications()
+
+                    assert len(active) == 1
+                    assert active[0].id == "content_announcement_v2.12"
+
+    def test_nothing_when_everything_is_dismissed(self, tmp_path):
+        """A quiet header is the normal state."""
+        with self._state(tmp_path):
+            with patch("app.notifications.get_current_version", return_value="2.12.0"):
+                with patch(
+                    "app.notifications.get_latest_version", return_value="2.12.0"
+                ):
+                    dismiss_notification("content_announcement_v2.12")
+
+                    assert get_active_notifications() == []
 
 
 class TestNotificationDataclass:
