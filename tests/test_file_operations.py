@@ -1,6 +1,10 @@
 """Tests for file operation utilities (copy_file, move_file, cleanup)"""
 
+import errno
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 
 class TestFileOperations:
@@ -130,6 +134,93 @@ class TestRemoveTmpFilesConfig:
 
         # Should match the config default
         assert result == settings.REMOVE_TMP_FILES_AFTER_DOWNLOAD
+
+
+class TestMoveAcrossFilesystems:
+    """The cross-device fallback, as hit when /data/tmp and /data/Videos differ.
+
+    Reproduces issue #122: a CIFS/SMB destination accepts the bytes but rejects
+    utime(), so metadata preservation must never be able to fail the move.
+    """
+
+    def _cross_device(self):
+        """Make shutil.move() behave as it does across two mounts."""
+        return patch(
+            "app.file_system_utils.shutil.move",
+            side_effect=OSError(errno.EXDEV, "Cross-device link"),
+        )
+
+    def _prepare(self, tmp_path, content="video content"):
+        source = tmp_path / "tmp" / "final.mkv"
+        source.parent.mkdir(parents=True)
+        source.write_text(content)
+        return source, tmp_path / "videos" / "My Video.mkv"
+
+    def test_move_completes_when_the_share_rejects_utime(self, tmp_path):
+        """The reported crash: content is copied, then copystat() blows up."""
+        from app.file_system_utils import move_final_to_destination
+
+        source, destination = self._prepare(tmp_path)
+
+        with self._cross_device():
+            with patch(
+                "app.file_system_utils.shutil.copystat",
+                side_effect=PermissionError(errno.EPERM, "Operation not permitted"),
+            ):
+                result = move_final_to_destination(source, destination)
+
+        assert result == destination
+        assert destination.read_text() == "video content"
+        assert not source.exists(), "source must still be reclaimed"
+
+    def test_utime_failure_is_reported_not_raised(self, tmp_path):
+        """The user should see why timestamps differ, not a traceback."""
+        from app.file_system_utils import move_final_to_destination
+
+        source, destination = self._prepare(tmp_path)
+        logged = []
+
+        with self._cross_device():
+            with patch(
+                "app.file_system_utils.shutil.copystat",
+                side_effect=PermissionError(errno.EPERM, "Operation not permitted"),
+            ):
+                move_final_to_destination(source, destination, logged.append)
+
+        assert any("timestamps" in line for line in logged)
+        assert any("✅ Moved to" in line for line in logged)
+
+    def test_cross_device_move_without_metadata_trouble(self, tmp_path):
+        """The ordinary cross-device case still moves and still copies stat."""
+        from app.file_system_utils import move_final_to_destination
+
+        source, destination = self._prepare(tmp_path, "another video")
+
+        with self._cross_device():
+            with patch("app.file_system_utils.shutil.copystat") as copystat:
+                move_final_to_destination(source, destination)
+
+        assert copystat.called, "timestamps are preserved where the share allows it"
+        assert destination.read_text() == "another video"
+        assert not source.exists()
+
+    def test_short_copy_keeps_the_source(self, tmp_path):
+        """Never delete the only complete copy because the destination lied."""
+        from app.file_system_utils import move_final_to_destination
+
+        source, destination = self._prepare(tmp_path, "a much longer payload")
+
+        def truncated_copy(src, dst):
+            Path(dst).write_text("trunc")
+
+        with self._cross_device():
+            with patch(
+                "app.file_system_utils.shutil.copyfile", side_effect=truncated_copy
+            ):
+                with pytest.raises(OSError, match="Incomplete copy"):
+                    move_final_to_destination(source, destination)
+
+        assert source.exists(), "source must survive an incomplete copy"
 
 
 class TestMoveFinalToDestination:

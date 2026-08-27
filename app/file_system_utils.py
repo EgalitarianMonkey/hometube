@@ -225,7 +225,29 @@ def move_final_to_destination(
         # Cross-device move - fallback to copy + delete
         if log_fn:
             log_fn(f"ℹ️ Cross-device move detected, using copy+delete: {e}")
-        shutil.copy2(str(source), str(destination))
+
+        # copyfile, not copy2: copy2 also runs copystat(), whose utime() call is
+        # rejected outright on CIFS/SMB shares. That raised PermissionError
+        # *after* the bytes had already landed intact, aborting the move and the
+        # surrounding playlist over a timestamp (issue #122).
+        shutil.copyfile(str(source), str(destination))
+
+        # Timestamps are a nicety. Preserve them where the filesystem allows it,
+        # never at the cost of a copy that already succeeded.
+        try:
+            shutil.copystat(str(source), str(destination))
+        except OSError as stat_error:
+            if log_fn:
+                log_fn(f"ℹ️ Destination kept its own timestamps: {stat_error}")
+
+        # The source is about to be deleted, so confirm the copy is whole first.
+        copied = destination.stat().st_size
+        expected = source.stat().st_size
+        if copied != expected:
+            raise OSError(
+                f"Incomplete copy to {destination}: {copied} of {expected} bytes"
+            ) from e
+
         source.unlink()
 
     if log_fn:
