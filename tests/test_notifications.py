@@ -14,6 +14,7 @@ from app.notifications import (
     check_update_notification,
     check_cleanup_notification_v260,
     check_content_announcement,
+    get_content_announcement_id,
     CONTENT_REPO_URL,
 )
 
@@ -255,7 +256,7 @@ class TestContentAnnouncement:
             notif = check_content_announcement()
 
             assert notif is not None
-            assert notif.id == "content_announcement"
+            assert notif.id == get_content_announcement_id()
             assert notif.action_url == CONTENT_REPO_URL
             assert notif.notification_type == NotificationType.INFO
 
@@ -266,9 +267,43 @@ class TestContentAnnouncement:
         with patch(
             "app.notifications.get_notifications_file_path", return_value=state_file
         ):
-            dismiss_notification("content_announcement")
+            dismiss_notification(get_content_announcement_id())
 
             assert check_content_announcement() is None
+
+    def test_id_tracks_the_minor_version(self):
+        """The id carries major.minor, so patches share it and minors do not."""
+        assert get_content_announcement_id("2.11.0") == "content_announcement_v2.11"
+        assert get_content_announcement_id("2.11.4") == get_content_announcement_id(
+            "2.11.0"
+        )
+        assert get_content_announcement_id("2.12.0") != get_content_announcement_id(
+            "2.11.0"
+        )
+        assert get_content_announcement_id("3.0.0") != get_content_announcement_id(
+            "2.11.0"
+        )
+
+    def test_reappears_after_a_feature_release(self, tmp_path):
+        """A dismissal covers its own release and its patches, not the next minor."""
+        state_file = tmp_path / "notifications.json"
+
+        with patch(
+            "app.notifications.get_notifications_file_path", return_value=state_file
+        ):
+            with patch("app.notifications.get_current_version", return_value="2.11.0"):
+                dismiss_notification(get_content_announcement_id())
+                assert check_content_announcement() is None
+
+            # A patch on top of it stays silent.
+            with patch("app.notifications.get_current_version", return_value="2.11.3"):
+                assert check_content_announcement() is None
+
+            # The next feature release offers it again.
+            with patch("app.notifications.get_current_version", return_value="2.12.0"):
+                notif = check_content_announcement()
+                assert notif is not None
+                assert notif.id == "content_announcement_v2.12"
 
     def test_announcement_does_not_deprecate_hometube(self, tmp_path):
         """HomeTube stays maintained, so the wording must not read as an EOL notice."""
