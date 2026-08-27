@@ -324,11 +324,21 @@ class TestContentAnnouncement:
             ):
                 assert word not in lowered, f"{word!r} in {angle!r}"
 
-    def test_angles_stay_one_line(self):
-        """The note earns its subtlety by being as short as the update notice."""
+    def test_angles_stay_glanceable(self):
+        """Short enough to read without deciding to — one sentence, no list.
+
+        The cap is the whole point of the note: past roughly a line it stops
+        being a detail in passing and starts being a paragraph asking for
+        attention, which is the thing that makes a header feel like an ad.
+        """
         for angle in CONTENT_ANGLES:
-            assert len(angle) <= 110, f"{len(angle)} chars: {angle!r}"
-            assert angle.count(".") <= 2
+            assert len(angle) <= 60, f"{len(angle)} chars: {angle!r}"
+            assert angle.count(".") <= 2, f"more than one sentence: {angle!r}"
+
+    def test_enough_angles_to_stay_fresh(self):
+        """A line should not come back before the user has forgotten it."""
+        assert len(CONTENT_ANGLES) >= 4
+        assert len(set(CONTENT_ANGLES)) == len(CONTENT_ANGLES)
 
     def test_angle_rotates_with_the_release(self):
         """A returning user meets a new detail, not the banner they already read."""

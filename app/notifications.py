@@ -279,14 +279,18 @@ def get_content_announcement_id(version: str | None = None) -> str:
 
 
 # One concrete capability per release rather than the same pitch every time.
-# These are written for people who already run their own containers: a specific
-# thing the engine does, in one line, with no adjectives to sell it. The angle
-# rotates with the minor version, so a returning user meets a new detail instead
-# of a banner they have already read and ignored.
+# Written for people who already run their own containers: a specific thing the
+# engine does, short enough to read without deciding to — the goal is a glance,
+# not a paragraph. No adjectives, nothing to sell; the link does the rest.
+#
+# The angle rotates with the minor version, so a returning user meets a new
+# detail instead of a banner they have learned to skip. Four of them means the
+# same line comes back only every fourth release.
 CONTENT_ANGLES = (
-    "It speaks MCP, so Claude, your IDE or any agent can drive your library.",
-    "REST API, CLI and a typed Python SDK — scriptable from anything that speaks HTTP.",
-    "Beyond video: transcripts, summaries, translations and documents, from URLs, files or plain text.",
+    "It speaks MCP — drive it from Claude or your IDE.",
+    "REST API, CLI and a Python SDK, included.",
+    "Not just video: transcripts, summaries, translations.",
+    "Send any page to it, straight from your browser.",
 )
 
 
