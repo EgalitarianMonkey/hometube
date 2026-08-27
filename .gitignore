@@ -75,3 +75,6 @@ logs/
 # Docker volumes and data
 docker-volumes/
 data/
+
+# Ignore work folder
+work/
