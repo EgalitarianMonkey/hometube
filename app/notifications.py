@@ -287,17 +287,26 @@ def get_content_announcement_id(version: str | None = None) -> str:
 # detail instead of a banner they have learned to skip. Four of them means the
 # same line comes back only every fourth release.
 CONTENT_ANGLES = (
+    "A backend with a job queue — downloads run in parallel.",
+    "One engine, many jobs: queue a batch and walk away.",
     "It speaks MCP — drive it from Claude or your IDE.",
     "REST API, CLI and a Python SDK, included.",
     "Not just video: transcripts, summaries, translations.",
     "Send any page to it, straight from your browser.",
 )
 
+# Rotation starts here rather than at minor 0, so CONTENT_ANGLES is ordered by
+# what lands best and index 0 is what the current release actually shows.
+# Appending an angle then extends the rotation instead of silently reshuffling
+# which one every past release would have served.
+CONTENT_ANGLES_FIRST_MINOR = 12
+
 
 def get_content_angle(version: str | None = None) -> str:
     """Pick this release's angle, deterministically, from the minor version."""
     minor = parse_version(version or get_current_version())[1]
-    return CONTENT_ANGLES[minor % len(CONTENT_ANGLES)]
+    offset = (minor - CONTENT_ANGLES_FIRST_MINOR) % len(CONTENT_ANGLES)
+    return CONTENT_ANGLES[offset]
 
 
 def check_content_announcement() -> Notification | None:

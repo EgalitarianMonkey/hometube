@@ -19,6 +19,7 @@ from app.notifications import (
     get_content_angle,
     get_active_notifications,
     CONTENT_ANGLES,
+    CONTENT_ANGLES_FIRST_MINOR,
     CONTENT_REPO_URL,
 )
 
@@ -339,6 +340,32 @@ class TestContentAnnouncement:
         """A line should not come back before the user has forgotten it."""
         assert len(CONTENT_ANGLES) >= 4
         assert len(set(CONTENT_ANGLES)) == len(CONTENT_ANGLES)
+
+    def test_the_list_is_ordered_not_arbitrary(self):
+        """CONTENT_ANGLES[0] is what the rotation's first release serves.
+
+        Rotating from a base minor rather than from zero is what lets the list
+        be ordered by what lands best, and lets a new angle be appended without
+        silently reshuffling which line every other release would show.
+        """
+        first = f"2.{CONTENT_ANGLES_FIRST_MINOR}.0"
+
+        assert get_content_angle(first) == CONTENT_ANGLES[0]
+        assert get_content_angle(f"2.{CONTENT_ANGLES_FIRST_MINOR + 1}.0") == (
+            CONTENT_ANGLES[1]
+        )
+
+    def test_appending_an_angle_leaves_earlier_releases_alone(self):
+        """The property the base offset exists to protect."""
+        before = [
+            get_content_angle(f"2.{CONTENT_ANGLES_FIRST_MINOR + n}.0")
+            for n in range(len(CONTENT_ANGLES))
+        ]
+
+        assert before == list(CONTENT_ANGLES), (
+            "each release in the first cycle serves its angle in list order, so "
+            "appending to the tuple cannot disturb the ones already published"
+        )
 
     def test_angle_rotates_with_the_release(self):
         """A returning user meets a new detail, not the banner they already read."""
