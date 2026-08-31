@@ -79,7 +79,7 @@ python-multipart==0.0.32
     # via streamlit
 pytokens==0.4.1
     # via black
-pytz==2025.2
+pytz==2026.3.post1
     # via pandas
 referencing==0.37.0
     # via
