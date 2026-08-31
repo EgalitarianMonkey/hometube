@@ -110,7 +110,7 @@ typing-extensions==4.16.0
     #   referencing
     #   starlette
     #   streamlit
-tzdata==2025.2
+tzdata==2026.3
     # via pandas
 urllib3==2.7.0
     # via requests
