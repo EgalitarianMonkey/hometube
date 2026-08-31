@@ -3,6 +3,10 @@ name = "hometube"
 version = "2.12.1"
 description = "HomeTube development workspace"
 requires-python = ">=3.11"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Yann Orieult" }]
+maintainers = [{ name = "Yann Orieult" }]
 
 dependencies = [
     "streamlit>=1.49,<1.63",
