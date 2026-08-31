@@ -52,7 +52,7 @@ numpy==2.4.6
     #   pandas
     #   pydeck
     #   streamlit
-packaging==25.0
+packaging==26.3
     # via
     #   altair
     #   black
