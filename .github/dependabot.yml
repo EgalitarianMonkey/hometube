@@ -12,15 +12,20 @@ updates:
       timezone: "Europe/Zurich"
     open-pull-requests-limit: 5
     ignore:
-      # numpy is a transitive dep of streamlit, which still pins "numpy<3".
-      # Dependabot proposes the major bump anyway and CI stays green (nothing
-      # imports numpy directly), but the resulting environment violates
-      # streamlit's own constraint. Drop this once streamlit allows 3.x.
+      # Transitive deps of streamlit whose majors its own pins forbid:
+      # "numpy<3" and "websockets<17" as of streamlit 1.62. Dependabot proposes
+      # them anyway and CI stays green — nothing imports either directly, and
+      # CI installs from pyproject.toml rather than from these files — but the
+      # resulting requirements would contradict streamlit's constraint.
+      # Re-check both against streamlit's requires_dist when its pin moves,
+      # and drop the entry rather than carrying it out of habit.
       #
-      # pandas used to be listed here for the same reason. streamlit 1.62
-      # widened its pin to "pandas<4", so major pandas updates are allowed
-      # again and are no longer ignored.
+      # pandas and pillow were both listed here for the same reason under
+      # streamlit 1.49 ("pandas<3", "pillow<12"). 1.62 widened them to
+      # "pandas<4" and "pillow<13", so their majors flow again.
       - dependency-name: "numpy"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "websockets"
         update-types: ["version-update:semver-major"]
     groups:
       python-minor-patch:
