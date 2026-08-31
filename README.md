@@ -707,7 +707,9 @@ Every contribution is appreciated! 🙏
 
 ## 📄 License
 
-This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE) file for details.
+HomeTube is free software under the **GNU Affero General Public License, version 3 or later** — see [LICENSE](LICENSE) for the full text.
+
+Copyright © 2025-2026 Yann Orieult, sole author except for third-party contributions received under the project licence. [NOTICE](NOTICE) records copyright and attribution, [AUTHORS](AUTHORS) lists everyone who has contributed, and [CONTRIBUTING.md](CONTRIBUTING.md#-licensing-of-contributions) sets out the terms that apply to new contributions.
 
 ## 🙏 Acknowledgments
 
