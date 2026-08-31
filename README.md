@@ -13,7 +13,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.49+-red.svg)](https://streamlit.io)
 [![Latest Release](https://img.shields.io/github/v/release/EgalitarianMonkey/hometube)](https://github.com/EgalitarianMonkey/hometube/releases)
 [![Docker Image](https://ghcr-badge.egpl.dev/egalitarianmonkey/hometube/latest_tag?trim=major&label=Docker)](https://github.com/EgalitarianMonkey/hometube/pkgs/container/hometube)
-[![License](https://img.shields.io/badge/License-AGPL--3.0-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL--3.0--or--later-green.svg)](LICENSE)
 
 <br/>
 

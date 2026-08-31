@@ -104,6 +104,29 @@ Example PR checklist:
 
 ---
 
+## 📜 Licensing of contributions
+
+HomeTube is licensed under the **AGPL-3.0-or-later** — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+By submitting a contribution — a pull request, a patch, or any code, documentation or other material — you agree to all of the following.
+
+- **You keep your copyright.** Nothing here assigns it or takes it away from you.
+- **You license your contribution under the project licence**, AGPL-3.0-or-later, so that it can be distributed as part of HomeTube.
+- **You grant the project's author a perpetual, worldwide, irrevocable, royalty-free right to relicense your contribution**, including under commercial or proprietary terms, as part of HomeTube or a work derived from it.
+- **You confirm you are entitled to grant this** — the work is yours, or you have permission from whoever owns it, an employer for instance.
+
+### Why the relicensing grant is asked
+
+HomeTube is one person's project, released under a copyleft licence. Without this grant, any future change to how HomeTube is offered — a commercial edition, a different licence, inclusion in a differently-licensed work — would require locating every past contributor and obtaining their individual agreement. Asking once, up front, keeps that option open rather than quietly closing it with each merge.
+
+The grant does not make your contribution any less free: it stays under the AGPL for everyone, exactly as before.
+
+### If you would rather not grant it
+
+Say so in your pull request. Your contribution can still be accepted under the AGPL alone. It simply means it could not be included in any future relicensing, and might have to be reimplemented if that ever happens — so it is better said openly at the time than discovered later.
+
+---
+
 ## 🔐 Security
 
 - Never submit API keys, cookies, or tokens.  
