@@ -1,11 +1,11 @@
-HomeTube — authors and contributors
+HomeTube — authorship
 
 See NOTICE for copyright and licensing, and LICENSE for the licence text.
 
 Author and maintainer
 ---------------------
 
-Yann Orieult
+Yann Orieult — creator, sole author and maintainer.
 
   Commits appear in this repository under several git identities. They are all
   the same person:
@@ -21,11 +21,10 @@ Yann Orieult
 Contributors
 ------------
 
-Contributions below were received under the project licence; their authors
-retain copyright in them. See NOTICE for the details of each.
+None. No third party holds copyright in any part of the current codebase.
 
-  Devon Campbell  <devon@radworks.io>
-    Jellyfin integration — commit 1ad1d32, 2025-10-21, pull request #54.
+Contributions are welcome under the terms in CONTRIBUTING.md, which require a
+grant permitting relicensing — see NOTICE for why that matters.
 
 Automated dependency updates are made by dependabot[bot]. They carry no
-copyrightable authorship and no contributor is listed for them.
+copyrightable authorship.

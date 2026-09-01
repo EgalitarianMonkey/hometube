@@ -1,124 +1,75 @@
-"""
-Post-download integrations (e.g., Jellyfin refresh hooks).
-"""
+"""Optional hand-offs to external media services once a download completes.
 
-from __future__ import annotations
-
-from dataclasses import dataclass
-from collections.abc import Callable
+Every integration here is inert until it is configured, and none of them may
+turn a successful download into a failed one. The file is already on disk by
+the time any of this runs; a media server that is asleep, unreachable or
+misconfigured is a footnote, not an error. So each helper swallows its own
+transport failures, reports them through the caller's logger and returns a
+boolean rather than raising.
+"""
 
 import requests
 
 from app.config import get_settings
 
-DEFAULT_TIMEOUT = 10
+# Jellyfin's public API: an authenticated POST asking the server to rescan its
+# libraries. The token travels in a header rather than the query string so it
+# does not end up in the server's access log.
+JELLYFIN_REFRESH_PATH = "/Library/Refresh"
+JELLYFIN_AUTH_HEADER = "X-Emby-Token"
+JELLYFIN_TIMEOUT_SECONDS = 5
 
 
-@dataclass(frozen=True)
-class JellyfinScanResult:
-    """Result of a Jellyfin library refresh attempt."""
-
-    success: bool
-    message: str
-    status_code: int | None = None
-
-
-def trigger_jellyfin_library_scan(
-    base_url: str,
-    api_key: str,
-    session: requests.Session | None = None,
-    log: Callable[[str], None] | None = None,
-) -> JellyfinScanResult:
-    """
-    Trigger a Jellyfin library scan (all libraries).
-
-    Args:
-        base_url: Base URL of the Jellyfin server (e.g., https://jellyfin.local:8096).
-        api_key: Jellyfin API key (X-Emby-Token).
-        session: Optional pre-configured requests Session (helps testing).
-        log: Optional callable used for diagnostic logging.
-
-    Returns:
-        JellyfinScanResult indicating success or failure.
-    """
-    if not base_url or not api_key:
-        return JellyfinScanResult(
-            success=False,
-            message="Missing Jellyfin base URL or API key.",
-        )
-
-    logger = log or (lambda _: None)
-    client = session or requests.Session()
-    normalized_url = base_url.rstrip("/")
-    headers = {
-        "X-Emby-Token": api_key.strip(),
-    }
-
-    refresh_endpoint = f"{normalized_url}/Library/Refresh"
-    try:
-        logger(f"POST {refresh_endpoint} (full library scan)")
-        response = client.post(
-            refresh_endpoint,
-            headers=headers,
-            timeout=DEFAULT_TIMEOUT,
-        )
-    except requests.RequestException as exc:
-        error_message = f"Jellyfin refresh request failed: {exc}"
-        logger(error_message)
-        return JellyfinScanResult(
-            success=False,
-            message=error_message,
-        )
-
-    if 200 <= response.status_code < 300:
-        return JellyfinScanResult(
-            success=True,
-            message="Jellyfin library refresh triggered successfully.",
-            status_code=response.status_code,
-        )
-
-    try:
-        response_text = response.text.strip()
-    except Exception:  # noqa: BLE001
-        response_text = ""
-
-    failure_message = (
-        f"Jellyfin refresh failed with status {response.status_code}. {response_text}"
-    ).strip()
-    logger(failure_message)
-    return JellyfinScanResult(
-        success=False,
-        message=failure_message,
-        status_code=response.status_code,
+def jellyfin_is_configured() -> bool:
+    """True when both a server URL and an API key are set."""
+    settings = get_settings()
+    return bool(
+        (settings.JELLYFIN_BASE_URL or "").strip()
+        and (settings.JELLYFIN_API_KEY or "").strip()
     )
 
 
-def post_download_actions(
-    log: Callable[[str], None],
-    log_title: Callable[[str], None],
-) -> None:
-    """
-    Execute media server integrations after a successful download.
+def trigger_jellyfin_library_scan(log_fn=None) -> bool:
+    """Ask Jellyfin to rescan its libraries so a new file is picked up.
 
-    Currently triggers a Jellyfin full-library refresh when configured.
+    Returns True only when the server accepted the request. Returns False when
+    the integration is not configured or the call did not succeed; it never
+    raises, deliberately — see the module docstring.
     """
     settings = get_settings()
-    base_url = (settings.JELLYFIN_BASE_URL or "").strip()
+    base_url = (settings.JELLYFIN_BASE_URL or "").strip().rstrip("/")
     api_key = (settings.JELLYFIN_API_KEY or "").strip()
 
-    if not (base_url and api_key):
+    if not base_url or not api_key:
+        return False
+
+    try:
+        response = requests.post(
+            f"{base_url}{JELLYFIN_REFRESH_PATH}",
+            headers={JELLYFIN_AUTH_HEADER: api_key},
+            timeout=JELLYFIN_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+    except requests.RequestException as error:
+        if log_fn:
+            log_fn(f"⚠️ Jellyfin library scan could not be requested: {error}")
+        return False
+
+    if log_fn:
+        log_fn("✅ Jellyfin library scan requested")
+    return True
+
+
+def post_download_actions(log_fn=None, title_fn=None) -> None:
+    """Run whatever should happen once a download has finished.
+
+    Stays silent when nothing is configured, so users who run no media server
+    never see a section about one.
+    """
+    if not jellyfin_is_configured():
         return
 
-    log("")
-    log_title("📡 Jellyfin Integration")
+    if title_fn:
+        title_fn("Post-download actions")
 
-    result = trigger_jellyfin_library_scan(
-        base_url=base_url,
-        api_key=api_key,
-        log=log,
-    )
-
-    if result.success:
-        log(result.message)
-    else:
-        log(f"⚠️ {result.message}")
+    trigger_jellyfin_library_scan(log_fn)

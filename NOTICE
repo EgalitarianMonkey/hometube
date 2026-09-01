@@ -30,30 +30,13 @@ each component for its licence.
 
 No additional restriction is imposed beyond the licences that apply.
 
-Third-party contributions
--------------------------
-
-The following contributions were received from their authors under the terms of
-this project's licence. Copyright in them is held by their respective authors,
-not by the author of this project.
-
-  Devon Campbell <devon@radworks.io>
-  Jellyfin integration — commit 1ad1d32, 2025-10-21, pull request #54.
-  9 files changed, 268 insertions, 6 deletions. Introduced
-  app/integrations_utils.py, tests/test_config_jellyfin.py and
-  tests/test_jellyfin_integration.py; modified app/config.py, app/main.py,
-  .env.sample, README.md, docs/docker.md and docs/installation.md.
-
-  Received under the AGPL-3.0-or-later terms of this repository. No copyright
-  assignment and no relicensing grant were requested or given at the time.
-
 Copyright ownership
 -------------------
 
-Copyright in this project is held by Yann Orieult, sole author except for the
-third-party contributions listed above, which remain with their authors.
+Copyright in this project is held by Yann Orieult alone. No third party holds
+copyright in any part of the current codebase.
 
-Because those contributions were received under the AGPL alone, offering
-HomeTube as a whole under different terms would require the agreement of their
-authors, or the replacement of their work. CONTRIBUTING.md sets out the terms
-that apply to contributions from now on.
+That undivided ownership is deliberate: it is what allows HomeTube to be
+offered under different terms in future without having to collect anyone
+else's agreement. CONTRIBUTING.md sets out the terms that keep it that way —
+contributions are accepted only with a grant permitting relicensing.
