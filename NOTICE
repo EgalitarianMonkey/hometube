@@ -1,0 +1,59 @@
+HomeTube — self-hosted web UI for downloading and organising videos
+Copyright (C) 2025-2026 Yann Orieult
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+Source: https://github.com/EgalitarianMonkey/hometube
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+Third-party components
+----------------------
+
+HomeTube depends on third-party software that it does not include: yt-dlp,
+ffmpeg/ffprobe, Streamlit, and its other Python dependencies. Each remains
+under its own licence, held by its own authors, and nothing here alters those
+terms. The container images built from this repository are based on an
+upstream image and bundle some of these components in binary form; consult
+each component for its licence.
+
+No additional restriction is imposed beyond the licences that apply.
+
+Third-party contributions
+-------------------------
+
+The following contributions were received from their authors under the terms of
+this project's licence. Copyright in them is held by their respective authors,
+not by the author of this project.
+
+  Devon Campbell <devon@radworks.io>
+  Jellyfin integration — commit 1ad1d32, 2025-10-21, pull request #54.
+  9 files changed, 268 insertions, 6 deletions. Introduced
+  app/integrations_utils.py, tests/test_config_jellyfin.py and
+  tests/test_jellyfin_integration.py; modified app/config.py, app/main.py,
+  .env.sample, README.md, docs/docker.md and docs/installation.md.
+
+  Received under the AGPL-3.0-or-later terms of this repository. No copyright
+  assignment and no relicensing grant were requested or given at the time.
+
+Copyright ownership
+-------------------
+
+Copyright in this project is held by Yann Orieult, sole author except for the
+third-party contributions listed above, which remain with their authors.
+
+Because those contributions were received under the AGPL alone, offering
+HomeTube as a whole under different terms would require the agreement of their
+authors, or the replacement of their work. CONTRIBUTING.md sets out the terms
+that apply to contributions from now on.

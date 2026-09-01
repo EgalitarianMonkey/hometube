@@ -13,7 +13,7 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.49+-red.svg)](https://streamlit.io)
 [![Latest Release](https://img.shields.io/github/v/release/EgalitarianMonkey/hometube)](https://github.com/EgalitarianMonkey/hometube/releases)
 [![Docker Image](https://ghcr-badge.egpl.dev/egalitarianmonkey/hometube/latest_tag?trim=major&label=Docker)](https://github.com/EgalitarianMonkey/hometube/pkgs/container/hometube)
-[![License](https://img.shields.io/badge/License-AGPL--3.0-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-AGPL--3.0--or--later-green.svg)](LICENSE)
 
 <br/>
 
@@ -707,7 +707,9 @@ Every contribution is appreciated! 🙏
 
 ## 📄 License
 
-This project is licensed under the AGPL-3.0 License - see the [LICENSE](LICENSE) file for details.
+HomeTube is free software under the **GNU Affero General Public License, version 3 or later** — see [LICENSE](LICENSE) for the full text.
+
+Copyright © 2025-2026 Yann Orieult, sole author except for third-party contributions received under the project licence. [NOTICE](NOTICE) records copyright and attribution, [AUTHORS](AUTHORS) lists everyone who has contributed, and [CONTRIBUTING.md](CONTRIBUTING.md#-licensing-of-contributions) sets out the terms that apply to new contributions.
 
 ## 🙏 Acknowledgments
 
