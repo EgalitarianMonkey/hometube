@@ -251,9 +251,9 @@ LANGUAGES_SECONDARIES=       # Secondary languages (comma-separated, e.g., fr,es
 YOUTUBE_COOKIES_FILE_PATH=./cookies/youtube_cookies.txt
 # COOKIES_FROM_BROWSER=brave  # Auto-extract from browser (optional)
 
-# Jellyfin Integration
+# Media server: Jellyfin
 JELLYFIN_BASE_URL=https://jellyfin.local:8096
-JELLYFIN_API_KEY=YOUR_JELLYFIN_API_KEY
+JELLYFIN_API_KEY=<api key allowed to refresh libraries>
 
 # Docker Paths (Docker Installation)
 VIDEOS_FOLDER_DOCKER_HOST=./downloads

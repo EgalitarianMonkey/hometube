@@ -4945,7 +4945,7 @@ if submitted:
         # Log the final file size for accuracy
         push_log(f"📊 Final file size: {final_size_str} (accurate measurement)")
 
-        # Trigger media-server integrations (Jellyfin, etc.)
+        # Hand off to whatever media server is configured, if any
         post_download_actions(safe_push_log, log_title)
 
         # Format full file path properly for display

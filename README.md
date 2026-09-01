@@ -555,9 +555,9 @@ HomeTube configuration is managed through the `.env` file:
 |`YTDLP_CUSTOM_ARGS`|Custom yt-dlp arguments||`--max-filesize 5M --write-info-json`|
 |`REMOVE_TMP_FILES_AFTER_DOWNLOAD`|Remove temporary files after successful download|`false`|`true,false` (false = keep for debugging/reuse)|
 |`NEW_DOWNLOAD_WITHOUT_TMP_FILES`|Clean tmp folder before each new download|`false`|`true,false` (true = fresh start, useful after errors)|
-|**Media Server Integration**||||
-|`JELLYFIN_BASE_URL`|Base URL of your Jellyfin server||`https://jellyfin.local:8096`|
-|`JELLYFIN_API_KEY`|Jellyfin API key used to trigger library scans||`0123456789abcdef0123456789abcdef`|
+|**Media server**||||
+|`JELLYFIN_BASE_URL`|Address of the Jellyfin server to notify after a download||`https://jellyfin.local:8096`|
+|`JELLYFIN_API_KEY`|API key allowed to request a library refresh||`0123456789abcdef0123456789abcdef`|
 |**Docker-specific Variables**||||
 |`VIDEOS_FOLDER_DOCKER_HOST`|Host videos folder in Docker context|**Must be defined**|`/mnt/data/videos` if in Docker container else `/downloads`|
 |`TMP_DOWNLOAD_FOLDER_DOCKER_HOST`|Host tmp download videos folder in Docker context|**Must be defined**|`/mnt/data/hometube/tmp` if in Docker container else `./tmp`|

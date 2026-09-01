@@ -129,12 +129,12 @@ services:
 | `REMOVE_TMP_FILES_AFTER_DOWNLOAD` | `false` | Remove temporary files after successful download |
 | `NEW_DOWNLOAD_WITHOUT_TMP_FILES` | `false` | Clean tmp folder before each new download |
 
-### Media Server Integration
+### Media server integration
 
 | Variable | Default Value | Description |
 |----------|---------------|-------------|
-| `JELLYFIN_BASE_URL` |  | Base URL of your Jellyfin server (e.g., `https://jellyfin.local:8096`) |
-| `JELLYFIN_API_KEY` |  | Jellyfin API key used for triggering library refreshes |
+| `JELLYFIN_BASE_URL` |  | Address of the Jellyfin server to notify, e.g. `https://jellyfin.local:8096` |
+| `JELLYFIN_API_KEY` |  | API key allowed to request a library refresh |
 
 ## Access
 

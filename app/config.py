@@ -81,7 +81,7 @@ _DEFAULTS = {
     "PLAYLIST_KEEP_OLD_VIDEOS": "false",  # Keep videos removed from playlist (archive instead of delete)
     # === System ===
     "DEBUG": "false",
-    # === Jellyfin Integration ===
+    # === Media server: Jellyfin ===
     "JELLYFIN_BASE_URL": "",
     "JELLYFIN_API_KEY": "",
 }
