@@ -504,7 +504,7 @@ def _handle_profile_failure(
     safe_push_log(f"❌ FAILED: {profile['label']}")
 
     # Diagnose the main issue
-    last_error = st.session_state.get("last_error", "").lower()
+    last_error = (st.session_state.get("last_error") or "").lower()
     if "requested format is not available" in last_error:
         safe_push_log("⚠️ Format rejected (authentication limitation)")
     elif any(auth_pattern in last_error for auth_pattern in AUTH_ERROR_PATTERNS):
@@ -646,7 +646,7 @@ def _build_profile_command(
     }
 
     # Use profile's container preference (always MKV from get_profiles_with_formats_id_to_download)
-    profile_container = profile.get("container", "mkv").lower()
+    profile_container = (profile.get("container") or "mkv").lower()
     profile_force_mp4 = profile_container == "mp4"
 
     # Build base command
@@ -696,7 +696,7 @@ def _get_profile_codec_info(profile: dict) -> list[str]:
     codec_info = []
 
     # Extract data directly from unified profile structure
-    video_codec = profile.get("vcodec", "").lower()
+    video_codec = (profile.get("vcodec") or "").lower()
     format_id = profile.get("format_id", "")
     height = profile.get("height", 0)
 
@@ -825,7 +825,7 @@ def _execute_profile_downloads(
             safe_push_log(f"📦 Container: {ext}")
 
             log_title(
-                f"📁 Container format: {profile.get('container', 'unknown').upper()}"
+                f"📁 Container format: {(profile.get('container') or 'unknown').upper()}"
             )
 
             # Store format_id in session state for file renaming
@@ -1710,8 +1710,8 @@ def display_url_info(url_info: dict) -> None:
         return
 
     # Get extractor info for platform-specific display
-    extractor = url_info.get("extractor", "").lower()
-    extractor_key = url_info.get("extractor_key", "").lower()
+    extractor = (url_info.get("extractor") or "").lower()
+    extractor_key = (url_info.get("extractor_key") or "").lower()
     # media_id = url_info.get("id")
 
     # Determine platform icon/emoji
