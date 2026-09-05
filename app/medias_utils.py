@@ -450,7 +450,7 @@ def analyze_video_formats(
     Analyze video formats from yt-dlp JSON output to find the best quality video tracks.
 
     Strategy:
-    1. Filter for video formats (acodec='none' or has vcodec)
+    1. Filter out audio-only formats (vcodec='none'; a null/missing vcodec is kept)
     2. Apply resolution limit if specified
     3. Prefer modern codecs (AV1 > VP9 > H.264)
     4. Sort by resolution and fps
@@ -469,8 +469,11 @@ def analyze_video_formats(
     if not formats:
         return []
 
-    # Filter for video formats
-    video_formats = [fmt for fmt in formats if fmt.get("vcodec") not in [None, "none"]]
+    # Filter for video formats.
+    # Only vcodec == "none" marks an audio-only format in yt-dlp output;
+    # vcodec None/missing means "codec unknown" and the format may still
+    # carry video (common with HLS/generic extractors), so keep it.
+    video_formats = [fmt for fmt in formats if fmt.get("vcodec") != "none"]
 
     if not video_formats:
         return []
