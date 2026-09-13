@@ -10,9 +10,29 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
+      # No `actions/checkout` here, on purpose.
+      #
+      # This job runs on `pull_request_target`, which is what lets pull requests
+      # opened from forks be labelled at all: a `pull_request` run from a fork
+      # only gets a read-only token and cannot write labels.
+      #
+      # The flip side is that `pull_request_target` runs in the *base*
+      # repository's trusted context, and checking out the fork's head SHA from
+      # that context is now refused outright by actions/checkout:
+      #
+      #   "Refusing to check out fork pull request code from a
+      #    'pull_request_target' workflow"  (gh.io/securely-using-pull_request_target)
+      #
+      # That refusal is what made this check fail on every fork PR — see #138,
+      # where `label` failed at the checkout step and was read for a week as
+      # "a label is missing". Nothing was missing: the job never reached the
+      # labeler, and adding a label by hand would not have turned the check green.
+      #
+      # `actions/labeler` reads `configuration-path` from the repository through
+      # the API, so it needs no working-directory checkout. Dropping the step
+      # fixes fork PRs and removes a "pwn request" pattern in the same move.
+      # Do NOT "fix" this instead by setting `allow-unsafe-pr-checkout: true`:
+      # that re-enables the exact pattern the refusal exists to prevent.
       - uses: actions/labeler@v7
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
