@@ -2,7 +2,7 @@
 #    uv pip compile pyproject.toml --extra dev -o requirements/requirements-dev.txt
 altair==6.2.2
     # via streamlit
-anyio==4.14.2
+anyio==4.15.1
     # via
     #   starlette
     #   streamlit
@@ -45,7 +45,7 @@ markupsafe==3.0.3
     # via jinja2
 mypy-extensions==1.1.0
     # via black
-narwhals==2.25.0
+narwhals==2.26.0
     # via altair
 numpy==2.4.6
     # via
@@ -63,9 +63,9 @@ pathspec==1.1.1
     # via black
 pillow==12.3.0
     # via streamlit
-platformdirs==4.11.5
+platformdirs==4.11.8
     # via black
-protobuf==7.36.0
+protobuf==7.36.1
     # via streamlit
 pyarrow==25.0.1
     # via streamlit
@@ -93,13 +93,13 @@ rpds-py==2026.6.3
     # via
     #   jsonschema
     #   referencing
-ruff==0.16.5
+ruff==0.16.7
     # via hometube (pyproject.toml)
 six==1.17.0
     # via python-dateutil
 starlette==1.6.0
     # via streamlit
-streamlit==1.62.0
+streamlit==1.63.0
     # via hometube (pyproject.toml)
 toml==0.10.2
     # via streamlit
