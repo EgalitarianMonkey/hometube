@@ -35,33 +35,40 @@ COPY pyproject.toml ./
 RUN <<'BASH'
 set -eux
 # Temporary build deps (watchdog may need a build on musllinux/aarch64).
-# py3-pip is one of them: the base image ships python3 without pip.
+# py3-pip is one of them: no interpreter in the base image carries a pip.
 apk add --no-cache --virtual .build-deps build-base python3-dev py3-pip
 
-# Upgrade pip and install runtime deps. Always go through "python3 -m pip":
-# the base provides no "pip" executable on PATH.
-python3 -m pip install --no-cache-dir --upgrade pip --break-system-packages
-python3 -m pip install --no-cache-dir --only-binary=:all: --no-binary=watchdog --no-compile ".[docker]" --break-system-packages
+# The base image currently puts a uv-built virtualenv first on PATH, and that
+# venv holds no pip of its own. So drive every install from the system pip and
+# aim it at whichever interpreter PATH resolves to: HomeTube then lands in the
+# very environment CMD runs in, venv or not. "pip --python" needs no pip on the
+# target, and PIP_BREAK_SYSTEM_PACKAGES covers the case where that target turns
+# out to be the system interpreter.
+TARGET_PY="$(command -v python3)"
+SITE_DIR="$("$TARGET_PY" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
 
-# Remove heavy optional deps not needed by HomeTube
-python - <<'PY'
-import importlib.util, subprocess, sys, os
-env = dict(os.environ)
-def rm(pkg: str):
-    if importlib.util.find_spec(pkg):
-        subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", pkg, "--break-system-packages"], env=env)
-rm("pyarrow")
-# If you never use deck.gl maps in Streamlit, uncomment:
-# rm("pydeck")
-PY
+/usr/bin/python3 -m pip --python "$TARGET_PY" install --no-cache-dir \
+    --only-binary=:all: --no-binary=watchdog --no-compile ".[docker]"
+
+# Remove heavy optional deps not needed by HomeTube.
+# (Add pydeck to the list to also drop Streamlit's deck.gl maps support.)
+for pkg in pyarrow; do
+    if "$TARGET_PY" -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('$pkg') else 1)"; then
+        /usr/bin/python3 -m pip --python "$TARGET_PY" uninstall -y "$pkg"
+    fi
+done
 
 # Prune Python bloat
-find /usr/lib/python3*/site-packages -type d -name "__pycache__" -prune -exec rm -rf {} +
-find /usr/lib/python3*/site-packages -type d -regex '.*\(tests\|testing\|test\)$' -exec rm -rf {} +
-find /usr/lib/python3*/site-packages -type f -name '*.pyi' -delete
+find "$SITE_DIR" -type d -name "__pycache__" -prune -exec rm -rf {} +
+find "$SITE_DIR" -type d -regex '.*\(tests\|testing\|test\)$' -exec rm -rf {} +
+find "$SITE_DIR" -type f -name '*.pyi' -delete
 
 # Drop build deps before committing the layer
 apk del .build-deps
+
+# A base that shifts under us must break the build here, not at runtime
+"$TARGET_PY" -c 'import streamlit'
+yt-dlp --version
 BASH
 
 # App code
