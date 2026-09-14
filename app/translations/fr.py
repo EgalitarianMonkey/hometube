@@ -342,6 +342,7 @@ Mets à jour le fichier de cookies où essaye l'option **cookies dans navigateur
     "playlist_video_failed": "❌ Échec vidéo {current}/{total}: {title}",
     "playlist_video_failure_reason": "↳ Raison : {reason}",
     "playlist_position_note": "↳ Position dans la playlist {current}/{total}",
+    "playlist_original_title_restored": "🏷️ Titre original : {original} (listé comme : {listed})",
     "playlist_video_skipped": "⏭️ Vidéo {current}/{total} ignorée (déjà existante): {title}",
     "playlist_download_complete": "🎉 Playlist téléchargée ! {completed}/{total} vidéos",
     "playlist_copying_to_dest": "📁 Copie des vidéos vers la destination...",

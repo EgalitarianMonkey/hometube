@@ -26,6 +26,32 @@ from app.workspace import (
     get_video_workspace,
 )
 
+# === PLAYLIST TITLES ===
+
+
+def resolve_original_title(video_url_info: dict | None, fallback_title: str) -> str:
+    """
+    Get the title of a video in its original language.
+
+    Playlist listings carry the titles YouTube auto-translates to the locale of
+    the request, so a French video can be listed under an English title. The
+    video's own metadata always holds the title its creator published, which is
+    the one files must be named with.
+
+    Args:
+        video_url_info: url_info dict of the video, as returned by yt-dlp
+        fallback_title: Title to keep when metadata carries no usable title
+
+    Returns:
+        str: Original title, or fallback_title
+    """
+    if not video_url_info or "error" in video_url_info:
+        return fallback_title
+
+    original_title = (video_url_info.get("title") or "").strip()
+    return original_title or fallback_title
+
+
 # === PLAYLIST DETECTION ===
 
 

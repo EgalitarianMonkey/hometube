@@ -344,6 +344,7 @@ Update your file cookies or try using **browser cookies** instead of file cookie
     "playlist_video_failed": "❌ Video {current}/{total} failed: {title}",
     "playlist_video_failure_reason": "↳ Reason: {reason}",
     "playlist_position_note": "↳ Playlist position {current}/{total}",
+    "playlist_original_title_restored": "🏷️ Original title: {original} (listed as: {listed})",
     "playlist_video_skipped": "⏭️ Video {current}/{total} skipped (already exists): {title}",
     "playlist_download_complete": "🎉 Playlist downloaded! {completed}/{total} videos",
     "playlist_copying_to_dest": "📁 Copying videos to destination...",

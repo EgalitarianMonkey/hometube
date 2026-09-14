@@ -105,6 +105,7 @@ from app.status_utils import (
     get_profiles_cached,
 )
 from app.playlist_utils import (
+    resolve_original_title,
     save_playlist_status,
     is_playlist_info,
     get_playlist_entries,
@@ -1117,6 +1118,53 @@ def compute_optimal_profiles(url_info: dict, json_path: Path) -> None:
 # for both single videos and videos within playlists
 
 
+def fetch_video_url_info(
+    video_url: str,
+    video_title: str,
+    video_workspace: Path,
+) -> dict | None:
+    """
+    Load the url_info.json of a video from its workspace, fetching it if missing.
+
+    Args:
+        video_url: Full URL of the video
+        video_title: Video title (used for logging only)
+        video_workspace: Path to video workspace directory
+
+    Returns:
+        dict | None: url_info dict (may contain an "error" key), or None
+    """
+    video_url_info_path = video_workspace / "url_info.json"
+
+    # Check if url_info.json already exists
+    video_url_info = None
+    if video_url_info_path.exists():
+        try:
+            import json
+
+            with open(video_url_info_path, "r", encoding="utf-8") as f:
+                video_url_info = json.load(f)
+            safe_push_log(f"📋 Using existing url_info.json for {video_title}")
+        except Exception as e:
+            safe_push_log(f"⚠️ Could not load existing url_info.json: {e}")
+
+    # If url_info.json doesn't exist, fetch it
+    if not video_url_info:
+        safe_push_log(f"📋 Fetching url_info.json for {video_title}...")
+        cookies_params = build_cookies_params_from_config()
+
+        video_url_info = build_url_info(
+            clean_url=video_url,
+            json_output_path=video_url_info_path,
+            cookies_params=cookies_params,
+            youtube_cookies_file_path=YOUTUBE_COOKIES_FILE_PATH,
+            cookies_from_browser=COOKIES_FROM_BROWSER,
+            youtube_clients=YOUTUBE_CLIENT_FALLBACKS,
+        )
+
+    return video_url_info
+
+
 def initialize_video_workspace(
     video_url: str,
     video_id: str,
@@ -1144,31 +1192,7 @@ def initialize_video_workspace(
     video_url_info_path = video_workspace / "url_info.json"
     video_status_path = video_workspace / "status.json"
 
-    # Check if url_info.json already exists
-    video_url_info = None
-    if video_url_info_path.exists():
-        try:
-            import json
-
-            with open(video_url_info_path, "r", encoding="utf-8") as f:
-                video_url_info = json.load(f)
-            safe_push_log(f"📋 Using existing url_info.json for {video_title}")
-        except Exception as e:
-            safe_push_log(f"⚠️ Could not load existing url_info.json: {e}")
-
-    # If url_info.json doesn't exist, fetch it
-    if not video_url_info:
-        safe_push_log(f"📋 Fetching url_info.json for {video_title}...")
-        cookies_params = build_cookies_params_from_config()
-
-        video_url_info = build_url_info(
-            clean_url=video_url,
-            json_output_path=video_url_info_path,
-            cookies_params=cookies_params,
-            youtube_cookies_file_path=YOUTUBE_COOKIES_FILE_PATH,
-            cookies_from_browser=COOKIES_FROM_BROWSER,
-            youtube_clients=YOUTUBE_CLIENT_FALLBACKS,
-        )
+    video_url_info = fetch_video_url_info(video_url, video_title, video_workspace)
 
     if video_url_info and "error" not in video_url_info:
         # Create status.json if it doesn't exist
@@ -3956,6 +3980,29 @@ if submitted:
             if not video_url and video_id:
                 video_url = f"https://www.youtube.com/watch?v={video_id}"
 
+            # Create video workspace (videos are stored separately, not inside playlist)
+            # This ensures the same video is never downloaded twice
+            video_workspace = ensure_video_workspace(
+                TMP_DOWNLOAD_FOLDER, "youtube", video_id
+            )
+
+            # Playlist listings carry the titles YouTube auto-translates to the
+            # locale of the request, so a French video can be listed in English.
+            # The video's own metadata holds the title in its original language.
+            video_url_info = fetch_video_url_info(
+                video_url, video_title, video_workspace
+            )
+            original_title = resolve_original_title(video_url_info, video_title)
+            if original_title != video_title:
+                push_log(
+                    t(
+                        "playlist_original_title_restored",
+                        original=original_title,
+                        listed=video_title,
+                    )
+                )
+                video_title = original_title
+
             downloads_total = max(videos_to_dl, 1)
             session_current = idx
             playlist_position = playlist_index or (initial_completed_count + idx)
@@ -3978,8 +4025,13 @@ if submitted:
             if playlist_note:
                 push_log(playlist_note)
 
-            # Update status
-            update_video_status_in_playlist(playlist_workspace, video_id, "downloading")
+            # Update status (store the original-language title for later renames)
+            update_video_status_in_playlist(
+                playlist_workspace,
+                video_id,
+                "downloading",
+                extra_data={"title": video_title},
+            )
             status_message = download_message
             if playlist_note:
                 status_message = f"{download_message}\n{playlist_note}"
@@ -3989,12 +4041,6 @@ if submitted:
             raw_progress = (session_current - 1) / downloads_total
             progress_percent = min(max(raw_progress, 0.0), 1.0)
             progress_placeholder.progress(progress_percent)
-
-            # Create video workspace (videos are stored separately, not inside playlist)
-            # This ensures the same video is never downloaded twice
-            video_workspace = ensure_video_workspace(
-                TMP_DOWNLOAD_FOLDER, "youtube", video_id
-            )
 
             # Use the reusable video download function (same as single videos)
             base_output = sanitize_filename(video_title)

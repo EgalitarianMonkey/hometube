@@ -3,6 +3,7 @@ Tests for playlist utilities
 """
 
 from app.playlist_utils import (
+    resolve_original_title,
     is_playlist_url,
     extract_playlist_id,
     is_playlist_info,
@@ -366,3 +367,38 @@ class TestPlaylistStatus:
         status = load_playlist_status(playlist_workspace)
         assert status["videos"]["vid1"]["status"] == "skipped"
         assert status["videos"]["vid1"]["skip_reason"] == "Already exists"
+
+
+class TestResolveOriginalTitle:
+    """Test the original-language title resolution used for playlist videos"""
+
+    def test_metadata_title_wins_over_listed_title(self):
+        """A playlist listing auto-translated by YouTube must not name the file"""
+        url_info = {
+            "title": "Arrêtons Mélenchon ! - La grosse semaine de Pierre-Emmanuel Barré"
+        }
+        listed_title = "Stop Mélenchon! - Pierre-Emmanuel Barré's Big Week"
+
+        assert resolve_original_title(url_info, listed_title) == url_info["title"]
+
+    def test_falls_back_when_url_info_missing(self):
+        """Without metadata, the listed title is all we have"""
+        assert resolve_original_title(None, "Listed title") == "Listed title"
+
+    def test_falls_back_when_url_info_has_error(self):
+        """A failed extraction must not wipe the title"""
+        url_info = {"error": "Video unavailable", "title": "Should be ignored"}
+
+        assert resolve_original_title(url_info, "Listed title") == "Listed title"
+
+    def test_falls_back_on_empty_title(self):
+        """An empty or blank metadata title is not a usable title"""
+        assert resolve_original_title({"title": ""}, "Listed title") == "Listed title"
+        assert (
+            resolve_original_title({"title": "   "}, "Listed title") == "Listed title"
+        )
+        assert resolve_original_title({}, "Listed title") == "Listed title"
+
+    def test_strips_surrounding_whitespace(self):
+        """Titles are used as filenames, so trailing spaces are dropped"""
+        assert resolve_original_title({"title": "  Ma vidéo  "}, "Listed") == "Ma vidéo"
