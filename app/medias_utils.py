@@ -93,7 +93,7 @@ def analyze_audio_formats(
     opus_formats = [
         fmt
         for fmt in audio_only_formats
-        if fmt.get("acodec", "").lower().startswith("opus")
+        if (fmt.get("acodec") or "").lower().startswith("opus")
     ]
 
     # Use Opus if available, otherwise use all audio formats
@@ -104,8 +104,8 @@ def analyze_audio_formats(
     candidate_formats = [
         fmt
         for fmt in candidate_formats
-        if "drc" not in fmt.get("format_id", "").lower()
-        and "drc" not in fmt.get("format_note", "").lower()
+        if "drc" not in (fmt.get("format_id") or "").lower()
+        and "drc" not in (fmt.get("format_note") or "").lower()
     ]
 
     if not candidate_formats:
@@ -137,12 +137,12 @@ def analyze_audio_formats(
     # Prefer "original"; only fall back to "default" when no "original" exists.
     vo_lang = None
     for fmt in best_group:
-        if "original" in fmt.get("format_note", "").lower():
+        if "original" in (fmt.get("format_note") or "").lower():
             vo_lang = fmt.get("language")
             break
     if vo_lang is None:
         for fmt in best_group:
-            if "default" in fmt.get("format_note", "").lower():
+            if "default" in (fmt.get("format_note") or "").lower():
                 vo_lang = fmt.get("language")
                 break
 
@@ -363,7 +363,7 @@ def get_profiles_with_formats_id_to_download(
                     format_info["format_id"] = f"{video_id}+{audio_ids}"
 
                 # Enrich with additional fields for application use
-                vcodec = format_info.get("vcodec", "unknown")
+                vcodec = format_info.get("vcodec") or "unknown"
                 height = format_info.get("height") or 0  # Handle None from yt-dlp
                 format_id = format_info.get("format_id", "")
 
@@ -450,7 +450,7 @@ def analyze_video_formats(
     Analyze video formats from yt-dlp JSON output to find the best quality video tracks.
 
     Strategy:
-    1. Filter for video formats (acodec='none' or has vcodec)
+    1. Filter out audio-only formats (vcodec='none'; a null/missing vcodec is kept)
     2. Apply resolution limit if specified
     3. Prefer modern codecs (AV1 > VP9 > H.264)
     4. Sort by resolution and fps
@@ -469,8 +469,11 @@ def analyze_video_formats(
     if not formats:
         return []
 
-    # Filter for video formats
-    video_formats = [fmt for fmt in formats if fmt.get("vcodec") not in [None, "none"]]
+    # Filter for video formats.
+    # Only vcodec == "none" marks an audio-only format in yt-dlp output;
+    # vcodec None/missing means "codec unknown" and the format may still
+    # carry video (common with HLS/generic extractors), so keep it.
+    video_formats = [fmt for fmt in formats if fmt.get("vcodec") != "none"]
 
     if not video_formats:
         return []
@@ -491,7 +494,7 @@ def analyze_video_formats(
     }
 
     def get_codec_score(fmt: dict) -> int:
-        vcodec = fmt.get("vcodec", "").lower()
+        vcodec = (fmt.get("vcodec") or "").lower()
         for codec_prefix, score in codec_scores.items():
             if vcodec.startswith(codec_prefix):
                 return score
@@ -559,7 +562,7 @@ def get_available_formats(url_info: dict) -> list[dict]:
             continue
 
         # Skip storyboard and other metadata formats
-        if fmt.get("format_note", "").lower() in ["storyboard", "mhtml"]:
+        if (fmt.get("format_note") or "").lower() in ["storyboard", "mhtml"]:
             continue
 
         # Extract key information for display
@@ -650,7 +653,7 @@ def get_best_audio_for_language(url_info: dict, language: str = "en") -> dict | 
     matching_audios = [
         fmt
         for fmt in best_audios
-        if fmt.get("language", "").lower().startswith(language_lower)
+        if (fmt.get("language") or "").lower().startswith(language_lower)
     ]
 
     if not matching_audios:

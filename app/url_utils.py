@@ -125,7 +125,7 @@ def check_url_info_integrity(url_info: dict) -> bool:
 
     # Check for premium codecs in video formats
     for fmt in formats:
-        vcodec = fmt.get("vcodec", "").lower()
+        vcodec = (fmt.get("vcodec") or "").lower()
 
         # Skip audio-only formats
         if vcodec == "none":
