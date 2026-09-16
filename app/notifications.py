@@ -19,6 +19,16 @@ from app.json_utils import safe_load_json, safe_save_json
 
 CONTENT_REPO_URL = "https://github.com/LatentNoise/content"
 
+# The hosted HomeTube surface — the same screen this app shows, run by someone
+# else, reachable with an email address and no Docker. It is what the Content
+# note points at: a repository asks the reader to install something before they
+# know whether they want it, and almost nobody does.
+#
+# Deliberately not `hometube.latentnoise.dev`: that name serves the HomeTube
+# marketing site, with a 301 from `hometube.egalitarianmonkey.com` in place
+# since 2026-09-02. Renaming either would restart that transfer from zero.
+CONTENT_TRY_URL = "https://hometube-app.latentnoise.dev"
+
 
 class NotificationType(Enum):
     """Types of notifications with associated styling."""
@@ -284,8 +294,8 @@ def get_content_announcement_id(version: str | None = None) -> str:
 # not a paragraph. No adjectives, nothing to sell; the link does the rest.
 #
 # The angle rotates with the minor version, so a returning user meets a new
-# detail instead of a banner they have learned to skip. Four of them means the
-# same line comes back only every fourth release.
+# detail instead of a banner they have learned to skip: a line comes back only
+# once every len(CONTENT_ANGLES) feature releases.
 CONTENT_ANGLES = (
     "A backend with a job queue — downloads run in parallel.",
     "One engine, many jobs: queue a batch and walk away.",
@@ -293,6 +303,10 @@ CONTENT_ANGLES = (
     "REST API, CLI and a Python SDK, included.",
     "Not just video: transcripts, summaries, translations.",
     "Send any page to it, straight from your browser.",
+    # Appended, never inserted: see CONTENT_ANGLES_FIRST_MINOR below. This one
+    # names the trial itself rather than a capability, because the surface it
+    # points at is the same screen the reader is looking at right now.
+    "Try it in your browser, no install.",
 )
 
 # Rotation starts here rather than at minor 0, so CONTENT_ANGLES is ordered by
@@ -329,8 +343,8 @@ def check_content_announcement() -> Notification | None:
         title="Content — where HomeTube goes next",
         message=get_content_angle(),
         notification_type=NotificationType.INFO,
-        action_label="Take a look",
-        action_url=CONTENT_REPO_URL,
+        action_label="Open the hosted trial",
+        action_url=CONTENT_TRY_URL,
         icon="🌱",
     )
 
