@@ -252,6 +252,39 @@ YTDLP_FORMATS_SORT_VP9_FIRST_ARG = (
 )
 
 
+def build_language_anchored_format_spec(
+    video_format_id: str, audio_formats: list[dict]
+) -> str:
+    """
+    Build a yt-dlp format spec that selects each audio track by its language.
+
+    The "-N" suffix of multi-audio ids ("251-0", "251-1") is only the position
+    of the track in one extraction. The download runs a fresh extraction, which
+    can list the tracks in another order, so "251-1" may then be a dub instead
+    of the original (issue #140). Selecting on the language keeps the track the
+    analysis chose; the positional ids stay as a fallback.
+
+    Example:
+        >>> build_language_anchored_format_spec(
+        ...     "399", [{"format_id": "251-1", "language": "fr-FR"}]
+        ... )
+        '399+ba[format_id^=251-][language=fr-FR]/399+251-1'
+    """
+    audio_ids = [a.get("format_id", "") for a in audio_formats]
+    positional = "+".join([video_format_id, *audio_ids])
+
+    selectors = []
+    for audio in audio_formats:
+        format_id = audio.get("format_id", "")
+        language = audio.get("language")
+        if "-" not in format_id or not language:
+            return positional
+        base_id = format_id.split("-")[0]
+        selectors.append(f"ba[format_id^={base_id}-][language={language}]")
+
+    return f"{video_format_id}+{'+'.join(selectors)}/{positional}"
+
+
 def get_profiles_with_formats_id_to_download(
     url_info_path: Path, multiple_langs: bool, audio_formats: list[dict] = None
 ) -> list[dict]:
@@ -361,6 +394,10 @@ def get_profiles_with_formats_id_to_download(
                         [a.get("format_id", "") for a in audio_formats]
                     )
                     format_info["format_id"] = f"{video_id}+{audio_ids}"
+                    # yt-dlp gets tracks by language, not by position (issue #140)
+                    format_info["format_spec"] = build_language_anchored_format_spec(
+                        video_id, audio_formats
+                    )
 
                 # Enrich with additional fields for application use
                 vcodec = format_info.get("vcodec", "unknown")

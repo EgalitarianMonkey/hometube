@@ -64,7 +64,8 @@ def build_base_ytdlp_command(
 
     # Detect if we have multiple audio streams (e.g., "313+251-0+251-1+251-2")
     # Count audio format IDs by looking for multiple "+" after the first video format
-    parts = format_spec.split("+")
+    # Only the first alternative counts: "/" separates yt-dlp fallbacks
+    parts = format_spec.split("/")[0].split("+")
     # If we have more than 2 parts (video + first audio + additional audios), enable multi-audio
     if len(parts) > 2:
         base_cmd.append("--audio-multistreams")
