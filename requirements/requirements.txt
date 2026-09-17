@@ -2,7 +2,7 @@
 #    uv pip compile pyproject.toml -o requirements/requirements.txt
 altair==6.2.2
     # via streamlit
-anyio==4.14.2
+anyio==4.15.1
     # via
     #   starlette
     #   streamlit
@@ -40,7 +40,7 @@ jsonschema-specifications==2025.9.1
     # via jsonschema
 markupsafe==3.0.3
     # via jinja2
-narwhals==2.25.0
+narwhals==2.26.0
     # via altair
 numpy==2.4.6
     # via
@@ -55,7 +55,7 @@ pandas==2.3.3
     # via streamlit
 pillow==12.3.0
     # via streamlit
-protobuf==7.36.0
+protobuf==7.36.1
     # via streamlit
 pyarrow==25.0.1
     # via streamlit
@@ -85,7 +85,7 @@ six==1.17.0
     # via python-dateutil
 starlette==1.6.0
     # via streamlit
-streamlit==1.62.0
+streamlit==1.63.0
     # via hometube (pyproject.toml)
 toml==0.10.2
     # via streamlit
