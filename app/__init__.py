@@ -2,5 +2,5 @@
 HomeTube - YouTube Video Downloader with Streamlit UI
 """
 
-__version__ = "2.12.2"
+__version__ = "2.12.3"
 __author__ = "Yann ORIEULT"
