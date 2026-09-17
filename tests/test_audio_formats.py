@@ -15,7 +15,11 @@ from typing import Dict
 # Add parent directory to path to import app modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.medias_utils import analyze_audio_formats
+from app.core import build_base_ytdlp_command
+from app.medias_utils import (
+    analyze_audio_formats,
+    build_language_anchored_format_spec,
+)
 
 
 def load_test_json(filename: str) -> Dict:
@@ -503,6 +507,72 @@ class TestVoDetectionOriginalVsDefault:
         assert vo_lang == "en-US", f"VO should fall back to 'en-US', got {vo_lang}"
 
 
+class TestLanguageAnchoredFormatSpec:
+    """Regression tests for issue #140.
+
+    The "-N" suffix of a multi-audio id is the track's position in one
+    extraction. The download re-extracts, so "251-1" can point at an auto-dub;
+    the spec handed to yt-dlp must select each track by its language.
+    """
+
+    def test_single_track_selected_by_language(self):
+        spec = build_language_anchored_format_spec(
+            "399", [{"format_id": "251-1", "language": "fr-FR"}]
+        )
+        assert spec == "399+ba[format_id^=251-][language=fr-FR]/399+251-1"
+
+    def test_multiple_tracks_keep_their_order(self):
+        spec = build_language_anchored_format_spec(
+            "399",
+            [
+                {"format_id": "251-1", "language": "fr-FR"},
+                {"format_id": "251-0", "language": "en-US"},
+            ],
+        )
+        assert spec == (
+            "399+ba[format_id^=251-][language=fr-FR]"
+            "+ba[format_id^=251-][language=en-US]/399+251-1+251-0"
+        )
+
+    def test_positional_ids_when_a_language_is_missing(self):
+        spec = build_language_anchored_format_spec(
+            "399",
+            [
+                {"format_id": "251-1", "language": "fr-FR"},
+                {"format_id": "251-0", "language": None},
+            ],
+        )
+        assert spec == "399+251-1+251-0"
+
+    def test_multistreams_only_for_several_audio_tracks(self):
+        def command(spec: str) -> list[str]:
+            return build_base_ytdlp_command(
+                "video",
+                Path("/tmp"),
+                spec,
+                embed_chapters=False,
+                embed_subs=False,
+                quality_strategy={
+                    "format": spec,
+                    "format_sort": "res",
+                    "extra_args": [],
+                },
+            )
+
+        single = build_language_anchored_format_spec(
+            "399", [{"format_id": "251-1", "language": "fr-FR"}]
+        )
+        several = build_language_anchored_format_spec(
+            "399",
+            [
+                {"format_id": "251-1", "language": "fr-FR"},
+                {"format_id": "251-0", "language": "en-US"},
+            ],
+        )
+        assert "--audio-multistreams" not in command(single)
+        assert "--audio-multistreams" in command(several)
+
+
 def run_tests():
     """Run all tests with simple reporting"""
     import traceback
@@ -513,6 +583,7 @@ def run_tests():
         TestMultiLanguageVideo,
         TestLanguagePreferences,
         TestVoDetectionOriginalVsDefault,
+        TestLanguageAnchoredFormatSpec,
     ]
 
     total_tests = 0

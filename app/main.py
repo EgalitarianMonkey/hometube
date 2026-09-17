@@ -636,8 +636,9 @@ def _build_profile_command(
     sb_choice: str,
 ) -> list[str]:
     """Build ytdlp command for a specific profile."""
-    # Get format string from format_id (single source of truth)
-    format_string = profile.get("format_id", "")
+    # format_spec selects audio tracks by language; format_id stays the
+    # profile identity (file names, status) and the fallback for older profiles
+    format_string = profile.get("format_spec") or profile.get("format_id", "")
 
     # Create quality strategy
     quality_strategy = {
