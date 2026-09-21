@@ -79,6 +79,10 @@ from app.logs_utils import (
     log_format_unavailable_error_hint,
     register_main_push_log,
     next_download_button_key,
+    MAX_LOG_LINES,
+    sanitize_log_line,
+    should_refresh_download_button,
+    trim_log_buffer,
 )
 from app.cut_utils import (
     get_keyframes,
@@ -3378,9 +3382,6 @@ logs_placeholder = st.empty()  # black scrollable window (bottom)
 download_btn_placeholder = st.empty()  # "Download logs" button (bottom)
 
 ALL_LOGS: list[str] = []  # global buffer (complete log content)
-# Fragmented (HLS) downloads emit one progress line per fragment, so the buffer
-# must stay bounded or memory grows for the whole download (issue #82)
-MAX_LOG_LINES = 10000
 
 
 def render_download_button():
@@ -3398,20 +3399,10 @@ def render_download_button():
 
 def push_log(line: str):
     # Clean the line of ANSI escape sequences and control characters
-    clean_line = line.rstrip("\n")
-
-    # Remove ANSI escape sequences (colors, cursor movements, etc.)
-    clean_line = ANSI_ESCAPE_PATTERN.sub("", clean_line)
-
-    # Remove other control characters except newlines and tabs
-    clean_line = "".join(
-        char for char in clean_line if ord(char) >= 32 or char in "\t\n"
-    )
+    clean_line = sanitize_log_line(line)
 
     ALL_LOGS.append(clean_line)
-    if len(ALL_LOGS) > MAX_LOG_LINES:
-        del ALL_LOGS[: len(ALL_LOGS) - MAX_LOG_LINES]
-        ALL_LOGS[0] = "… (older log lines truncated)"
+    trim_log_buffer(ALL_LOGS, MAX_LOG_LINES)
 
     # Update logs display
     with logs_placeholder.container():
@@ -3433,8 +3424,7 @@ def push_log(line: str):
     # line: each refresh copies the full log into a new widget payload that
     # Streamlit retains until the run ends, which used to grow quadratically on
     # fragment-by-fragment downloads (issue #82)
-    is_progress_flood = clean_line.startswith(("[download]", "frame=", "size="))
-    if not is_progress_flood or len(ALL_LOGS) % 200 == 0:
+    if should_refresh_download_button(clean_line, len(ALL_LOGS)):
         render_download_button()
 
 
