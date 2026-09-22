@@ -9,8 +9,59 @@ import itertools
 
 import streamlit as st
 
-from app.constants import AUTH_ERROR_PATTERNS
+from app.constants import ANSI_ESCAPE_PATTERN, AUTH_ERROR_PATTERNS
 from app.file_system_utils import is_valid_cookie_file
+
+# === LOG BUFFER ===
+
+# Fragmented (HLS) downloads emit one progress line per fragment, so the buffer
+# must stay bounded or memory grows for the whole download (issue #82).
+MAX_LOG_LINES = 10000
+
+LOG_TRUNCATION_MARKER = "… (older log lines truncated)"
+
+# Lines yt-dlp and ffmpeg repeat once per fragment or frame.
+PROGRESS_LINE_PREFIXES = ("[download]", "frame=", "size=")
+
+# One download-button refresh every N lines during a progress flood.
+DOWNLOAD_BUTTON_REFRESH_EVERY = 200
+
+
+def sanitize_log_line(line: str) -> str:
+    """Strip the trailing newline, ANSI escapes and control characters."""
+    clean_line = line.rstrip("\n")
+    clean_line = ANSI_ESCAPE_PATTERN.sub("", clean_line)
+    return "".join(char for char in clean_line if ord(char) >= 32 or char in "\t\n")
+
+
+def trim_log_buffer(logs: list[str], max_lines: int = MAX_LOG_LINES) -> list[str]:
+    """
+    Cap ``logs`` to ``max_lines`` **in place**, oldest lines first (issue #82).
+
+    Mutating in place is deliberate: the caller keeps a module-level buffer that
+    other code holds a reference to, so rebinding it to a new list would leave
+    those references pointing at the unbounded original.
+    """
+    if len(logs) > max_lines:
+        del logs[: len(logs) - max_lines]
+        logs[0] = LOG_TRUNCATION_MARKER
+    return logs
+
+
+def should_refresh_download_button(line: str, log_count: int) -> bool:
+    """
+    Whether the "download logs" button is worth re-rendering for ``line``.
+
+    Each refresh copies the whole buffer into a new widget payload that
+    Streamlit retains until the run ends, so refreshing on every progress line
+    made memory grow quadratically on fragment-by-fragment downloads (issue
+    #82). Progress lines therefore only refresh it once every
+    ``DOWNLOAD_BUTTON_REFRESH_EVERY`` lines; anything else refreshes it.
+    """
+    if not line.startswith(PROGRESS_LINE_PREFIXES):
+        return True
+    return log_count % DOWNLOAD_BUTTON_REFRESH_EVERY == 0
+
 
 # === LOGGING FUNCTIONS ===
 
