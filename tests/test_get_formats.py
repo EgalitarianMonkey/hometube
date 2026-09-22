@@ -96,8 +96,8 @@ class TestGetFormatsMonoLang:
         )
 
         if len(profiles) == 2:
-            codec1 = profiles[0].get("vcodec", "").lower()
-            codec2 = profiles[1].get("vcodec", "").lower()
+            codec1 = (profiles[0].get("vcodec") or "").lower()
+            codec2 = (profiles[1].get("vcodec") or "").lower()
 
             # Check that codecs are different (AV1 vs VP9)
             assert codec1 != codec2, "Two profiles should have different codecs"
