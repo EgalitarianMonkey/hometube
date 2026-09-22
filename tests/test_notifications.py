@@ -21,6 +21,7 @@ from app.notifications import (
     CONTENT_ANGLES,
     CONTENT_ANGLES_FIRST_MINOR,
     CONTENT_REPO_URL,
+    CONTENT_TRY_URL,
 )
 
 
@@ -262,8 +263,24 @@ class TestContentAnnouncement:
 
             assert notif is not None
             assert notif.id == get_content_announcement_id()
-            assert notif.action_url == CONTENT_REPO_URL
+            assert notif.action_url == CONTENT_TRY_URL
             assert notif.notification_type == NotificationType.INFO
+
+    def test_announcement_links_to_something_usable_without_installing(self):
+        """The note's whole job is to shorten "this looks good" to "I tried it".
+
+        A link to the repository asks the reader to set up Docker before they
+        know whether they want it, which is the step almost nobody takes. The
+        action has to land on a surface they can use as they are.
+        """
+        assert CONTENT_TRY_URL.startswith("https://")
+        assert CONTENT_TRY_URL != CONTENT_REPO_URL
+        assert "github.com" not in CONTENT_TRY_URL
+
+        # hometube.latentnoise.dev is the marketing site, not a surface; the
+        # hosted app is hometube-app. Mixing them up sends everyone to a page
+        # with nothing to click.
+        assert CONTENT_TRY_URL == "https://hometube-app.latentnoise.dev"
 
     def test_no_announcement_when_dismissed(self, tmp_path):
         """Dismissing the announcement keeps it hidden."""
@@ -369,7 +386,13 @@ class TestContentAnnouncement:
 
     def test_angle_rotates_with_the_release(self):
         """A returning user meets a new detail, not the banner they already read."""
-        seen = [get_content_angle(f"2.{minor}.0") for minor in range(11, 17)]
+        # One full cycle from any starting minor, so appending an angle extends
+        # the window instead of breaking this assertion.
+        start = CONTENT_ANGLES_FIRST_MINOR - 1
+        seen = [
+            get_content_angle(f"2.{minor}.0")
+            for minor in range(start, start + len(CONTENT_ANGLES))
+        ]
 
         assert len(set(seen)) == len(CONTENT_ANGLES)
         assert get_content_angle("2.11.0") == get_content_angle("2.11.9")

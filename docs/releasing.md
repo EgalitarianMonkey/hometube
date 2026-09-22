@@ -32,7 +32,14 @@ HomeTube follows semantic versioning:
 
 4. **CI takes over** (`.github/workflows/release.yml`): tests + lint, multi-arch Docker build pushed to GHCR, then a **draft release** is created with auto-generated notes (merged PRs grouped by category, per `.github/release.yml`).
 
-5. **Curate and publish.** Open the draft on GitHub, rewrite the notes — a short intro on what the release means for users, keep the generated PR list below — then click **Publish release**.
+5. **Curate and publish.** Open the draft on GitHub, rewrite the notes — a short intro on what the release means for users, keep the generated PR list below — then paste this footer at the very end, and click **Publish release**:
+
+   ```markdown
+   ---
+   *HomeTube is built on [Content](https://github.com/LatentNoise/content), the engine behind it — or [try it in your browser](https://hometube-app.latentnoise.dev), no install.*
+   ```
+
+   It lives here rather than in CI on purpose: the notes are rewritten by hand at this step, and a footer injected by `release.yml` would be overwritten by that rewrite about half the time.
 
 ## Why a draft?
 
