@@ -38,9 +38,14 @@ jobs:
           python -m black --check app/ tests/
           python -m ruff check app/ tests/ --output-format=github
 
+      # Measure the package, not a hand-listed set of modules: `--cov=app.utils`
+      # sat here from the initial commit and app/utils.py was split up in #46
+      # (2025-10-20), after which coverage.py silently measured app/translations
+      # alone — 51 of 6167 statements — and nobody noticed for eleven months.
+      # `--cov=app` cannot drift that way when a module is renamed or moved.
       - name: Run tests
         run: |
-          python -m pytest tests/ -v --tb=short -m "not slow and not external and not network" --cov=app.utils --cov=app.translations --cov-report=xml --cov-report=term-missing
+          python -m pytest tests/ -v --tb=short -m "not slow and not external and not network" --cov=app --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.12'
