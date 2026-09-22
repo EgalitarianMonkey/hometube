@@ -627,7 +627,7 @@ DEBUG=1 python -c "import app.main" 2>/dev/null
 
 - ✅ **Stable**: Core functionality tested and reliable
 - 🔄 **Active Development**: Regular updates, fixes and fresh yt-dlp releases
-- 🧪 **Test Coverage**: 84% on testable modules ([details](docs/testing.md))
+- 🧪 **Test Coverage**: 358 tests, 22% of statements across `app/`, concentrated on the utility modules ([details](docs/testing.md))
 - 📦 **Production Ready**: Docker images available on GHCR
 - 🏠 **HomeLab Optimized**: Designed for self-hosted environments
 - 🌱 **Next generation**: The platform it grew into is [Content](#-what-comes-next-content)

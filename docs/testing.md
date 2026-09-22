@@ -3,21 +3,32 @@
 ## 📊 Current Testing Status
 
 ### ✅ Test Suite Overview
-- **20 focused tests** covering core functionality
-- **84% coverage** on testable modules (`app.utils`, `app.translations`)
+- **358 tests** passing (6 skipped), across 23 test modules
+- **22% of statements** covered across the `app/` package, measured by `make test-coverage`
 - **Robust Streamlit mocking** prevents import conflicts
 - **Multi-environment support** (UV, conda, pip/venv)
-- **Quick execution** (< 2 seconds for full suite)
+- **Quick execution** (under 20 seconds for the full suite)
+
+Coverage is uneven by design: the pure helpers are well covered — `app/workspace.py` 97%,
+`app/text_utils.py` 93%, `app/tmp_files.py` 77%, `app/status_utils.py` 73% — while the Streamlit
+entry point `app/main.py` and `app/playlist_sync.py` are exercised end to end rather than unit
+tested and sit at 0%. Those two are 42% of the statements on their own, which is most of the gap
+between the per-module figures and the package total.
 
 ### 🏗️ Current test structure
 
 ```
 tests/
 ├── __init__.py              # Package initialization
-├── conftest.py              # Centralized configuration + fixtures (71 lines)
-├── test_core_functions.py   # Core function tests (146 lines, 10 tests)
-├── test_translations.py     # Translation system tests (106 lines, 4 tests)  
-└── test_utils.py           # Project structure tests (108 lines, 6 tests)
+├── conftest.py              # Centralized configuration + fixtures
+├── test_core_functions.py   # Core function tests
+├── test_translations.py     # Translation system tests
+├── test_text_utils.py       # Text and filename helpers
+├── test_url_utils.py        # URL parsing and normalization
+├── test_subtitles_utils.py  # Subtitle selection and conversion
+├── test_playlist_utils.py   # Playlist parsing
+├── test_logs_utils.py       # Bounded log buffer (issue #82)
+└── ...                      # 23 test modules in total
 ```
 
 **Note**: The project uses a **simplified but robust** testing approach with focused coverage of essential functionality.
@@ -51,7 +62,7 @@ make pre-commit         # Full quality checks
 
 ## 🔧 Testing features
 
-### 1. Robust pytest configuration (`pytest.ini`)
+### 1. Robust pytest configuration (`[tool.pytest.ini_options]` in `pyproject.toml`)
 - Custom markers (unit, integration, performance, slow, external, stress)
 - Optimized default options 
 - Warning filters
@@ -198,13 +209,14 @@ def test_project_directories_exist(self, project_root):
 ## 🔧 Configuration and tools
 
 ### Test environment variables
-```ini
-# pytest.ini
-[tool:pytest]
-testpaths = tests
-python_files = test_*.py *_test.py
-python_classes = Test*
-python_functions = test_*
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["--strict-markers", "--strict-config", "--verbose", "--tb=short"]
 ```
 
 ### Available pytest markers
