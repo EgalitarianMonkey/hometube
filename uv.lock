@@ -264,7 +264,7 @@ wheels = [
 
 [[package]]
 name = "hometube"
-version = "2.12.3"
+version = "2.13.0"
 source = { editable = "." }
 dependencies = [
     { name = "python-dotenv" },
