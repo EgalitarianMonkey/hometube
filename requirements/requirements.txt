@@ -67,7 +67,7 @@ python-dotenv==1.2.3
     # via hometube (pyproject.toml)
 python-multipart==0.0.32
     # via streamlit
-pytz==2026.3.post1
+pytz==2026.4
     # via pandas
 referencing==0.37.0
     # via
@@ -83,7 +83,7 @@ rpds-py==2026.6.3
     #   referencing
 six==1.17.0
     # via python-dateutil
-starlette==1.6.0
+starlette==1.7.0
     # via streamlit
 streamlit==1.64.0
     # via hometube (pyproject.toml)
