@@ -63,7 +63,7 @@ pathspec==1.1.1
     # via black
 pillow==12.3.0
     # via streamlit
-platformdirs==4.11.10
+platformdirs==4.11.12
     # via black
 protobuf==7.36.2
     # via streamlit
@@ -79,7 +79,7 @@ python-multipart==0.0.32
     # via streamlit
 pytokens==0.4.1
     # via black
-pytz==2026.3.post1
+pytz==2026.4
     # via pandas
 referencing==0.37.0
     # via
@@ -93,11 +93,11 @@ rpds-py==2026.6.3
     # via
     #   jsonschema
     #   referencing
-ruff==0.16.8
+ruff==0.16.9
     # via hometube (pyproject.toml)
 six==1.17.0
     # via python-dateutil
-starlette==1.6.0
+starlette==1.7.0
     # via streamlit
 streamlit==1.64.0
     # via hometube (pyproject.toml)
