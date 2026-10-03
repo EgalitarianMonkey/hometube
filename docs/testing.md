@@ -38,7 +38,7 @@ tests/
 ### Run Tests
 ```bash
 # Quick tests (< 2 seconds)
-make test-fast
+make test-ci
 
 # Full test suite
 make test
@@ -125,12 +125,12 @@ make pre-commit         # Full quality checks
 make test             # Run all tests
 make test-all         # Run complete test suite with coverage
 make test-unit        # Run unit tests only (core + translations + utils)
-make test-fast        # Run fast tests only (exclude slow and external)
+make test-ci          # Run fast tests only (exclude slow, external and network)
 make test-coverage    # Run tests with coverage report
 
 # UV-specific commands (faster for UV users)
 make uv-test          # Run tests with UV
-make uv-test-fast     # Run fast tests with UV
+make uv-test-ci       # Run fast tests with UV
 ```
 
 #### Verification script (`scripts/check_tests.py`)
@@ -262,7 +262,7 @@ pytest -m "not stress"
 
 ### Quick development testing
 ```bash
-make test-fast    # Fast tests only (< 2 seconds)
+make test-ci      # Fast tests only (< 2 seconds)
 make test         # All tests (< 5 seconds)
 ```
 
@@ -274,7 +274,7 @@ make test-all     # Complete test suite with coverage
 ### UV users (faster)
 ```bash
 make uv-test      # Run tests with UV
-make uv-test-fast # Fast tests with UV
+make uv-test-ci   # Fast tests with UV
 ```
 
 ### Debugging specific tests

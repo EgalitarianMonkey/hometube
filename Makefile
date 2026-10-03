@@ -1,7 +1,11 @@
 # Makefile for HomeTube testing and development
 # Supports both UV (fast) and standard Python (universal) workflows
 
-.PHONY: help install test test-unit test-integration test-performance test-coverage clean lint format type-check dev-setup docker-build docker-up docker-down docker-logs docker-test version-update run
+# `type-check` sat in this list with no recipe anywhere in the file, so
+# `make type-check` answered "Nothing to be done" and exited 0. There is no type
+# checker in this project — pyproject.toml pins black and ruff, not mypy — so
+# the declaration is dropped rather than given a body.
+.PHONY: help install test test-unit test-integration test-performance test-coverage clean lint format dev-setup docker-build docker-up docker-down docker-logs docker-test version-update run
 
 # Default target
 help:
@@ -156,9 +160,20 @@ version-tag:
 		echo "⏸️  Tag not pushed. Run 'git push --tags' when ready."; \
 	fi
 
-# Catch-all rule to prevent "No rule to make target" errors when passing version as argument
+# Absorb the bare version argument of `make version-update 2.14.0`, which make
+# would otherwise try to build as a target of its own.
+#
+# This rule used to be unconditional, and a catch-all that succeeds silently
+# makes every unknown target a no-op that exits 0: `make tets` printed nothing
+# and returned success, and so did `make type-check`, `make test-fast` and
+# `make uv-test-fast` — three commands the docs told contributors to run before
+# committing, which therefore ran no tests and no checks for months while
+# reporting success. Guarding it on the goal list keeps the version argument
+# working and gives every other typo the "No rule to make target" it deserves.
+ifneq ($(filter version-update version-tag,$(MAKECMDGOALS)),)
 %:
 	@:
+endif
 
 # === UNIVERSAL TESTING COMMANDS (work with any Python environment) ===
 # Run all fast tests including external (for local development with yt-dlp installed)
@@ -242,9 +257,13 @@ uv-test-ci:
 	uv run pytest tests/ -v --tb=short -m "not slow and not external and not network"
 
 # Run linting with UV
+# flake8 is not a dependency of this project and never has been — ruff is the
+# linter, pinned in pyproject.toml next to black — so this recipe failed on its
+# second line for anyone who ran it. It also reformatted the tree instead of
+# checking it, which is what `make format` is for.
 uv-lint:
-	uv run black app/ tests/
-	uv run flake8 app/ tests/
+	uv run black --check app/ tests/
+	uv run ruff check app/ tests/
 
 # === UNIVERSAL CODE QUALITY COMMANDS ===
 # Format code (fixes most issues automatically)

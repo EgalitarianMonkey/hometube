@@ -95,7 +95,7 @@ Access the application at: <http://localhost:8501>
 make test
 
 # Fast tests only
-make test-fast
+make test-ci
 
 # With coverage report
 make test-coverage
@@ -115,7 +115,7 @@ python -m pytest tests/test_core_functions.py::test_sanitize_filename -v
 
 ```bash
 make uv-test
-make uv-test-fast
+make uv-test-ci
 ```
 
 ### Test Categories
@@ -137,9 +137,6 @@ make format
 
 # Run linting
 make lint
-
-# Type checking
-make type-check
 
 # All quality checks before commit
 make pre-commit

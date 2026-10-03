@@ -509,17 +509,14 @@ make dev-setup              # Setup development environment
 make test-watch             # Run tests in watch mode
 make format                 # Format code with black
 make lint                   # Run linting checks
-make type-check             # Run type checking
 make clean                  # Clean build artifacts
 
 # Docker development
 make docker-build           # Build local Docker image
 make docker-test            # Test Docker image
-make docker-run             # Run Docker container locally
-
-# Documentation
-make docs-serve             # Serve documentation locally
-make docs-build             # Build documentation
+make docker-up              # Run Docker container locally
+make docker-logs            # Follow container logs
+make docker-down            # Stop and remove containers
 ```
 
 ### IDE Configuration
