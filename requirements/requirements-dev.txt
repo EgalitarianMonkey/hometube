@@ -16,7 +16,7 @@ blinker==1.9.0
     # via streamlit
 certifi==2026.7.22
     # via requests
-charset-normalizer==3.5.1
+charset-normalizer==3.5.2
     # via requests
 click==8.5.0
     # via
@@ -63,7 +63,7 @@ pathspec==1.1.1
     # via black
 pillow==12.3.0
     # via streamlit
-platformdirs==4.11.10
+platformdirs==4.12.2
     # via black
 protobuf==7.36.2
     # via streamlit
@@ -73,13 +73,13 @@ pydeck==0.9.3
     # via streamlit
 python-dateutil==2.9.0.post0
     # via pandas
-python-dotenv==1.2.3
+python-dotenv==1.2.4
     # via hometube (pyproject.toml)
 python-multipart==0.0.32
     # via streamlit
 pytokens==0.4.1
     # via black
-pytz==2026.3.post1
+pytz==2026.4
     # via pandas
 referencing==0.37.0
     # via
@@ -93,11 +93,11 @@ rpds-py==2026.6.3
     # via
     #   jsonschema
     #   referencing
-ruff==0.16.8
+ruff==0.16.10
     # via hometube (pyproject.toml)
 six==1.17.0
     # via python-dateutil
-starlette==1.6.0
+starlette==1.7.0
     # via streamlit
 streamlit==1.64.0
     # via hometube (pyproject.toml)
@@ -114,7 +114,7 @@ tzdata==2026.4
     # via pandas
 urllib3==2.8.0
     # via requests
-uvicorn==0.53.0
+uvicorn==0.54.0
     # via streamlit
 watchdog==6.0.0
     # via

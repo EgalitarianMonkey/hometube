@@ -35,7 +35,7 @@ test = [
 
 dev = [
     "black==26.5.1",
-    "ruff==0.16.8",
+    "ruff==0.16.10",
     "watchdog>=6.0.0",
 ]
 
@@ -58,7 +58,7 @@ dev-dependencies = [
     "pytest-mock>=3.15.1",
     "pytest-xdist>=3.8.0",
     "black==26.5.1",
-    "ruff==0.16.8",
+    "ruff==0.16.10",
     "watchdog>=6.0.0",
 ]
 
