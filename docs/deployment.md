@@ -26,7 +26,7 @@ nano .env                # Configure paths, cookies, etc.
 
 **Single Service**:
 ```yaml
-# docker-compose.prod.yml
+# docker-compose.yml
 version: '3.8'
 
 services:
@@ -91,14 +91,20 @@ networks:
     driver: bridge
 ```
 
-### Automated Deployment Script
+### Deploying a Specific Version
+
+The image tag in `docker-compose.yml` is what pins the version. `latest` follows
+every release; set an explicit tag when you want to control upgrades yourself.
+Tags match the [release](https://github.com/EgalitarianMonkey/hometube/releases)
+names (`vX.Y.Z`).
 
 ```bash
-# Download and run deployment script
-curl -sSL https://raw.githubusercontent.com/EgalitarianMonkey/hometube/main/deploy.sh | bash -s -- v1.0.0
+# Edit the image line in docker-compose.yml, e.g.
+#   image: ghcr.io/egalitarianmonkey/hometube:vX.Y.Z
+docker compose up -d
 
-# Or manual deployment
-./deploy.sh v1.0.0 --backup --production
+# Or stay on the latest release
+docker compose pull && docker compose up -d
 ```
 
 ## ☁️ Cloud Deployment
@@ -122,27 +128,30 @@ git clone https://github.com/EgalitarianMonkey/hometube.git
 cd hometube
 
 # 3. Configure environment
-cp .env.example .env
+cp docker-compose.yml.sample docker-compose.yml
+cp .env.sample .env
 nano .env  # Edit configuration
 
 # 4. Setup SSL (if using domain)
 sudo certbot --nginx -d your-domain.com
 
 # 5. Deploy application
-docker-compose -f docker-compose.prod.yml up -d
+docker compose up -d
 ```
 
 ### Digital Ocean Droplet
 
-**One-Click Deployment**:
+**Quick Setup**:
 ```bash
 # Create droplet with Docker pre-installed
 # Size: 2GB RAM, 1 vCPU minimum
 
-# Quick setup
 git clone https://github.com/EgalitarianMonkey/hometube.git
 cd hometube
-./deploy.sh latest --production
+cp docker-compose.yml.sample docker-compose.yml
+cp .env.sample .env
+nano .env  # set VIDEOS_FOLDER_DOCKER_HOST and TMP_DOWNLOAD_FOLDER_DOCKER_HOST
+docker compose up -d
 ```
 
 ### AWS ECS/Fargate
@@ -409,7 +418,7 @@ sqlite3 app.db .dump > backup.sql
 **Recovery Procedure**:
 ```bash
 # 1. Stop services
-docker-compose down
+docker compose down
 
 # 2. Restore data
 tar -xzf backup/config.tar.gz -C /config
@@ -419,7 +428,7 @@ tar -xzf backup/videos.tar.gz -C /data
 tar -xzf backup/nginx.tar.gz -C /etc/nginx
 
 # 4. Restart services
-docker-compose up -d
+docker compose up -d
 
 # 5. Verify functionality
 curl -f http://localhost:8501/_stcore/health
@@ -444,15 +453,18 @@ watchtower:
 
 **Manual Update Process**:
 ```bash
-# Update to latest version
-./deploy.sh latest --backup
+# Update to the latest release
+docker compose pull && docker compose up -d
 
-# Update to specific version
-./deploy.sh v1.2.0 --backup
-
-# Rollback if needed
-./deploy.sh v1.1.0 --no-backup
+# Pin or roll back to a specific version: set the image tag in
+# docker-compose.yml to ghcr.io/egalitarianmonkey/hometube:vX.Y.Z, then
+docker compose up -d
 ```
+
+💡 Your videos and configuration live in the bind-mounted host folders
+(`VIDEOS_FOLDER_DOCKER_HOST`, `TMP_DOWNLOAD_FOLDER_DOCKER_HOST`) and in `.env`,
+so recreating the container does not touch them. Back those paths up, not the
+container.
 
 ### Maintenance Tasks
 
