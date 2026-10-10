@@ -519,9 +519,9 @@ HomeTube supports comprehensive environment variable configuration for all its f
 
 | Variable | Default | Description | Example |
 |----------|---------|-------------|---------|
-| `DOWNLOAD_FOLDER` | `/data/downloads` | Main download directory | `/home/user/Videos` |
+| `VIDEOS_FOLDER` | `/data/videos` | Main download directory | `/home/user/Videos` |
 | `TMP_DOWNLOAD_FOLDER` | `/data/tmp` | Temporary processing folder | `/tmp/hometube` |
-| `HOMETUBE_LANGUAGE` | `en` | Interface language | `en`, `fr` |
+| `UI_LANGUAGE` | `en` | Interface language | `en`, `fr` |
 | `YTDLP_CUSTOM_ARGS` | *(empty)* | Default yt-dlp arguments | `--max-filesize 100M` |
 | `DEBUG` | `false` | Enable debug mode | `true`, `false` |
 

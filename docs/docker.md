@@ -96,12 +96,13 @@ services:
 
 | Variable | Default Value | Description |
 |----------|---------------|-------------|
-| `QUALITY_PROFILE` | `auto` | Default quality profile (`mkv_av1_opus`, `mkv_vp9_opus`, `mp4_av1_aac`, `mp4_h264_aac`) |
 | `VIDEO_QUALITY_MAX` | `max` | Maximum video resolution (`max`, `2160`, `1440`, `1080`, `720`, `480`, `360`) |
 | `QUALITY_DOWNGRADE` | `true` | Allow quality downgrade on profile failure |
 | `EMBED_CHAPTERS` | `true` | Embed chapters by default |
 | `EMBED_SUBTITLES` | `true` | Embed subtitles by default |
 | `CUTTING_MODE` | `keyframes` | Video cutting precision (`keyframes`, `precise`) |
+
+The quality profile itself is not an environment variable: it is chosen in the interface, through the "choose a profile" download strategy. `QUALITY_DOWNGRADE` decides which strategy is preselected.
 
 ### Audio Language Preferences
 
