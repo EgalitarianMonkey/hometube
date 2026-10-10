@@ -10,8 +10,6 @@ attrs==26.1.0
     # via
     #   jsonschema
     #   referencing
-blinker==1.9.0
-    # via streamlit
 certifi==2026.7.22
     # via requests
 charset-normalizer==3.5.1
@@ -51,7 +49,7 @@ packaging==26.3
     # via
     #   altair
     #   streamlit
-pandas==2.3.3
+pandas==3.0.6
     # via streamlit
 pillow==12.3.0
     # via streamlit
@@ -67,8 +65,6 @@ python-dotenv==1.2.3
     # via hometube (pyproject.toml)
 python-multipart==0.0.32
     # via streamlit
-pytz==2026.3.post1
-    # via pandas
 referencing==0.37.0
     # via
     #   jsonschema
@@ -83,7 +79,7 @@ rpds-py==2026.6.3
     #   referencing
 six==1.17.0
     # via python-dateutil
-starlette==1.6.0
+starlette==1.7.0
     # via streamlit
 streamlit==1.64.0
     # via hometube (pyproject.toml)
@@ -96,11 +92,9 @@ typing-extensions==4.16.0
     #   referencing
     #   starlette
     #   streamlit
-tzdata==2026.4
-    # via pandas
 urllib3==2.8.0
     # via requests
-uvicorn==0.53.0
+uvicorn==0.54.0
     # via streamlit
 watchdog==6.0.0
     # via streamlit
