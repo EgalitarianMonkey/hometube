@@ -1,4 +1,6 @@
 <!-- markdownlint-disable-file -->
+
+[![Deploy to Railyard](https://app.railyard.run/deploy/badge)](https://app.railyard.run/deploy?repo=https://github.com/EgalitarianMonkey/hometube)
 <div align="center">
 
 <br/>
