@@ -9,7 +9,7 @@ authors = [{ name = "Yann Orieult" }]
 maintainers = [{ name = "Yann Orieult" }]
 
 dependencies = [
-    "streamlit>=1.49,<1.65",
+    "streamlit>=1.49,<1.66",
     "requests>=2.32.5",
     "python-dotenv>=1.1.1",
 ]
@@ -20,7 +20,7 @@ local = [
 ]
 
 docker = [
-    "streamlit>=1.49,<1.65",
+    "streamlit>=1.49,<1.66",
     "requests>=2.32.5",
     "python-dotenv>=1.1.1",
 ]
@@ -34,8 +34,8 @@ test = [
 ]
 
 dev = [
-    "black==26.5.1",
-    "ruff==0.16.8",
+    "black==26.10.0",
+    "ruff==0.16.10",
     "watchdog>=6.0.0",
 ]
 
@@ -57,8 +57,8 @@ dev-dependencies = [
     "pytest-cov>=7.0.0",
     "pytest-mock>=3.15.1",
     "pytest-xdist>=3.8.0",
-    "black==26.5.1",
-    "ruff==0.16.8",
+    "black==26.10.0",
+    "ruff==0.16.10",
     "watchdog>=6.0.0",
 ]
 
