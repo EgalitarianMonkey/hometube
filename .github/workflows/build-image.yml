@@ -109,15 +109,22 @@ jobs:
       - name: Prepare build labels
         id: labels
         run: |
+          # The build timestamp is computed here, outside the heredoc below.
+          # That heredoc's delimiter is quoted on purpose, so the shell expands
+          # nothing inside it — which is what keeps the values substituted into
+          # it from being interpreted. A command substitution placed in there
+          # would be emitted as its own source text, not as a date.
+          created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+
           # Base labels that are always included
           base_labels=$(cat << 'EOF'
           org.opencontainers.image.revision=${{ github.sha }}
-          org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
           io.hometube.ytdlp.version=${{ steps.ytdlp-version.outputs.version }}
           io.hometube.build.trigger=${{ github.event_name }}
           io.hometube.build.run=${{ github.run_id }}
           EOF
           )
+          base_labels=$(printf '%s\norg.opencontainers.image.created=%s' "$base_labels" "$created")
 
           # Combine with additional labels if provided
           additional_labels="${{ inputs.labels }}"
