@@ -227,6 +227,15 @@ class TestUpdatePanelNeverBreaksTheApp:
     """
 
     def test_renders_the_panel_with_every_version_known(self):
+        """The "up to date" branch, pinned against the version the app ships.
+
+        Hard-coding the released tag here made this test fail on every single
+        version bump: `make version-update` moved `app.__version__` forward, the
+        fake "latest" stayed behind, and the panel correctly reported "Update
+        available" while the assertion still demanded "Up to date". A release
+        PR could therefore never go green, which is exactly what held 2.13.1
+        back for thirty days. The fake release must follow the app.
+        """
         completed = subprocess.CompletedProcess(
             args=["yt-dlp", "--version"], returncode=0, stdout="2025.09.23\n"
         )
@@ -235,7 +244,9 @@ class TestUpdatePanelNeverBreaksTheApp:
             patch("app.ytdlp_version_check.subprocess.run", return_value=completed),
             patch(
                 "app.ytdlp_version_check.requests.get",
-                return_value=fake_response(200, {"tag_name": "v2.13.0"}),
+                return_value=fake_response(
+                    200, {"tag_name": f"v{app.__version__}"}
+                ),
             ),
             patch("app.ytdlp_version_check.st") as st,
         ):
@@ -244,7 +255,7 @@ class TestUpdatePanelNeverBreaksTheApp:
         st.info.assert_called_once()
         panel = st.info.call_args.args[0]
         assert "2025.09.23" in panel
-        assert "2.13.0" in panel
+        assert app.__version__ in panel
         assert "✅ Up to date" in panel
 
     def test_reports_unknown_versions_instead_of_failing(self):
