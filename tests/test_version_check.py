@@ -244,9 +244,7 @@ class TestUpdatePanelNeverBreaksTheApp:
             patch("app.ytdlp_version_check.subprocess.run", return_value=completed),
             patch(
                 "app.ytdlp_version_check.requests.get",
-                return_value=fake_response(
-                    200, {"tag_name": f"v{app.__version__}"}
-                ),
+                return_value=fake_response(200, {"tag_name": f"v{app.__version__}"}),
             ),
             patch("app.ytdlp_version_check.st") as st,
         ):
