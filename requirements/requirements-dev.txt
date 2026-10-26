@@ -14,7 +14,7 @@ black==26.10.1
     # via hometube (pyproject.toml)
 certifi==2026.10.23
     # via requests
-charset-normalizer==3.5.1
+charset-normalizer==3.5.2
     # via requests
 click==8.5.0
     # via
@@ -37,11 +37,11 @@ jsonschema==4.26.0
     # via altair
 jsonschema-specifications==2025.9.1
     # via jsonschema
-markupsafe==3.0.3
+markupsafe==3.0.4
     # via jinja2
 mypy-extensions==1.1.0
     # via black
-narwhals==2.26.0
+narwhals==2.27.1
     # via altair
 numpy==2.4.6
     # via
@@ -59,7 +59,7 @@ pathspec==1.1.1
     # via black
 pillow==13.0.0
     # via streamlit
-platformdirs==4.11.10
+platformdirs==4.13.5
     # via black
 protobuf==7.36.2
     # via streamlit
@@ -69,13 +69,13 @@ pydeck==0.9.3
     # via streamlit
 python-dateutil==2.9.0.post0
     # via pandas
-python-dotenv==1.2.3
+python-dotenv==1.2.4
     # via hometube (pyproject.toml)
 python-multipart==0.0.32
     # via streamlit
 pytokens==0.4.1
     # via black
-pytz==2026.3.post1
+pytz==2026.5
     # via pandas
 referencing==0.37.0
     # via
@@ -85,15 +85,15 @@ requests==2.34.2
     # via
     #   hometube (pyproject.toml)
     #   streamlit
-rpds-py==2026.6.3
+rpds-py==2026.9.1
     # via
     #   jsonschema
     #   referencing
-ruff==0.16.8
+ruff==0.17.2
     # via hometube (pyproject.toml)
 six==1.17.0
     # via python-dateutil
-starlette==1.6.0
+starlette==1.9.0
     # via streamlit
 streamlit==1.66.1
     # via hometube (pyproject.toml)
@@ -104,11 +104,11 @@ typing-extensions==4.16.0
     #   referencing
     #   starlette
     #   streamlit
-tzdata==2026.4
+tzdata==2026.5
     # via pandas
 urllib3==2.8.0
     # via requests
-uvicorn==0.53.0
+uvicorn==0.54.0
     # via streamlit
 watchdog==6.0.0
     # via
