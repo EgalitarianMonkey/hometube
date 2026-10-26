@@ -13,7 +13,7 @@ updates:
     open-pull-requests-limit: 5
     ignore:
       # Transitive deps of streamlit whose majors its own pins forbid:
-      # "numpy<3" and "websockets<17" as of streamlit 1.62. Dependabot proposes
+      # "numpy<3" and "websockets<18" as of streamlit 1.66. Dependabot proposes
       # them anyway and CI stays green — nothing imports either directly, and
       # CI installs from pyproject.toml rather than from these files — but the
       # resulting requirements would contradict streamlit's constraint.
@@ -22,7 +22,10 @@ updates:
       #
       # pandas and pillow were both listed here for the same reason under
       # streamlit 1.49 ("pandas<3", "pillow<12"). 1.62 widened them to
-      # "pandas<4" and "pillow<13", so their majors flow again.
+      # "pandas<4" and "pillow<13", and 1.66.1 to "pillow<14", so their majors
+      # flow again — but a pillow major still lands before streamlit allows it
+      # (#167 proposed 13.0.0 against streamlit 1.64): close such a PR and move
+      # streamlit instead.
       - dependency-name: "numpy"
         update-types: ["version-update:semver-major"]
       - dependency-name: "websockets"
