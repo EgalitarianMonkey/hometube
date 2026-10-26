@@ -90,12 +90,13 @@ sync-deps:
 	
 	# Generate requirements.txt from pyproject.toml (production dependencies)
 	# --upgrade is required: without it uv preserves the pins already present in
-	# the output file and this target regenerates nothing.
-	uv pip compile pyproject.toml --upgrade -o requirements/requirements.txt
+	# the output file and this target regenerates nothing. --universal writes
+	# platform differences as markers instead of resolving for this machine only.
+	uv pip compile pyproject.toml --universal --upgrade -o requirements/requirements.txt
 	@echo "📦 Updated requirements/requirements.txt"
 
 	# Generate requirements-dev.txt from pyproject.toml (with dev dependencies)
-	uv pip compile pyproject.toml --extra dev --upgrade -o requirements/requirements-dev.txt
+	uv pip compile pyproject.toml --extra dev --universal --upgrade -o requirements/requirements-dev.txt
 	@echo "🛠️ Updated requirements/requirements-dev.txt"
 	
 	# Note: environment.yml needs manual sync when adding system deps

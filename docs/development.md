@@ -397,7 +397,7 @@ uv lock
 **Update requirements files for python:**
 
 ```bash
-uv pip compile pyproject.toml -o requirements/requirements.txt
+uv pip compile pyproject.toml --universal -o requirements/requirements.txt
 ```
 
 #### Stage Changes
