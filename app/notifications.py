@@ -439,6 +439,8 @@ def _render_single_notification(notif: Notification, dismiss_key: str) -> None:
     with col2:
         # Dismiss button (styled as a small X)
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("✕", key=dismiss_key, help="Dismiss this notification"):
+        if st.button(
+            "✕", key=dismiss_key, help="Dismiss this notification", type="tertiary"
+        ):
             st.session_state[dismiss_key] = True
             st.rerun()
