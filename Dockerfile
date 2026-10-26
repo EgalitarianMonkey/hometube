@@ -60,14 +60,18 @@ done
 
 # Prune Python bloat
 find "$SITE_DIR" -type d -name "__pycache__" -prune -exec rm -rf {} +
-find "$SITE_DIR" -type d -regex '.*\(tests\|testing\|test\)$' -exec rm -rf {} +
+# Test suites only, matched by exact name. A suffix match also took
+# pandas/_testing, which `import pandas` itself loads, so pandas could not be
+# imported in the image at all.
+find "$SITE_DIR" -type d \( -name tests -o -name test \) -prune -exec rm -rf {} +
 find "$SITE_DIR" -type f -name '*.pyi' -delete
 
 # Drop build deps before committing the layer
 apk del .build-deps
 
-# A base that shifts under us must break the build here, not at runtime
-"$TARGET_PY" -c 'import streamlit'
+# A base that shifts under us, or a prune that cuts too deep, must break the
+# build here, not at runtime
+"$TARGET_PY" -c 'import streamlit, pandas'
 yt-dlp --version
 BASH
 
