@@ -4227,7 +4227,9 @@ if submitted:
 
     # If no filename provided, get video title
     if filename is None:
-        filename = get_video_title(clean_url, cookies_part)
+        filename = get_video_title(
+            clean_url, cookies_part, json_path=tmp_video_dir / "url_info.json"
+        )
 
     base_output = filename  # without extension
 
@@ -4813,7 +4815,9 @@ if submitted:
             status_placeholder.info("📝 Customizing video metadata...")
 
             # Get original title for preservation in album field
-            original_title = get_video_title(clean_url, cookies_part)
+            original_title = get_video_title(
+                clean_url, cookies_part, json_path=tmp_video_dir / "url_info.json"
+            )
 
             # Extract video ID from URL
             video_id = video_id_from_url(clean_url)

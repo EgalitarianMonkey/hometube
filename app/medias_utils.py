@@ -756,7 +756,9 @@ def get_video_title_from_json(json_path: Path | None = None) -> str:
         return "video"
 
 
-def get_video_title(url: str, cookies_part: list[str] = None) -> str:
+def get_video_title(
+    url: str, cookies_part: list[str] = None, json_path: Path | None = None
+) -> str:
     """
     Get video title with fallback strategy.
 
@@ -767,6 +769,9 @@ def get_video_title(url: str, cookies_part: list[str] = None) -> str:
     Args:
         url: Video URL (used for fallback only)
         cookies_part: Cookie parameters for fallback (optional)
+        json_path: Path to the workspace url_info.json. Callers should pass the
+            path of the URL workspace created by url_analysis(); without it the
+            lookup falls back to the TMP root, where no url_info.json is written.
 
     Returns:
         str: Sanitized video title suitable for filename
@@ -782,7 +787,7 @@ def get_video_title(url: str, cookies_part: list[str] = None) -> str:
         import subprocess
 
         # Strategy 1: Try to get title from existing JSON (fastest)
-        title = get_video_title_from_json()
+        title = get_video_title_from_json(json_path)
         if title != "video":  # Successfully got title from JSON
             return title
 
