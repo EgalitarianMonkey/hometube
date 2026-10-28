@@ -1,0 +1,28 @@
+{
+  "id": "hlsNoFilesize",
+  "title": "HLS stream without a reported filesize",
+  "_type": "video",
+  "extractor": "generic",
+  "extractor_key": "Generic",
+  "webpage_url": "https://example.test/share/hlsNoFilesize",
+  "formats": [
+    {
+      "format_id": "hls-raw-3200",
+      "url": "https://example.test/v.m3u8",
+      "ext": "mp4",
+      "protocol": "m3u8_native",
+      "vcodec": "avc1.640028",
+      "acodec": "none",
+      "height": 1080,
+      "width": 1920
+    },
+    {
+      "format_id": "hls-raw-audio-audio",
+      "url": "https://example.test/a.m3u8",
+      "ext": "mp4",
+      "protocol": "m3u8_native",
+      "vcodec": "none",
+      "acodec": "mp4a.40.2"
+    }
+  ]
+}
