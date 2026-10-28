@@ -251,6 +251,18 @@ YTDLP_FORMATS_SORT_VP9_FIRST_ARG = (
     '-S "res,fps,codec:vp9,codec:h264,br,ext:webm:moved,ext:mp4"'
 )
 
+# --print template used to read back the selected format as one JSON line.
+# The two numeric fields MUST carry a `|0` default: yt-dlp's template engine
+# prints the bare sentinel `NA` for a missing field, and an unquoted `NA` is not
+# valid JSON, so json.loads would reject the whole line and every profile would
+# be discarded. This hits any extractor that reports no size (HLS, e.g. Loom).
+# The string fields are quoted, so a missing one becomes "NA" and stays valid.
+YTDLP_FORMAT_PROBE_PRINT_TEMPLATE = (
+    '{"format_id":"%(format_id)s","ext":"%(ext)s","height":%(height|0)s,'
+    '"vcodec":"%(vcodec)s","protocol":"%(protocol)s",'
+    '"filesize_approx":%(filesize_approx|0)s}'
+)
+
 
 def build_language_anchored_format_spec(
     video_format_id: str, audio_formats: list[dict]
@@ -357,7 +369,7 @@ def get_profiles_with_formats_id_to_download(
             cmd.extend(
                 [
                     "--print",
-                    '{"format_id":"%(format_id)s","ext":"%(ext)s","height":%(height)s,"vcodec":"%(vcodec)s","protocol":"%(protocol)s","filesize_approx":%(filesize_approx)s}',
+                    YTDLP_FORMAT_PROBE_PRINT_TEMPLATE,
                 ]
             )
 
