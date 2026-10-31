@@ -18,6 +18,14 @@ from app.translations import t
 # === CONSTANTS ===
 HOMETUBE_GITHUB_REPO = "EgalitarianMonkey/hometube"  # GitHub repository for HomeTube
 
+# `UNKNOWN_VERSION` is the placeholder the update panel substitutes for a
+# lookup that came back None, and the three statuses are everything it can
+# report about a pair of versions.
+UNKNOWN_VERSION = "unknown"
+STATUS_UP_TO_DATE = "✅ Up to date"
+STATUS_UPDATE_AVAILABLE = "🔄 Update available"
+STATUS_UNKNOWN = "❓ Could not compare"
+
 
 # === YT-DLP VERSION CHECK ===
 
@@ -113,6 +121,58 @@ def get_latest_hometube_version() -> str | None:
     return None
 
 
+# === VERSION COMPARISON ===
+
+
+def _comparable_version(value: str | None) -> tuple | None:
+    """Parse a version into a comparable tuple, or None when there is none.
+
+    Returns None for a missing version, for the `unknown` placeholder, and for
+    anything `parse_version` cannot read — it answers `(0, 0, 0)` in that case,
+    and neither HomeTube nor yt-dlp has ever published a `0.0.0`, so that value
+    means "unparseable" here rather than a real version.
+    """
+    if not value or value == UNKNOWN_VERSION:
+        return None
+
+    # Imported lazily, mirroring `notifications.get_latest_version()`, which
+    # imports this module the same way: the two modules reference each other.
+    from app.notifications import parse_version
+
+    parsed = parse_version(value)
+    return None if parsed == (0, 0, 0) else parsed
+
+
+def describe_version_status(current: str | None, latest: str | None) -> str:
+    """Say whether `latest` is actually newer than `current`.
+
+    Compares parsed `(major, minor, patch)` tuples rather than the two strings.
+    Equality is the wrong test in three ways, all of them observed:
+
+    * **Running ahead of the latest release.** A published release can lag the
+      running build — a release left in draft is invisible to
+      `/releases/latest`, which is exactly the state 2.13.3 shipped in — and an
+      inequality then told the user to "update" to a version *older* than
+      theirs.
+    * **A failed lookup.** Both sides fall back to `unknown`, and
+      `"unknown" == "unknown"` reported ✅ *Up to date*: a check that reached
+      nothing claimed success, while a half-failed one offered an update to
+      `unknown`.
+    * **Dotted dates don't compare as strings.** yt-dlp numbers its releases
+      `2026.9.1`, `2026.10.26`; `"2026.9.1" > "2026.10.26"` lexically, so the
+      newer release reads as older.
+    """
+    current_tuple = _comparable_version(current)
+    latest_tuple = _comparable_version(latest)
+
+    if current_tuple is None or latest_tuple is None:
+        return STATUS_UNKNOWN
+
+    return (
+        STATUS_UPDATE_AVAILABLE if latest_tuple > current_tuple else STATUS_UP_TO_DATE
+    )
+
+
 # === UI DISPLAY FUNCTIONS ===
 
 
@@ -123,10 +183,10 @@ def check_and_show_updates() -> None:
     """
     try:
         # Get current versions
-        ytdlp_current = get_current_ytdlp_version() or "unknown"
-        ytdlp_latest = get_latest_ytdlp_version() or "unknown"
-        hometube_current = get_current_hometube_version() or "unknown"
-        hometube_latest = get_latest_hometube_version() or "unknown"
+        ytdlp_current = get_current_ytdlp_version() or UNKNOWN_VERSION
+        ytdlp_latest = get_latest_ytdlp_version() or UNKNOWN_VERSION
+        hometube_current = get_current_hometube_version() or UNKNOWN_VERSION
+        hometube_latest = get_latest_hometube_version() or UNKNOWN_VERSION
 
         # Build information message
         update_info_markdown = f"""
@@ -136,13 +196,13 @@ def check_and_show_updates() -> None:
 
 **{t('update_current_version')}:** {hometube_current}  
 **{t('update_latest_version')}:** {hometube_latest}  
-**Status:** {"✅ Up to date" if hometube_current == hometube_latest else "🔄 Update available"}
+**Status:** {describe_version_status(hometube_current, hometube_latest)}
 
 **yt-dlp:**
 
 **{t('update_current_version')}:** {ytdlp_current}  
 **{t('update_latest_version')}:** {ytdlp_latest}  
-**Status:** {"✅ Up to date" if ytdlp_current == ytdlp_latest else "🔄 Update available"}
+**Status:** {describe_version_status(ytdlp_current, ytdlp_latest)}
 
 **{t('update_docker_title')}:**
 
