@@ -23,7 +23,12 @@ import requests
 import app
 from app.ytdlp_version_check import (
     HOMETUBE_GITHUB_REPO,
+    STATUS_UNKNOWN,
+    STATUS_UP_TO_DATE,
+    STATUS_UPDATE_AVAILABLE,
+    UNKNOWN_VERSION,
     check_and_show_updates,
+    describe_version_status,
     get_current_hometube_version,
     get_current_ytdlp_version,
     get_latest_hometube_version,
@@ -218,6 +223,87 @@ class TestVersionSourcesAgree:
         assert app.__version__ == get_current_hometube_version()
 
 
+class TestDescribeVersionStatus:
+    """The panel's verdict used to be `current == latest`, which is wrong.
+
+    An inequality says "newer" when all it knows is "different", and the two
+    strings are different in three situations that have nothing to do with an
+    available update. Each test below is one of them, and each was measured on
+    the panel before the comparison was fixed.
+    """
+
+    def test_a_newer_release_is_an_update(self):
+        assert describe_version_status("2.13.0", "2.14.0") == STATUS_UPDATE_AVAILABLE
+
+    def test_a_newer_patch_is_an_update(self):
+        """The one case equality got right; it must keep working."""
+        assert describe_version_status("2.13.2", "2.13.3") == STATUS_UPDATE_AVAILABLE
+
+    def test_the_same_version_is_up_to_date(self):
+        assert describe_version_status("2.13.3", "2.13.3") == STATUS_UP_TO_DATE
+
+    def test_running_ahead_of_the_latest_release_is_up_to_date(self):
+        """🔴 Live on 2026-10-31: `v2.13.3` was tagged, built and pushed to
+        `:latest`, but its GitHub release was left a draft — and a draft is
+        invisible to `/releases/latest`, which kept answering `v2.13.2`.
+
+        So every user on `:latest` who opened the panel was told an update was
+        available, and sent to a release *older* than the one they were
+        running. The app must never advertise a downgrade as an upgrade.
+        """
+        assert describe_version_status("2.13.3", "2.13.2") == STATUS_UP_TO_DATE
+
+    def test_both_versions_unknown_is_not_up_to_date(self):
+        """🔴 The sharpest one: `"unknown" == "unknown"` reported ✅ *Up to
+        date*.
+
+        Offline, or with GitHub rate-limiting, every lookup returns None and
+        the panel substitutes `unknown` on both sides. The old test asserted
+        `"unknown" in panel` and never looked at the status line, so a check
+        that reached nothing claimed success — this repository's recurring
+        defect, a thing that silently does nothing instead of failing.
+        """
+        assert (
+            describe_version_status(UNKNOWN_VERSION, UNKNOWN_VERSION) == STATUS_UNKNOWN
+        )
+
+    def test_an_unknown_latest_is_not_an_update(self):
+        """The other half of a failed lookup: it offered an update to `unknown`."""
+        assert describe_version_status("2.13.3", UNKNOWN_VERSION) == STATUS_UNKNOWN
+
+    def test_an_unknown_current_is_not_an_update(self):
+        assert describe_version_status(UNKNOWN_VERSION, "2.13.3") == STATUS_UNKNOWN
+
+    @pytest.mark.parametrize("value", [None, ""])
+    def test_a_missing_version_is_not_an_update(self, value):
+        assert describe_version_status(value, "2.13.3") == STATUS_UNKNOWN
+        assert describe_version_status("2.13.3", value) == STATUS_UNKNOWN
+
+    def test_an_unparseable_version_is_not_an_update(self):
+        """`parse_version` answers `(0, 0, 0)` for anything it cannot read, so
+        comparing its output blindly would call two unreadable strings equal —
+        the `unknown` defect again, one layer down."""
+        assert describe_version_status("not-a-version", "2.13.3") == STATUS_UNKNOWN
+        assert describe_version_status("2.13.3", "garbage") == STATUS_UNKNOWN
+
+    def test_ytdlp_dotted_dates_compare_numerically_not_lexically(self):
+        """yt-dlp numbers releases by date, and `"2026.9.1" > "2026.10.26"` as
+        strings — so a string comparison reads the newer release as older."""
+        assert (
+            describe_version_status("2026.9.1", "2026.10.26") == STATUS_UPDATE_AVAILABLE
+        )
+        assert describe_version_status("2026.10.26", "2026.9.1") == STATUS_UP_TO_DATE
+
+    def test_a_v_prefix_is_not_a_difference(self):
+        """`get_latest_*` strips the prefix, but nothing guarantees every
+        caller does."""
+        assert describe_version_status("2.13.3", "v2.13.3") == STATUS_UP_TO_DATE
+
+    def test_the_three_statuses_are_distinct(self):
+        """Guards the tests above: identical constants would make them vacuous."""
+        assert len({STATUS_UP_TO_DATE, STATUS_UPDATE_AVAILABLE, STATUS_UNKNOWN}) == 3
+
+
 class TestUpdatePanelNeverBreaksTheApp:
     """`check_and_show_updates` is wired to a sidebar button in `app/main.py`.
 
@@ -257,7 +343,13 @@ class TestUpdatePanelNeverBreaksTheApp:
         assert "✅ Up to date" in panel
 
     def test_reports_unknown_versions_instead_of_failing(self):
-        """Offline, and without yt-dlp: the panel still renders."""
+        """Offline, and without yt-dlp: the panel still renders.
+
+        The status assertions are the half this test was missing. It checked
+        only that `unknown` appeared somewhere, so it passed just as happily
+        while the panel told an offline user ✅ *Up to date* — a verdict it had
+        no information to reach.
+        """
         with (
             patch(
                 "app.ytdlp_version_check.subprocess.run", side_effect=FileNotFoundError
@@ -273,6 +365,38 @@ class TestUpdatePanelNeverBreaksTheApp:
         st.error.assert_not_called()
         panel = st.info.call_args.args[0]
         assert "unknown" in panel
+        assert STATUS_UNKNOWN in panel
+        assert STATUS_UP_TO_DATE not in panel
+        assert STATUS_UPDATE_AVAILABLE not in panel
+
+    def test_a_release_behind_the_running_build_is_not_an_update(self):
+        """The panel on 2026-10-31, with `v2.13.3`'s release still a draft.
+
+        `/releases/latest` answered `v2.13.2` while the image ran 2.13.3, and
+        the panel offered the older release as an upgrade. The fake release is
+        derived from the running version rather than hard-coded, for the reason
+        written on `test_renders_the_panel_with_every_version_known`: a literal
+        tag here fails on every version bump.
+        """
+        major = int(app.__version__.split(".")[0])
+        older_release = f"{major - 1}.0.0"
+        completed = subprocess.CompletedProcess(
+            args=["yt-dlp", "--version"], returncode=0, stdout="2026.10.26\n"
+        )
+
+        with (
+            patch("app.ytdlp_version_check.subprocess.run", return_value=completed),
+            patch(
+                "app.ytdlp_version_check.requests.get",
+                return_value=fake_response(200, {"tag_name": f"v{older_release}"}),
+            ),
+            patch("app.ytdlp_version_check.st") as st,
+        ):
+            check_and_show_updates()
+
+        panel = st.info.call_args.args[0]
+        assert older_release in panel
+        assert STATUS_UPDATE_AVAILABLE not in panel
 
     def test_an_unexpected_failure_is_shown_not_raised(self):
         with (
