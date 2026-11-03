@@ -92,11 +92,19 @@ sync-deps:
 	# --upgrade is required: without it uv preserves the pins already present in
 	# the output file and this target regenerates nothing. --universal writes
 	# platform differences as markers instead of resolving for this machine only.
-	uv pip compile pyproject.toml --universal --upgrade -o requirements/requirements.txt
+	# --python-version does the same for the Python axis: --universal resolves
+	# from the interpreter running uv upwards, not from requires-python, so on a
+	# 3.12 machine it drops the 3.11 fork and pins a numpy that has no 3.11
+	# release. Keep it equal to requires-python's lower bound — the contract test
+	# tests/test_requirements_contract.py fails if the two drift apart.
+	uv pip compile pyproject.toml --universal --python-version 3.11 --upgrade -o requirements/requirements.txt
 	@echo "📦 Updated requirements/requirements.txt"
 
 	# Generate requirements-dev.txt from pyproject.toml (with dev dependencies)
-	uv pip compile pyproject.toml --extra dev --universal --upgrade -o requirements/requirements-dev.txt
+	# --extra test as well as --extra dev: pytest and its plugins live in the
+	# test extra, and without it this file pins no test runner while
+	# docs/contributing.md tells a contributor to install it and run `make test`.
+	uv pip compile pyproject.toml --extra dev --extra test --universal --python-version 3.11 --upgrade -o requirements/requirements-dev.txt
 	@echo "🛠️ Updated requirements/requirements-dev.txt"
 	
 	# Note: environment.yml needs manual sync when adding system deps
