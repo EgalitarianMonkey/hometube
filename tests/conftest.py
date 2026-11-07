@@ -3,6 +3,7 @@ Simplified and robust pytest configuration.
 """
 
 import pytest
+import shutil
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -41,6 +42,33 @@ mock_st.markdown = MagicMock(return_value=None)
 
 # Install the mock IMMEDIATELY
 sys.modules["streamlit"] = mock_st
+
+
+# === EXTERNAL TOOL AVAILABILITY ===
+# `external` means "this test drives a real external tool"; pyproject declares it
+# as "Tests requiring external tools (yt-dlp, ffmpeg, etc.)". The tools are not
+# Python dependencies of a dev install: yt-dlp sits in the `local` extra, so
+# `uv sync`, requirements.txt and requirements-dev.txt all omit the binary on
+# purpose, and no documented setup path installs it.
+#
+# A marker only deselects, it does not skip. CI and `make test-ci` pass
+# `-m "not external"`, but `make test` does not -- and that is the command
+# docs/contributing.md names both for "Verify setup" and in the PR checklist. So
+# a contributor on a clean checkout saw these tests *fail*, and the failure read
+# as a code regression (`assert 0 >= 1`) rather than as a missing tool, because
+# the code under test catches the OSError and returns an empty list.
+#
+# A tool the project never asked you to install is not a regression: skip.
+EXTERNAL_TOOLS = ("yt-dlp",)
+
+
+def pytest_runtest_setup(item):
+    """Skip `external` tests when the tools they drive are not on PATH."""
+    if item.get_closest_marker("external") is None:
+        return
+    missing = [tool for tool in EXTERNAL_TOOLS if shutil.which(tool) is None]
+    if missing:
+        pytest.skip(f"requires external tool(s) not on PATH: {', '.join(missing)}")
 
 
 def pytest_configure(config):
