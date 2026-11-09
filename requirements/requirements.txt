@@ -62,7 +62,7 @@ pyarrow==26.0.0
     # via streamlit
 pydeck==0.9.3
     # via streamlit
-python-dateutil==3.0.0
+python-dateutil==4.0.0
     # via pandas
 python-dotenv==1.2.4
     # via hometube (pyproject.toml)

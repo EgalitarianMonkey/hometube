@@ -102,7 +102,7 @@ pytest-mock==3.17.0
     # via hometube (pyproject.toml)
 pytest-xdist==3.8.0
     # via hometube (pyproject.toml)
-python-dateutil==3.0.0
+python-dateutil==4.0.0
     # via pandas
 python-dotenv==1.2.4
     # via hometube (pyproject.toml)
