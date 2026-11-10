@@ -4,7 +4,7 @@ Complete guide for contributing to HomeTube.
 
 ## 📋 Prerequisites
 
-- **Python 3.10+**
+- **Python 3.11+**
 - **Git**
 - **FFmpeg** (for video processing)
 - **Package manager**: UV (recommended), conda, or pip
@@ -293,10 +293,11 @@ GitHub Actions workflows:
 
 | Workflow | Trigger | Purpose |
 | -------- | ------- | ------- |
-| `tests.yml` | Push, PR | Run tests on Python 3.10-3.12 |
-| `docker-build.yml` | Push to main, tags | Build multi-arch Docker images |
-| `release.yml` | Version tags (v*) | Create GitHub releases |
-| `refresh-ytdlp.yml` | Daily, manual | Update yt-dlp version |
+| `ci.yml` | Push to main, PR | Lint, run the suite on Python 3.11, and build the image without pushing it |
+| `pr-labeler.yml` | PR opened or updated | Label the pull request from its branch name |
+| `release.yml` | Version tags (v*) | Run the suite, publish the images, draft the GitHub release |
+| `refresh-ytdlp.yml` | Daily 06:00 UTC, manual | Rebuild the image when a new yt-dlp is published |
+| `build-image.yml` | Called by `release.yml` and `refresh-ytdlp.yml` | Build and push the multi-arch image |
 
 ### Local CI Testing
 

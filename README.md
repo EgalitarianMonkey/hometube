@@ -493,7 +493,7 @@ python run.py
 
 ```bash
 # Create conda environment
-conda create -n hometube python=3.10
+conda create -n hometube python=3.11
 conda activate hometube
 
 # Install dependencies including yt-dlp
@@ -608,7 +608,7 @@ DEBUG=1 python -c "import app.main" 2>/dev/null
 
 |Component|Technology|Purpose|
 |---------|----------|-------|
-|**Backend**|Python 3.10+, yt-dlp, FFmpeg|Core processing|
+|**Backend**|Python 3.11+, yt-dlp, FFmpeg|Core processing|
 |**Frontend**|Streamlit|Web interface|
 |**Container**|🐳 jauderho/yt-dlp (Alpine + yt-dlp + FFmpeg)|Optimized deployment|
 |**CI/CD**|GitHub Actions|Automation|
@@ -619,7 +619,7 @@ DEBUG=1 python -c "import app.main" 2>/dev/null
 
 |Requirement|Minimum|Recommended|
 |-----------|-------|-----------|
-|**Python**|3.10+|3.11+|
+|**Python**|3.11+|3.11+|
 |**FFmpeg**|Latest|Latest|
 |**Storage**|2GB free|10GB+|
 |**Memory**|512MB|2GB|

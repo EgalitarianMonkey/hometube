@@ -75,7 +75,7 @@ For development or systems without Docker.
 
 ### Prerequisites
 
-- **Python 3.10+**: [Download from python.org](https://www.python.org/downloads/)
+- **Python 3.11+**: [Download from python.org](https://www.python.org/downloads/)
 - **FFmpeg**: Required for video processing
 - **Package manager**: pip, conda, uv, or poetry
 
@@ -93,7 +93,7 @@ brew install python ffmpeg
 ```
 
 #### Windows
-1. Install [Python 3.10+](https://www.python.org/downloads/)
+1. Install [Python 3.11+](https://www.python.org/downloads/)
 2. Download [FFmpeg](https://ffmpeg.org/download.html) and add to PATH
 
 ### Python Environment Setup

@@ -24,6 +24,7 @@ counterpart — so that files the reader is told to create (``docker-compose.yml
 ``.env``, ``nginx.conf``) do not register as broken promises.
 """
 
+import posixpath
 import re
 import shutil
 import subprocess
@@ -46,6 +47,20 @@ DASH_F_FILE = re.compile(r"-f\s+([A-Za-z0-9_][A-Za-z0-9_./-]*\.ya?ml)\b")
 SAMPLE_COPY = re.compile(
     r"\bcp\s+([A-Za-z0-9_.][A-Za-z0-9_./-]*\.(?:sample|example))\b"
 )
+
+# A relative Markdown link to another document, `#anchor` stripped. Scanned over
+# the whole file rather than over fenced blocks alone, unlike the four patterns
+# above: prose mentions a *command* in passing, but it never mentions a link in
+# passing — a link is clicked, and a dead relative link in a GitHub-rendered
+# document answers 404.
+MD_LINK = re.compile(r"\[[^\]]*\]\((?!\w+:)([^)#\s]+\.md)(?:#[^)\s]*)?\)")
+
+# A YAML file the documentation names in backticks. The workflow tables of
+# docs/contributing.md and docs/development.md named `tests.yml` and
+# `docker-build.yml`, neither of which has ever existed in this repository
+# (the real ones are ci.yml, release.yml, build-image.yml, refresh-ytdlp.yml
+# and pr-labeler.yml), and nothing compared the two lists.
+BACKTICKED_YAML = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\.ya?ml)`")
 
 # A raw.githubusercontent.com URL pointing into *this* repository's own tree.
 # Scoped to the owner/repo so that URLs for Yann's other projects (README.md
@@ -180,6 +195,68 @@ def test_every_self_referencing_raw_url_resolves():
     )
 
 
+def whole_file_references(pattern):
+    """(file, lineno, captured path) for every line of the docs, fences included.
+
+    The two rules below are about links and file names rather than commands, and
+    those promise something wherever they are written — see `MD_LINK`.
+    """
+    found = []
+    for path in doc_sources():
+        for lineno, raw in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            for match in pattern.finditer(raw):
+                found.append((path.relative_to(REPO_ROOT), lineno, match.group(1)))
+    return found
+
+
+def test_every_relative_document_link_resolves():
+    """`docs/development.md` linked `automatic-ytdlp-updates.md`, which is in no clone.
+
+    The real document is `docs/architecture/ytdlp-version-management.md`. On
+    GitHub a dead relative link renders as a normal link and answers 404 on
+    click, which is the same silence as the rest of this module's subjects.
+    """
+    tracked = tracked_files()
+    broken = []
+    for path, lineno, target in whole_file_references(MD_LINK):
+        resolved = posixpath.normpath((path.parent / target).as_posix())
+        if resolved not in tracked:
+            broken.append((path, lineno, f"[...]({target}) → {resolved}"))
+    assert (
+        not broken
+    ), "the docs link to documents that are not in the repository:\n" + report(broken)
+
+
+def test_every_yaml_file_the_docs_name_is_one_the_repository_has():
+    """The workflow tables named `tests.yml` and `docker-build.yml` for a year.
+
+    Matched by basename, not by path, because the docs name a workflow both
+    ways — `.github/workflows/ci.yml` in one guide and `` `ci.yml` `` in the
+    other's table. A file the reader is told to *create* is legitimate when the
+    repository ships the sample it is created from, the same exemption the
+    `-f` rule above makes.
+    """
+    basenames = {Path(name).name for name in tracked_files()}
+    samples = {
+        Path(name).name.removesuffix(".sample")
+        for name in tracked_files()
+        if name.endswith(".sample")
+    }
+    broken = [
+        (path, lineno, f"`{target}`")
+        for path, lineno, target in whole_file_references(BACKTICKED_YAML)
+        if Path(target).name not in basenames and Path(target).name not in samples
+    ]
+    assert not broken, (
+        "the docs name YAML files the repository does not ship:\n"
+        + report(broken)
+        + "\n(a workflow table that names a workflow nobody wrote describes a "
+        "CI pipeline that does not exist)"
+    )
+
+
 def test_the_parsers_actually_find_something():
     """Guard the guards: four rules that match nothing would all pass."""
     assert len(tracked_files()) > 50, "git ls-files returned almost nothing"
@@ -192,6 +269,22 @@ def test_the_parsers_actually_find_something():
 
     dash_f = {target for _, _, target in references(DASH_F_FILE)}
     assert "environment.yml" in dash_f, f"the `-f` parser is broken — found {dash_f}"
+
+    links = {target for _, _, target in whole_file_references(MD_LINK)}
+    assert (
+        len(links) > 10 and "docs/installation.md" in links
+    ), f"the Markdown-link parser is broken — found {sorted(links)[:5]}"
+
+    yamls = {
+        Path(target).name for _, _, target in whole_file_references(BACKTICKED_YAML)
+    }
+    assert {
+        "ci.yml",
+        "release.yml",
+        "refresh-ytdlp.yml",
+    } <= yamls, (
+        f"the backticked-YAML parser no longer finds the workflows — found {yamls}"
+    )
 
 
 def test_a_gitignored_script_does_not_count_as_shipped():

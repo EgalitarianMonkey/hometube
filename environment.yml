@@ -4,29 +4,35 @@ channels:
   - defaults
 
 dependencies:
-  - python>=3.10
+  # Keep this lower bound equal to `requires-python` in pyproject.toml. It read
+  # `python>=3.10` until 2026-11-10, while the project has required 3.11 — so
+  # conda would build a 3.10 environment in which the pip install below is
+  # unsatisfiable ("hometube depends on Python>=3.11"), and the failure then
+  # arrives one step after the wrong prerequisite that caused it.
+  - python>=3.11
   - pip
   - ffmpeg  # Required for video processing
-  
-  # Development and testing dependencies via pip
+
+  # Install HomeTube's own declared dependencies instead of a second copy of
+  # them. This line is deliberately the only entry in the pip section: every
+  # version this file used to restate was a source of truth nothing updated,
+  # and by 2026-11-10 all five had drifted from pyproject.toml —
+  #   * python-dotenv was missing entirely, and it is a *direct* core
+  #     dependency rather than a streamlit transitive, so app/config.py printed
+  #     "python-dotenv not installed — skipping .env loading" and the
+  #     contributor's whole .env was ignored: one warning line in Streamlit's
+  #     output, and videos land in ./downloads whatever VIDEOS_FOLDER says
+  #   * requests was missing too, arriving only by accident through streamlit
+  #   * streamlit>=1.49.1 dropped the <1.67 ceiling pyproject.toml declares
+  #   * black>=23.0.0 against the exact `black==26.10.1` the project pins, so
+  #     this path can install a black whose formatting CI then rejects
+  #   * ruff, the actual linter, was absent — while flake8 and mypy, which this
+  #     project does not use, were installed
+  # `[test,dev]` is the same set CI installs (.github/workflows/ci.yml).
+  # yt-dlp stays out on purpose: it is the `local` extra and is expected as a
+  # system tool, like ffmpeg above.
   - pip:
-    # === CORE DEPENDENCIES ===
-    - streamlit>=1.49.1
-    
-    # === TESTING DEPENDENCIES ===
-    # Essential for make test commands to work
-    - pytest>=8.4.2
-    - pytest-asyncio>=1.2.0
-    - pytest-cov>=7.0.0
-    - pytest-mock>=3.15.0
-    - pytest-xdist>=3.8.0
-    
-    # === DEVELOPMENT DEPENDENCIES ===
-    # Code quality and development tools
-    - black>=23.0.0
-    - flake8>=6.0.0
-    - mypy>=1.5.0
-    - watchdog>=3.0.0
+    - -e .[test,dev]
 
 # === USAGE GUIDE ===
 #
@@ -37,15 +43,15 @@ dependencies:
 #   python run.py
 #
 # 🛠️ Full Development Setup:
-#   conda env create -f environment.yml  
+#   conda env create -f environment.yml
 #   conda activate hometube
 #   make test-all
 #   python run.py
 #
 # 🔄 Alternative with Requirements Files:
-#   conda create -n hometube python>=3.10 ffmpeg
+#   conda create -n hometube python>=3.11 ffmpeg
 #   conda activate hometube
-#   pip install -r requirements-dev.txt
+#   pip install -r requirements/requirements-dev.txt
 #
 # 📁 Environment Management:
 #   conda env update -f environment.yml     # Update existing environment
