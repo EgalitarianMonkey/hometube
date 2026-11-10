@@ -6,7 +6,7 @@ Guide for developers contributing to HomeTube.
 
 ### Prerequisites
 
-- **Python 3.10+**
+- **Python 3.11+**
 - **Package manager**: pip, conda, uv, or poetry
 - **Docker** (for container testing)
 - **Git**
@@ -233,27 +233,32 @@ pre-commit run --all-files
 
 ### GitHub Actions Workflows
 
-**1. Tests Workflow** (`.github/workflows/tests.yml`):
-- Triggered on: Push, Pull Request
-- Runs on: Ubuntu, Python 3.10-3.12
-- Steps: Install dependencies → Run tests → Upload coverage
+**1. CI** (`.github/workflows/ci.yml`):
+- Triggered on: Push to `main`, Pull Request
+- Runs on: Ubuntu, Python 3.11
+- Steps: Install `.[test,dev]` → lint with black and ruff → run the suite with coverage
+- Second job, `docker-build`: builds the image without pushing it
 
-**2. Docker Build** (`.github/workflows/docker-build.yml`):
-- Triggered on: Push to main, Tags
-- Builds: Multi-architecture images
-- Pushes to: GitHub Container Registry
+**2. Pull Request Labeler** (`.github/workflows/pr-labeler.yml`):
+- Triggered on: Pull request opened, synchronised, reopened or edited
+- Labels the pull request from its branch name
 
 **3. Release** (`.github/workflows/release.yml`):
 - Triggered on: Version tags (v*)
-- Creates: GitHub releases with changelog
-- Includes: Documentation artifacts
+- Runs the suite, publishes the multi-arch images, then creates a **draft**
+  GitHub Release — publishing it is a deliberate manual step, see
+  [Releasing](releasing.md)
 
-**4. Automatic yt-dlp Updates** (`.github/workflows/refresh-ytdlp.yml`):
+**4. Image build** (`.github/workflows/build-image.yml`):
+- Triggered on: `workflow_call` only, from `release.yml` and `refresh-ytdlp.yml`
+- Builds and pushes the multi-architecture image to GitHub Container Registry
+
+**5. Automatic yt-dlp Updates** (`.github/workflows/refresh-ytdlp.yml`):
 
 - Triggered on: Daily schedule (06:00 UTC), Manual dispatch
 - Monitors: Latest yt-dlp version from base image
 - Rebuilds: Docker images when new yt-dlp versions are detected
-- See: [Automatic yt-dlp Updates](automatic-ytdlp-updates.md) for details
+- See: [yt-dlp version management](architecture/ytdlp-version-management.md) for details
 
 ### Local CI Testing
 
@@ -265,8 +270,8 @@ make ci
 docker build -t hometube:test .
 
 # Test different Python versions (with pyenv)
-pyenv install 3.10.12 3.11.9 3.12.1
-pyenv local 3.10.12
+pyenv install 3.11.9 3.12.1
+pyenv local 3.11.9
 make test-all
 ```
 
