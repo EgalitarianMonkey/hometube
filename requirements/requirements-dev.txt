@@ -126,7 +126,7 @@ ruff==0.17.4
     # via hometube (pyproject.toml)
 starlette==1.10.0
     # via streamlit
-streamlit==1.66.1
+streamlit==1.67.0
     # via hometube (pyproject.toml)
 typing-extensions==4.16.0
     # via
