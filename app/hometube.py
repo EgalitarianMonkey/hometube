@@ -8,14 +8,19 @@ import os
 import subprocess
 from pathlib import Path
 
+# The port docker-compose.yml.sample publishes by default, kept in step with it
+# deliberately: "${PORT:-8501}:8501".
+DEFAULT_PORT = "8501"
+
 
 def setup_environment():
     """Configure the environment for the application"""
-    # Get the directory where this script is located
-    script_dir = Path(__file__).parent
+    # This module lives in app/, so the project root — where .env sits — is one
+    # level up. Same expression as app/config.py's early .env loading.
+    project_root = Path(__file__).resolve().parent.parent
 
     # Load .env file
-    env_file = script_dir / ".env"
+    env_file = project_root / ".env"
     if env_file.exists():
         with open(env_file, "r", encoding="utf-8") as f:
             for line in f:
@@ -28,19 +33,28 @@ def setup_environment():
                         os.environ[key] = value
 
 
-def run_app(port=8502, debug=False):
+def run_app(port=None, debug=False):
     """
     Lance l'application Streamlit
 
     Args:
-        port (int): Port sur lequel lancer l'application
+        port (int): Port sur lequel lancer l'application. Par défaut, PORT puis
+            le 8501 que docker-compose.yml.sample publie.
         debug (bool): Mode debug
+
+    Returns:
+        int: le code de retour de Streamlit, 0 si le lancement a réussi
     """
     import sys
 
     setup_environment()
 
-    app_file = Path(__file__).parent / "app" / "main.py"
+    # setup_environment() has just loaded .env, so PORT is readable here.
+    if port is None:
+        port = os.environ.get("PORT", "").strip() or DEFAULT_PORT
+
+    # main.py sits next to this module, both inside app/.
+    app_file = Path(__file__).resolve().parent / "main.py"
 
     cmd = [
         sys.executable,
@@ -56,10 +70,14 @@ def run_app(port=8502, debug=False):
         "false",
     ]
 
+    # The return code is propagated rather than discarded: Streamlit exits
+    # non-zero when it cannot start at all (a missing target, a taken port), and
+    # a launcher that swallows that reports success having launched nothing.
     try:
-        subprocess.run(cmd)
+        return subprocess.run(cmd).returncode
     except KeyboardInterrupt:
         print("\n👋 Application stopped")
+        return 0
 
 
 def download_video(url, filename, **options):
@@ -116,5 +134,8 @@ def download_video(url, filename, **options):
 
 
 if __name__ == "__main__":
-    # If the script is run directly, launch the Streamlit interface
-    run_app()
+    # If the script is run directly, launch the Streamlit interface. Exit with
+    # Streamlit's own code so a failed launch is a failed command.
+    import sys
+
+    sys.exit(run_app())

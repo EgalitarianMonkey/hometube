@@ -78,7 +78,11 @@ python run.py
 DEBUG=1 python run.py
 
 # Custom port
-PORT=8502 streamlit run app/main.py
+PORT=8502 python run.py
+
+# Custom port, launching Streamlit directly (PORT is read by run.py, not by
+# Streamlit, which has its own --server.port)
+streamlit run app/main.py --server.port 8502
 
 # With UV
 uv run streamlit run app/main.py

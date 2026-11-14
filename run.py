@@ -9,6 +9,26 @@ import sys
 import subprocess
 from pathlib import Path
 
+# The port docker-compose.yml.sample publishes by default, kept in step with it
+# deliberately: "${PORT:-8501}:8501".
+DEFAULT_PORT = "8501"
+
+
+def read_port_from_env_file(env_file):
+    """Return the PORT value set in a .env file, or None if it sets none.
+
+    Deliberately a plain scan rather than a dotenv dependency: run.py has to
+    work before anything is installed, so it may not import from the project.
+    """
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line.startswith("PORT="):
+            continue
+        value = line.split("=", 1)[1].split("#", 1)[0].strip().strip("\"'")
+        if value:
+            return value
+    return None
+
 
 def main():
     # Get the directory where this script is located
@@ -38,27 +58,35 @@ def main():
         print("   Install it with: pip install yt-dlp")
         sys.exit(1)
 
-    # Load port from .env if available
+    # Resolve the port from PORT, the one port variable this project documents:
+    # .env.sample ships it, docs/installation.md describes it, and
+    # docker-compose.yml.sample publishes "${PORT:-8501}:8501" with it. The
+    # default below is that same 8501, so a local run and a container answer on
+    # the same port unless the user says otherwise.
+    #
+    # An explicit environment variable wins over the file, which is how
+    # app/config.py behaves too (it calls load_dotenv with override=False).
     env_file = script_dir / ".env"
-    port = "8502"  # default port
+    port = DEFAULT_PORT
 
     if env_file.exists():
         print(f"✅ .env file found: {env_file}")
-        with open(env_file, "r") as f:
-            for line in f:
-                if line.strip().startswith("STREAMLIT_PORT="):
-                    port = line.split("=")[1].strip()
-                    break
+        port = read_port_from_env_file(env_file) or port
     else:
         print("⚠️  .env file not found, using default values")
+
+    port = os.environ.get("PORT", "").strip() or port
 
     print(f"🚀 Starting application on port {port}")
     print(f"🌐 Open your browser at: http://localhost:{port}")
     print("   Press Ctrl+C to stop the application")
 
-    # Launch streamlit
+    # Launch streamlit. The return code is propagated rather than discarded:
+    # Streamlit exits non-zero when it cannot start at all (a missing target, a
+    # port already taken), and a launcher that swallows that reports success
+    # having launched nothing.
     try:
-        subprocess.run(
+        return subprocess.run(
             [
                 sys.executable,
                 "-m",
@@ -72,10 +100,11 @@ def main():
                 "--browser.gatherUsageStats",
                 "false",
             ]
-        )
+        ).returncode
     except KeyboardInterrupt:
         print("\n👋 Application stopped")
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
