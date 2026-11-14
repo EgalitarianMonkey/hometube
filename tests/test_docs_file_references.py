@@ -62,6 +62,15 @@ MD_LINK = re.compile(r"\[[^\]]*\]\((?!\w+:)([^)#\s]+\.md)(?:#[^)\s]*)?\)")
 # and pr-labeler.yml), and nothing compared the two lists.
 BACKTICKED_YAML = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\.ya?ml)`")
 
+# `` `tests/test_core_functions.py` `` or `` `conftest.py` `` anywhere in the prose.
+BACKTICKED_PY = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./-]*\.py)`")
+
+# `pytest tests/x.py`, `python -m pytest tests/x.py::Class::test`, `python run.py`
+# inside a fenced block. The `::` selector is left off the capture.
+COMMAND_PY = re.compile(
+    r"(?:pytest|python3?)\s+(?:-m\s+pytest\s+)?([A-Za-z0-9_][A-Za-z0-9_./-]*\.py)\b"
+)
+
 # A raw.githubusercontent.com URL pointing into *this* repository's own tree.
 # Scoped to the owner/repo so that URLs for Yann's other projects (README.md
 # links one for LatentNoise/content) are not read as promises made here.
@@ -257,6 +266,42 @@ def test_every_yaml_file_the_docs_name_is_one_the_repository_has():
     )
 
 
+def test_every_python_file_the_docs_name_is_one_the_repository_has():
+    """Four modules named in the guides were deleted in the #83 refactor.
+
+    `docs/testing.md` documented a whole section on `test_utils.py` and a
+    `scripts/check_tests.py` verification script; `docs/development.md` offered
+    `python -m pytest tests/test_utils.py -v` as a copy-pasteable command;
+    `docs/architecture/intelligent-caching.md` cited "11 unit tests" in
+    `tests/test_url_info_reuse.py`; and `generic-file-naming.md` told the reader
+    to run `pytest tests/test_generic_file_naming.py`. All four existed once and
+    none has been in a clone for a year.
+
+    The sibling rule above matched YAML by basename only, which is why a `.py`
+    could rot unnoticed. Here a reference *with* a directory must resolve at
+    exactly that path — `tests/test_utils.py` is a claim about where a file is —
+    while a bare name is matched by basename, because the prose legitimately
+    says `` `config.py` `` for `app/config.py`.
+    """
+    tracked = tracked_files()
+    basenames = {Path(name).name for name in tracked}
+
+    broken = []
+    for path, lineno, target in whole_file_references(BACKTICKED_PY) + references(
+        COMMAND_PY
+    ):
+        resolved = target in tracked if "/" in target else target in basenames
+        if not resolved:
+            broken.append((path, lineno, target))
+
+    assert not broken, (
+        "the docs name Python files the repository does not ship:\n"
+        + report(sorted(set(broken)))
+        + "\n(a guide that tells a contributor to run a test module nobody "
+        "wrote describes a suite that does not exist)"
+    )
+
+
 def test_the_parsers_actually_find_something():
     """Guard the guards: four rules that match nothing would all pass."""
     assert len(tracked_files()) > 50, "git ls-files returned almost nothing"
@@ -284,6 +329,16 @@ def test_the_parsers_actually_find_something():
         "refresh-ytdlp.yml",
     } <= yamls, (
         f"the backticked-YAML parser no longer finds the workflows — found {yamls}"
+    )
+
+    pys = {
+        target
+        for _, _, target in whole_file_references(BACKTICKED_PY)
+        + references(COMMAND_PY)
+    }
+    assert {"app/main.py", "conftest.py", "run.py"} <= pys, (
+        "the Python-reference parsers no longer find the files the guides name "
+        f"— found {sorted(pys)[:8]}"
     )
 
 
