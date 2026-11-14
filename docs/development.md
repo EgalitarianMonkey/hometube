@@ -68,10 +68,11 @@ uv add --dev pytest pytest-asyncio pytest-mock pytest-cov pytest-xdist
 
 ```
 tests/
-├── conftest.py              # Shared fixtures and configuration  
+├── conftest.py              # Shared fixtures and configuration
 ├── test_core_functions.py   # Core utility functions tests
 ├── test_translations.py     # Translation system tests
-└── test_utils.py            # Project structure and configuration tests
+├── test_*_contract.py       # The repository pinned against its own docs
+└── ...                      # 36 test modules in total
 ```
 
 ### Running Tests
@@ -89,10 +90,10 @@ make test-performance    # Performance tests
 make test-coverage
 
 # Run specific test file
-python -m pytest tests/test_utils.py -v
+python -m pytest tests/test_core_functions.py -v
 
 # Run specific test function
-python -m pytest tests/test_utils.py::TestUtilityFunctions::test_sanitize_filename -v
+python -m pytest tests/test_core_functions.py::TestCoreFunctions::test_sanitize_filename -v
 
 # Alternative: using make
 make test-file           # Interactive file selection

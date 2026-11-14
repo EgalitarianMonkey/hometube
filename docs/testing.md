@@ -3,11 +3,12 @@
 ## 📊 Current Testing Status
 
 ### ✅ Test Suite Overview
-- **358 tests** passing (6 skipped), across 23 test modules
-- **22% of statements** covered across the `app/` package, measured by `make test-coverage`
+- **505 tests** passing (6 skipped), across 36 test modules
+- **25% of statements** covered across the `app/` package, measured by `make test-coverage`
 - **Robust Streamlit mocking** prevents import conflicts
 - **Multi-environment support** (UV, conda, pip/venv)
-- **Quick execution** (under 20 seconds for the full suite)
+- **Quick execution** (seconds, not minutes — the exact figure is whatever
+  `make test-coverage` prints on your machine, so it is not restated here)
 
 Coverage is uneven by design: the pure helpers are well covered — `app/workspace.py` 97%,
 `app/text_utils.py` 93%, `app/tmp_files.py` 77%, `app/status_utils.py` 73% — while the Streamlit
@@ -28,7 +29,7 @@ tests/
 ├── test_subtitles_utils.py  # Subtitle selection and conversion
 ├── test_playlist_utils.py   # Playlist parsing
 ├── test_logs_utils.py       # Bounded log buffer (issue #82)
-└── ...                      # 23 test modules in total
+└── ...                      # 36 test modules in total
 ```
 
 **Note**: The project uses a **simplified but robust** testing approach with focused coverage of essential functionality.
@@ -37,7 +38,7 @@ tests/
 
 ### Run Tests
 ```bash
-# Quick tests (< 2 seconds)
+# Quick tests (CI's selection)
 make test-ci
 
 # Full test suite
@@ -76,7 +77,7 @@ make pre-commit         # Full quality checks
 - Import-time mocking to prevent conflicts
 
 ### 3. Core function tests (`test_core_functions.py`)
-- **10 focused tests** covering main utility functions
+- **13 focused tests** covering main utility functions
 - Edge case testing (empty inputs, invalid data)
 - URL validation and sanitization
 - Time parsing and formatting
@@ -92,18 +93,21 @@ make pre-commit         # Full quality checks
 - Essential key presence validation
 - Empty translation detection
 
-### 5. Project structure tests (`test_utils.py`)
-- **6 structural tests** ensuring project integrity
-- Directory existence validation (app/, tests/, downloads/)
-- Required file verification (main.py, pyproject.toml, Makefile, etc.)
-- Configuration file testing
-- Fixture functionality verification
-- Performance regression tests
-- Concurrency simulation
-- Baseline performance metrics
+### 5. Contract tests (`tests/test_*_contract.py`)
+- Nine modules pinning the repository against its own documentation and
+  configuration, each written from a defect that was public and silent
+- `test_requirements_contract.py` — the generated requirements and their generators
+- `test_contributor_setup_contract.py` — the documented Python floor and `environment.yml`
+- `test_makefile_contract.py` — the Make targets the guides name
+- `test_docs_file_references.py` — a file the docs promise must exist
+- `test_env_var_contract.py` — a variable may be documented only if the config reads it
+- `test_translation_contract.py` — every key `app/` asks for exists in both languages
+- `test_workflow_labels_contract.py` — the labels the published image carries
+- `test_external_tool_contract.py` — a missing external tool must skip, not fail
+- `test_launcher_contract.py` — the port contract and the paths each launcher resolves
 
 ### 6. yt-dlp Version detection tests (`test_ytdlp_version_detection.py`)
-- **14 tests** for automated version tracking system
+- **7 tests** for automated version tracking system
 - **Unit tests**: Version comparison logic (no dependencies)
 - **Network tests**: Crane-based version detection from registries
 - **Integration tests**: Local build consistency validation
@@ -133,26 +137,22 @@ make uv-test          # Run tests with UV
 make uv-test-ci       # Run fast tests with UV
 ```
 
-#### Verification script (`scripts/check_tests.py`)
-- Automatic structure verification
-- Execution of all test categories
-- Detailed summary report  
-- Usage instructions
-
 ## 📈 Current metrics
 
 ### Test coverage
-- **Current**: 20 focused tests covering essential functionality
-- **Approach**: Quality over quantity - core functions well tested
-- **Coverage**: Main utilities, translations, project structure
+- **Current**: 505 tests, 25% of the statements in `app/`
+- **Approach**: the pure helpers are unit tested; the Streamlit entry point and
+  `app/playlist_sync.py` are exercised end to end, which is where the gap is
+- **Coverage**: utilities, translations, and the contracts between the
+  documentation, the configuration and the code
 
 ### Organization
-- **Current**: 3 specialized test modules + fixtures
+- **Current**: 36 test modules + shared fixtures in `conftest.py`
 - **Structure**: Clean separation by functionality
 - **Focus**: Essential testing without complexity overhead
 
 ### Test performance
-- **Speed**: Fast execution (< 2 seconds for full suite)
+- **Speed**: Fast execution — the suite is seconds, not minutes
 - **Reliability**: Robust Streamlit mocking prevents import conflicts
 - **Maintainability**: Simple, focused tests easy to understand and maintain
 
@@ -262,8 +262,8 @@ pytest -m "not stress"
 
 ### Quick development testing
 ```bash
-make test-ci      # Fast tests only (< 2 seconds)
-make test         # All tests (< 5 seconds)
+make test-ci      # Fast tests only (CI's selection)
+make test         # All tests (wider: also the external-tool tests)
 ```
 
 ### Before committing
@@ -293,7 +293,7 @@ The HomeTube test suite provides:
 
 - ✅ **Simplicity**: Focused on essential functionality without over-engineering
 - ✅ **Reliability**: Robust Streamlit mocking prevents import conflicts
-- ✅ **Speed**: Full test suite completes in under 5 seconds
+- ✅ **Speed**: Full test suite completes in seconds
 - ✅ **Coverage**: Core functions, translations, and project structure tested
 - ✅ **Maintainability**: Clear, simple tests easy to understand and extend
 - ✅ **Automation**: Makefile commands for all testing scenarios

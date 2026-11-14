@@ -299,8 +299,7 @@ pytest tests/
 
 # Test specific functionality
 pytest tests/test_tmp_files.py
-pytest tests/test_generic_file_naming.py
 pytest tests/test_subtitles_utils.py
 ```
 
-**Test Coverage**: 188 tests passing ✅
+**Test Coverage**: see `make test-coverage`; the naming behaviour itself is covered by `tests/test_tmp_files.py` ✅
