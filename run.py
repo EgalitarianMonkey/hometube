@@ -81,9 +81,12 @@ def main():
     print(f"🌐 Open your browser at: http://localhost:{port}")
     print("   Press Ctrl+C to stop the application")
 
-    # Launch streamlit
+    # Launch streamlit. The return code is propagated rather than discarded:
+    # Streamlit exits non-zero when it cannot start at all (a missing target, a
+    # port already taken), and a launcher that swallows that reports success
+    # having launched nothing.
     try:
-        subprocess.run(
+        return subprocess.run(
             [
                 sys.executable,
                 "-m",
@@ -97,10 +100,11 @@ def main():
                 "--browser.gatherUsageStats",
                 "false",
             ]
-        )
+        ).returncode
     except KeyboardInterrupt:
         print("\n👋 Application stopped")
+        return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
