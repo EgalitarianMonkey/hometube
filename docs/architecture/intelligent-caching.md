@@ -111,7 +111,7 @@ Detection criteria:
 
 ### Test Coverage
 
-**11 unit tests** in `tests/test_url_info_reuse.py`:
+Covered by `tests/test_url_utils.py` and `tests/test_preferred_client.py`:
 
 - ✅ File existence checks
 - ✅ Premium format detection (AV1, VP9)
