@@ -99,7 +99,7 @@ urllib3==2.8.0
     # via requests
 uvicorn==0.54.0
     # via streamlit
-watchdog==6.0.0 ; sys_platform != 'darwin'
+watchdog==7.1.0 ; sys_platform != 'darwin'
     # via streamlit
 websockets==17.4
     # via streamlit
