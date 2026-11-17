@@ -1,16 +1,30 @@
+# Streamlit settings for a local `streamlit run` from the repository root, and
+# for the published image, which copies this file to /app/.streamlit/.
+#
+# Two of the options below do not apply in the image: the Dockerfile's CMD
+# passes them as command-line flags, and a flag wins over this file. Each of
+# those lines says so, and tests/test_streamlit_config_contract.py checks the
+# list against Streamlit's own config loader in both directions.
+
 [browser]
 gatherUsageStats = false           # disable telemetry collection
 
 [server]
-enableCORS = true                  # keep true unless you explicitly need wide CORS
-enableXsrfProtection = true        # CSRF protection (default: true)
+enableCORS = true                  # overridden by the image CMD (to false)
+enableXsrfProtection = true        # overridden by the image CMD (to false)
 headless = true                    # do not auto-open a browser on the server side
-maxUploadSize = 200                # prevent very large uploads (in MB)
+maxUploadSize = 200                # ceiling for st.file_uploader, which the app does not use
 
 [client]
-showErrorDetails = false           # hide detailed error traces from end-users
+# `false` is Streamlit's deprecated spelling of "stacktrace": the browser still
+# shows the exception type and the traceback, and only the exception message is
+# withheld (it goes to the log). "none" is the value that withholds the
+# traceback as well.
+showErrorDetails = false
 
 [theme]
+# Set explicitly rather than inherited, so a Streamlit release that changes its
+# own default palette does not change how HomeTube looks.
 base = "dark"
 primaryColor = "#7c4dff"
 backgroundColor = "#0f1117"
