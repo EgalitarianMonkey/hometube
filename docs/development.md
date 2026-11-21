@@ -497,12 +497,12 @@ _Check CI results for validation before merging._
 ### Deployment
 
 **Development**:
-- Every push to `main` → `latest` Docker image
-- Available at `ghcr.io/EgalitarianMonkey/hometube:latest`
+- A push to `main` runs CI, which builds the image **without publishing it** (`push: false`)
+- No tag is built from `main`: a merged commit reaches the registry with the next release, or when the daily yt-dlp refresh rebuilds `latest`
 
 **Production**:
-- Version tags → versioned Docker images
-- Available at `ghcr.io/EgalitarianMonkey/hometube:2.4.1`
+- A `v*` tag → versioned Docker images, and `latest`
+- Available at `ghcr.io/EgalitarianMonkey/hometube:X.Y.Z`, `:X.Y`, `:X` and `:latest`
 - GitHub releases with changelogs and artifacts
 
 ## 🛠️ Development Tools
