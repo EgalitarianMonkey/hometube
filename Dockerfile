@@ -18,13 +18,22 @@ LABEL io.hometube.ytdlp.version="${YTDLP_VERSION}"
 # Minimal runtime deps
 RUN apk add --no-cache tini ca-certificates curl deno
 
-# Pip/Streamlit/runtime ergonomics
+# Pip/Streamlit/runtime ergonomics.
+#
+# Streamlit reads one environment variable per config option, and the name is
+# always STREAMLIT_<SECTION>_<OPTION>: `server.headless` is
+# STREAMLIT_SERVER_HEADLESS, `browser.gatherUsageStats` is
+# STREAMLIT_BROWSER_GATHER_USAGE_STATS. A name matching no option is read by
+# nothing and reports nothing — STREAMLIT_HEADLESS sat on the line below and was
+# ignored by every container this image ever started. The CMD passes
+# --server.headless=true as well, which is why the omission was invisible.
+# tests/test_docker_contract.py now checks every STREAMLIT_* name in the tree.
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_BREAK_SYSTEM_PACKAGES=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
-    STREAMLIT_HEADLESS=true
+    STREAMLIT_SERVER_HEADLESS=true
 
 WORKDIR /app
 

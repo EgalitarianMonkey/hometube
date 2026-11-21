@@ -4,10 +4,16 @@ This guide explains how to use the HomeTube Docker image.
 
 ## Available Images
 
-The image is available on GitHub Container Registry:
-- `ghcr.io/EgalitarianMonkey/hometube:latest` - Stable version (main branch)
-- `ghcr.io/EgalitarianMonkey/hometube:2.4.1` - Specific tagged version
-- `ghcr.io/EgalitarianMonkey/hometube:main` - Development version
+The image is available on GitHub Container Registry, under `ghcr.io/EgalitarianMonkey/hometube`:
+
+| Tag | What it points to | Published by |
+|-----|-------------------|--------------|
+| `latest` | The most recent release | a release, and every yt-dlp refresh |
+| `X.Y.Z`, `X.Y`, `X` | A release's exact version, and its minor and major series | a release |
+| `yt-dlp-<version>` | The current release rebuilt on that yt-dlp version | the daily yt-dlp refresh |
+| `vX.Y.Z-yt-dlp-<version>` | The same rebuild, pinned to both versions | the daily yt-dlp refresh |
+
+**No tag is built from the `main` branch.** A commit merged into `main` reaches the registry when a release is tagged, or when the daily refresh rebuilds `latest` because yt-dlp published a new version. The tags that exist are listed on the [package page](https://github.com/EgalitarianMonkey/hometube/pkgs/container/hometube).
 
 ## Quick Usage
 
@@ -28,13 +34,24 @@ docker run -p 8501:8501 \
   -v ./downloads:/data/videos \
   -v ./tmp:/data/tmp \
   -v ./cookies:/config \
-  -e STREAMLIT_SERVER_PORT=8501 \
+  -e UI_LANGUAGE=en \
   ghcr.io/EgalitarianMonkey/hometube:latest
 ```
 
 ### With docker-compose
 
-**Step 1: Create your configuration**
+**Step 1: Create your environment file**
+
+The sample compose file reads `.env` — both as the container's environment (`env_file`) and for the host paths it binds — so this step comes first:
+
+```bash
+cp .env.sample .env
+
+# Set at least VIDEOS_FOLDER_DOCKER_HOST and TMP_DOWNLOAD_FOLDER_DOCKER_HOST
+nano .env  # or use your preferred editor
+```
+
+**Step 2: Create your configuration**
 ```bash
 # Copy the sample configuration
 cp docker-compose.yml.sample docker-compose.yml
@@ -43,7 +60,7 @@ cp docker-compose.yml.sample docker-compose.yml
 nano docker-compose.yml  # or use your preferred editor
 ```
 
-**Step 2: Deploy**
+**Step 3: Deploy**
 ```bash
 docker-compose up -d
 ```
@@ -52,16 +69,21 @@ docker-compose up -d
 ```yaml
 services:
   hometube:
-    image: ghcr.io/EgalitarianMonkey/hometube:latest
-    ports:
-      - "8501:8501"
-    volumes:
-      - ./downloads:/data/videos
-      - ./tmp:/data/tmp
-      - ./cookies:/config
+    image: ghcr.io/egalitarianmonkey/hometube:latest
+    container_name: hometube
+    env_file: .env
     environment:
-      - STREAMLIT_SERVER_PORT=8501
-      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - TZ=${TZ:-America/New_York}
+    ports:
+      - "${PORT:-8501}:8501"
+    volumes:
+      - type: bind
+        source: ${VIDEOS_FOLDER_DOCKER_HOST:?set VIDEOS_FOLDER_DOCKER_HOST}
+        target: /data/videos
+      - type: bind
+        source: ${TMP_DOWNLOAD_FOLDER_DOCKER_HOST:?set TMP_DOWNLOAD_FOLDER_DOCKER_HOST}
+        target: /data/tmp
+      - "${YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST}:/config/youtube_cookies.txt"
     restart: unless-stopped
 ```
 
@@ -79,12 +101,25 @@ services:
 
 | Variable | Default Value | Description |
 |----------|---------------|-------------|
-| `STREAMLIT_SERVER_PORT` | `8501` | Application listening port |
-| `STREAMLIT_SERVER_ADDRESS` | `0.0.0.0` | Listening address |
+| `PORT` | `8501` | Host port the sample compose file publishes, as `"${PORT:-8501}:8501"` |
 | `TZ` | `UTC` | Container timezone (e.g., `America/New_York`, `Europe/Paris`) |
 | `DEBUG` | `false` | Enable debug logging mode |
 
+**The container always listens on 8501.** `EXPOSE`, the image's health check and the sample compose file all name that port, so publish it on whatever host port you want — `-p 9000:8501`, or `PORT=9000` with the sample compose file — rather than moving the port inside the container. Setting `STREAMLIT_SERVER_PORT` does move the server, and leaves the health check probing 8501, so the container is reported unhealthy for as long as it runs. `STREAMLIT_SERVER_ADDRESS` has the opposite problem: the image's launch command passes `--server.address` itself, and a command-line flag wins over an environment variable, so setting it changes nothing.
+
+### Docker Host Paths
+
+The sample compose file binds three host paths, and the first two are declared with `:?`, which stops `docker compose up` immediately when they are unset:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `VIDEOS_FOLDER_DOCKER_HOST` | Yes | Host folder bound to `/data/videos` |
+| `TMP_DOWNLOAD_FOLDER_DOCKER_HOST` | Yes | Host folder bound to `/data/tmp` |
+| `YOUTUBE_COOKIES_FILE_PATH_DOCKER_HOST` | No | Host cookie file bound to `/config/youtube_cookies.txt` |
+
 ### Path Configuration
+
+These are the paths *inside* the container, which the volumes above are bound to. Change them only if you also change the volume targets.
 
 | Variable | Default Value | Description |
 |----------|---------------|-------------|
