@@ -28,6 +28,15 @@ described a container this project does not publish:
   variable. The port is worse than not working — it works, and leaves ``EXPOSE``
   and the ``HEALTHCHECK``'s hard-coded port behind, so the container runs
   reported unhealthy.
+* Its troubleshooting section gave ``docker exec -it hometube /bin/bash`` as
+  *the* way to get a shell in the container, and the image has no bash. The
+  base is Alpine (busybox ``sh`` and ``ash``), this Dockerfile adds only
+  ``tini``, ``ca-certificates``, ``curl`` and ``deno``, and it creates its own
+  user with ``-s /bin/sh``. The command answers ``exec: "/bin/bash": stat
+  /bin/bash: no such file or directory`` — measured on the published image
+  rather than reasoned: ``ghcr.io/egalitarianmonkey/hometube:latest`` was read
+  straight from the registry over HTTP and its layers carry ``/bin/sh``,
+  ``/bin/ash`` and ``/bin/busybox`` and no bash at all.
 * And the ``ENV`` block set ``STREAMLIT_HEADLESS``, which is not a name
   Streamlit reads. It builds one variable per option, always
   ``STREAMLIT_<SECTION>_<OPTION>``, so the name is ``STREAMLIT_SERVER_HEADLESS``.
@@ -37,12 +46,15 @@ described a container this project does not publish:
 The rules below decide nothing about how the image should be configured. They
 make the two sides state the same thing: a tag a document offers must be one the
 workflows publish, a variable the sample file requires must be documented, a
-variable the tree sets must be one something reads, and a knob the documents
-offer must be one the launch command leaves alone.
+variable the tree sets must be one something reads, a knob the documents offer
+must be one the launch command leaves alone, and a program or path a documented
+``docker exec`` names must be one the image actually has.
 
 Everything is derived from the tree. The flags, ports and environment come from
 the Dockerfile; the tag shapes from the two workflows that publish; the required
-variables from the sample compose file; and the set of environment variables
+variables from the sample compose file; the programs and directories the image
+has from the Dockerfile's own ``apk add``, ``adduser -s``, ``ENTRYPOINT``,
+``mkdir`` and ``WORKDIR``; and the set of environment variables
 Streamlit honours from ``streamlit.web.cli`` — the click command ``streamlit
 run`` is, which is what actually reads the environment — rather than from this
 module's reading of Streamlit's naming rules. Streamlit is a core dependency, so
@@ -56,16 +68,21 @@ same reason the scan matches *assignments* (``NAME=`` and ``"NAME"``) rather
 than any occurrence of a name — the Dockerfile's comment names the dead variable
 deliberately.
 
-Two of the ten rules exist only to stop the other eight passing on nothing: a
-``CMD`` that was never found, a table parser that silently matched zero rows or
-a tag scan that found no image reference would make every assertion above
-vacuously true.
+Three of the thirteen rules exist only to stop the other ten passing on nothing:
+a ``CMD`` that was never found, a table parser that silently matched zero rows,
+a tag scan that found no image reference, or a ``docker exec`` parse that
+yielded no command would make every assertion above vacuously true. The third
+of them also asserts that a ``--virtual .build-deps`` package is *not* derived
+as provided: that group is removed by ``apk del`` before the layer is
+committed, so a parse that swallowed it would vouch for programs the published
+image does not carry.
 """
 
 import functools
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -122,6 +139,60 @@ COMPOSE_PUBLISHED_PORT = re.compile(r'^\s*-\s*"[^"]*:(\d+)"\s*$', re.MULTILINE)
 
 # A full image reference with a tag, as a document offers it to a reader.
 IMAGE_REFERENCE = re.compile(r"ghcr\.io/[\w-]+/hometube:([A-Za-z0-9._<>-]+)")
+
+# `docker exec -it hometube /bin/bash`, as a document hands it to a reader. The
+# `compose` form is accepted too, and a leading prompt marker is tolerated.
+DOCKER_EXEC_LINE = re.compile(
+    r"^\s*(?:[$#]\s+)?docker\s+(?:compose\s+)?exec\s+(.+?)\s*$", re.MULTILINE
+)
+
+# `docker exec` flags that swallow the following token, so the container name is
+# not mistaken for one of their values. Everything else that starts with `-` is
+# a boolean (`-it`, `--privileged`) or carries its value with `=`.
+DOCKER_EXEC_VALUE_FLAGS = frozenset(
+    {
+        "-e",
+        "--env",
+        "--env-file",
+        "-u",
+        "--user",
+        "-w",
+        "--workdir",
+        "--detach-keys",
+    }
+)
+
+# `RUN apk add --no-cache tini ca-certificates curl deno`. A `--virtual` install
+# is deliberately *not* matched: those are the build deps, and `apk del
+# .build-deps` removes them before the layer is committed, so a program they
+# provide is not in the published image.
+APK_ADD = re.compile(r"^\s*(?:RUN\s+)?apk\s+add\s+([^\n]*)$", re.MULTILINE)
+
+# The login shell the Dockerfile gives its own user, and the entrypoint it
+# relies on: two absolute program paths the image is asserted to have.
+ADDUSER_SHELL = re.compile(r"^\s*adduser\b[^\n]*?-s\s+(/\S+)", re.MULTILINE)
+ENTRYPOINT_LINE = re.compile(r"^\s*ENTRYPOINT\s+(\[.*\])\s*$", re.MULTILINE)
+
+# The directories the image creates, and the working directory it sets.
+MKDIR_LINE = re.compile(r"^\s*mkdir\s+(?:-\S+\s+)*([^\n]*)$", re.MULTILINE)
+WORKDIR_LINE = re.compile(r"^\s*WORKDIR\s+(\S+)\s*$", re.MULTILINE)
+
+# `container_name: hometube` in the sample compose file — the name the guide's
+# own `docker exec` lines address.
+COMPOSE_CONTAINER_NAME = re.compile(r"^\s*container_name:\s*(\S+)\s*$", re.MULTILINE)
+
+# A volume target in the sample compose file, long form and short form.
+COMPOSE_TARGET = re.compile(r"^\s*target:\s*(/\S+)\s*$", re.MULTILINE)
+COMPOSE_SHORT_MOUNT = re.compile(r"^\s*-\s*\"[^\"]*:(/[^\":]+)\"\s*$", re.MULTILINE)
+
+# Where a package manager puts an executable, for mapping an apk package name
+# onto the absolute paths a program of that name could occupy.
+BIN_DIRS = ("/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin")
+
+# Programs whose basename makes them an interactive shell. A document that
+# execs one of these is making a claim about the image's filesystem, which is
+# the claim `/bin/bash` got wrong.
+SHELL_NAMES = frozenset({"sh", "ash", "bash", "dash", "zsh", "ksh", "fish", "csh"})
 
 # The tag templates the publishing workflows feed to the registry:
 # `type=semver,pattern={{version}}` and `type=raw,value=latest` in release.yml,
@@ -333,6 +404,94 @@ def _documented_image_tags():
     return found
 
 
+def _container_name():
+    """The container the sample compose file names, hence the one the docs exec."""
+    match = COMPOSE_CONTAINER_NAME.search(COMPOSE_SAMPLE.read_text(encoding="utf-8"))
+    return match.group(1) if match else ""
+
+
+def _documented_docker_exec_commands():
+    """Every ``docker exec`` a document hands a reader, parsed.
+
+    Yields ``(origin, argv)`` for the commands addressed to HomeTube's own
+    container, where ``argv`` is the program and its arguments — the flags and
+    the container name removed.
+    """
+    container = _container_name()
+    commands = []
+    for path in SCANNED_TEXT_FILES:
+        if not path.is_file():
+            continue
+        origin = path.relative_to(REPO_ROOT).as_posix()
+        for line in DOCKER_EXEC_LINE.findall(path.read_text(encoding="utf-8")):
+            try:
+                tokens = shlex.split(line)
+            except ValueError:
+                continue
+
+            argv, target, index = [], None, 0
+            while index < len(tokens):
+                token = tokens[index]
+                if token.startswith("-"):
+                    if token in DOCKER_EXEC_VALUE_FLAGS:
+                        index += 1
+                elif target is None:
+                    target = token
+                else:
+                    argv = tokens[index:]
+                    break
+                index += 1
+
+            # Another project's container is not a claim about this image.
+            if target == container and argv:
+                commands.append((origin, argv))
+    return commands
+
+
+def _absolute_programs_the_image_provides():
+    """The absolute program paths the Dockerfile accounts for.
+
+    Derived three ways: the login shell it gives its own user, the entrypoint it
+    launches, and the conventional locations of every package it ``apk add``s
+    outside the throwaway ``.build-deps`` group. Installing a program therefore
+    makes a document free to name it.
+    """
+    text = _dockerfile_text()
+    provided = set(ADDUSER_SHELL.findall(text))
+
+    entrypoint = ENTRYPOINT_LINE.search(text)
+    if entrypoint:
+        for token in json.loads(entrypoint.group(1)):
+            if token.startswith("/"):
+                provided.add(token)
+
+    for arguments in APK_ADD.findall(text):
+        words = arguments.split()
+        if "--virtual" in words:
+            continue
+        for word in words:
+            if not word.startswith("-"):
+                provided.update(f"{directory}/{word}" for directory in BIN_DIRS)
+    return provided
+
+
+def _container_paths_the_image_creates():
+    """The absolute directories the image is known to contain.
+
+    The Dockerfile's ``mkdir`` and ``WORKDIR``, plus the volume targets the
+    sample compose file mounts — a bind mount creates its target too.
+    """
+    text = _dockerfile_text()
+    created = set(WORKDIR_LINE.findall(text))
+    for arguments in MKDIR_LINE.findall(text):
+        created.update(word for word in arguments.split() if word.startswith("/"))
+
+    compose = COMPOSE_SAMPLE.read_text(encoding="utf-8")
+    created.update(COMPOSE_TARGET.findall(compose))
+    created.update(COMPOSE_SHORT_MOUNT.findall(compose))
+    return created
+
+
 # --------------------------------------------------------------------------- #
 # The image's own declarations
 # --------------------------------------------------------------------------- #
@@ -528,9 +687,103 @@ def test_every_image_tag_the_documents_offer_is_one_the_workflows_publish():
     )
 
 
+def test_every_absolute_program_the_documents_exec_is_one_the_image_has():
+    """A program a document execs by absolute path must be in the image.
+
+    The troubleshooting section offered ``docker exec -it hometube /bin/bash``
+    and the image is Alpine: the base installs busybox, this Dockerfile adds
+    only ``tini``, ``ca-certificates``, ``curl`` and ``deno``, and it gives its
+    own user ``-s /bin/sh``. There is no bash, so the one command a reader is
+    given for *access the container* answers ``exec: "/bin/bash": stat
+    /bin/bash: no such file or directory``.
+
+    Only absolute paths are checked, and on purpose: a bare ``df`` or ``ls``
+    resolves through ``PATH`` against a base image this Dockerfile deliberately
+    leaves unpinned, so what busybox provides is not this repository's claim to
+    make. An absolute path is — it names a file and asserts it exists.
+    """
+    provided = _absolute_programs_the_image_provides()
+    missing = {}
+    for origin, argv in _documented_docker_exec_commands():
+        program = argv[0]
+        if program.startswith("/") and program not in provided:
+            missing.setdefault(program, set()).add(origin)
+
+    assert not missing, (
+        "these programs are exec'd by absolute path in a document and the "
+        f"Dockerfile accounts for none of them: { {k: sorted(v) for k, v in missing.items()} } "
+        f"(the image provides: {sorted(provided & {f'{d}/{n}' for d in BIN_DIRS for n in SHELL_NAMES})})"
+    )
+
+
+def test_every_container_path_the_documents_name_is_one_the_image_creates():
+    """A path a documented command inspects must be one the image has.
+
+    ``docker exec hometube ls -la /data/videos`` is only useful if that is
+    really where downloads land. The accepted set is derived from the
+    Dockerfile's own ``mkdir`` and ``WORKDIR`` and from the sample compose
+    file's volume targets, so moving the download directory on either side
+    makes the guide's command fail here rather than in a reader's terminal.
+    """
+    created = _container_paths_the_image_creates()
+    unknown = {}
+    for origin, argv in _documented_docker_exec_commands():
+        for argument in argv[1:]:
+            if not argument.startswith("/"):
+                continue
+            path = Path(argument)
+            if not any(path == Path(c) or Path(c) in path.parents for c in created):
+                unknown.setdefault(argument, set()).add(origin)
+
+    assert not unknown, (
+        "these container paths are named by a documented command and the image "
+        f"creates none of them: { {k: sorted(v) for k, v in unknown.items()} } "
+        f"(the image creates: {sorted(created)})"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Rules that exist so the ones above cannot pass on nothing
 # --------------------------------------------------------------------------- #
+
+
+def test_the_docker_exec_harness_reads_real_commands():
+    container = _container_name()
+    assert container, (
+        "no container_name was read from docker-compose.yml.sample, so every "
+        "documented `docker exec` would be treated as another project's"
+    )
+
+    commands = _documented_docker_exec_commands()
+    assert len(commands) >= 3, (
+        f"expected the documents to hand the reader several `docker exec` "
+        f"commands for the {container} container, parsed {commands}"
+    )
+    assert any(
+        argv[0].startswith("/") for _, argv in commands
+    ), f"no documented command execs an absolute path, so the rule above checks nothing: {commands}"
+    assert any(
+        argument.startswith("/") for _, argv in commands for argument in argv[1:]
+    ), f"no documented command names an absolute container path: {commands}"
+
+    provided = _absolute_programs_the_image_provides()
+    assert "/bin/sh" in provided, (
+        "the Dockerfile's own user shell was not derived, so the program check "
+        f"would reject everything: {sorted(provided)[:10]}"
+    )
+    # The throwaway build group must not count: `apk del .build-deps` removes
+    # it before the layer is committed. Asserted on a package only that group
+    # installs, rather than on bash, so installing bash stays a legal change.
+    assert not {f"{directory}/build-base" for directory in BIN_DIRS} & provided, (
+        "a `--virtual .build-deps` package was derived as provided, so the rule "
+        "above would accept a program that is not in the published image"
+    )
+
+    created = _container_paths_the_image_creates()
+    assert {"/app", "/data/videos", "/data/tmp"} <= created, (
+        "the Dockerfile's mkdir/WORKDIR were not parsed, so the path check "
+        f"would reject everything: {sorted(created)}"
+    )
 
 
 def test_the_dockerfile_harness_reads_a_real_launch_command():

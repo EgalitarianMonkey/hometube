@@ -263,8 +263,11 @@ docker logs hometube
 ```
 
 ### Access the container
+
+The image is Alpine-based and ships no `bash`, so use `sh`:
+
 ```bash
-docker exec -it hometube /bin/bash
+docker exec -it hometube /bin/sh
 ```
 
 ### Check volumes
