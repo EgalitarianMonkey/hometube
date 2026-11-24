@@ -15,6 +15,26 @@ LABEL org.opencontainers.image.title="HomeTube" \
 ARG YTDLP_VERSION
 LABEL io.hometube.ytdlp.version="${YTDLP_VERSION}"
 
+# Work around an inconsistent upstream index, so the install below can stay
+# strict. Alpine is mid-split on CPython's `_dbm` module: `python3-ndbm` has
+# been bumped to -r2 and claims
+# /usr/lib/python3.14/lib-dynload/_dbm.cpython-314-x86_64-linux-musl.so, while
+# `python3` is still -r1 and still owns that file. apk refuses to overwrite a
+# file owned by another package, and that is a hard error, so the entire image
+# stopped building on 2026-11-24:
+#   ERROR: python3-ndbm-3.14.10-r2: trying to overwrite
+#   usr/lib/python3.14/lib-dynload/_dbm...so owned by python3-3.14.10-r1
+# Nothing here changed to cause it — the base is unpinned on purpose (see the
+# FROM above), so it resolves against whatever the index holds today. The two
+# packages carry the same extension module built for the same 3.14.10, so
+# transferring ownership is safe.
+#
+# `--force-overwrite` is deliberately scoped to this one package instead of
+# being passed to the install below: everything else keeps apk's file-ownership
+# checks, and a *different* collision will still fail the build loudly. Drop
+# this line once the index is self-consistent again.
+RUN apk add --no-cache --force-overwrite python3-ndbm
+
 # Minimal runtime deps
 RUN apk add --no-cache tini ca-certificates curl deno
 
