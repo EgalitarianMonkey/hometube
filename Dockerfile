@@ -15,8 +15,21 @@ LABEL org.opencontainers.image.title="HomeTube" \
 ARG YTDLP_VERSION
 LABEL io.hometube.ytdlp.version="${YTDLP_VERSION}"
 
-# Minimal runtime deps
-RUN apk add --no-cache tini ca-certificates curl deno
+# Minimal runtime deps.
+#
+# `--upgrade` is load-bearing, not tidiness. The base image is unpinned and
+# carries whatever `python3` it was built with, while this `apk add` resolves
+# against today's index. Once the index has moved on by a package revision, apk
+# installs the newer subpackage of a dependency and leaves the older `python3`
+# in place, and the two own the same file:
+#   ERROR: python3-ndbm-3.14.10-r2: trying to overwrite
+#   usr/lib/python3.14/lib-dynload/_dbm...so owned by python3-3.14.10-r1
+# apk treats that as a hard error, so the whole image stops building — which on
+# 2026-11-24 took out every release path and the daily yt-dlp refresh at once,
+# silently, because the refresh only builds when yt-dlp itself moves.
+# `--upgrade` lets apk move `python3` and its subpackages together instead of
+# straddling two revisions.
+RUN apk add --no-cache --upgrade tini ca-certificates curl deno
 
 # Pip/Streamlit/runtime ergonomics.
 #
