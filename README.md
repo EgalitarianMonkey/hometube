@@ -169,15 +169,16 @@ Transform your downloads with **powerful built-in video processing tools**:
 
 ### 🔧 Advanced configurations
 
-Custom yt-dlp arguments support offers **full flexibility** for advanced users to tailor downloads to specific needs.
+Custom yt-dlp arguments let advanced users tailor downloads to specific needs.
 
 - **📱 Network configuration**: `--proxy http://proxy.company.com:8080 --retries 5`
 - **📂 File size limits**: `--max-filesize 500M --min-filesize 100M`
 - **📋 Enhanced metadata**: `--write-info-json --write-description --write-thumbnail`
 - **🛜 Bandwidth control**: `--limit-rate 1M --fragment-retries 10`
-- **➕ More options**: `yt-dlp --options variable`
 
 Custom yt-dlp arguments can be added directly from the UI or set by default for any download with the `YTDLP_CUSTOM_ARGS` environment variable.
+
+**🔒 A reviewed allowlist, not a pass-through**: the field accepts the network, throttling, format and metadata options, and refuses anything that could run a program, read a file or choose where to write (`--exec`, `--downloader`, `--config-location`, `--plugin-dirs`, `-o`, `--paths`, `--cookies`…). A refused argument is named in the download log, so it never fails silently. [The full list, and how to turn the allowlist off](docs/usage.md#-custom-yt-dlp-arguments).
 
 **🔀 Smart Conflict Resolution**: HomeTube automatically detects and resolves conflicts between base settings and custom arguments, giving priority to your custom preferences while maintaining system stability.
 
@@ -554,7 +555,8 @@ HomeTube configuration is managed through the `.env` file:
 |**Safety Options**||||
 |`ALLOW_OVERWRITE_EXISTING_VIDEO`|Allow overwriting existing videos in destination folder|`false`|`true,false` (false = protect existing files)|
 |**Advanced Options**||||
-|`YTDLP_CUSTOM_ARGS`|Custom yt-dlp arguments||`--max-filesize 5M --write-info-json`|
+|`YTDLP_CUSTOM_ARGS`|Custom yt-dlp arguments (reviewed allowlist — see [usage](docs/usage.md#-custom-yt-dlp-arguments))||`--max-filesize 5M --write-info-json`|
+|`YTDLP_UNSAFE_CUSTOM_ARGS`|🚨 Accept **any** yt-dlp argument, allowlist off. Gives anyone who can reach the interface the ability to run commands as this application|`false`|`true,false`|
 |`REMOVE_TMP_FILES_AFTER_DOWNLOAD`|Remove temporary files after successful download|`false`|`true,false` (false = keep for debugging/reuse)|
 |`NEW_DOWNLOAD_WITHOUT_TMP_FILES`|Clean tmp folder before each new download|`false`|`true,false` (true = fresh start, useful after errors)|
 |**Media server**||||

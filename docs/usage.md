@@ -523,6 +523,7 @@ HomeTube supports comprehensive environment variable configuration for all its f
 | `TMP_DOWNLOAD_FOLDER` | `/data/tmp` | Temporary processing folder | `/tmp/hometube` |
 | `UI_LANGUAGE` | `en` | Interface language | `en`, `fr` |
 | `YTDLP_CUSTOM_ARGS` | *(empty)* | Default yt-dlp arguments | `--max-filesize 100M` |
+| `YTDLP_UNSAFE_CUSTOM_ARGS` | `false` | 🚨 Accept **any** yt-dlp argument, allowlist off — gives anyone who can reach the interface a shell | `true`, `false` |
 | `DEBUG` | `false` | Enable debug mode | `true`, `false` |
 
 #### 🛠️ Custom yt-dlp Arguments
@@ -536,10 +537,27 @@ YTDLP_CUSTOM_ARGS=--max-filesize 100M --write-info-json
 
 **⚠️ Important Notes:**
 
-- **Format Arguments**: Don't override `--format` as it's managed by the quality selector
-- **Output Arguments**: Don't override output path arguments
-- **Safety**: Invalid arguments will be ignored with error messages
+- **Allowlist**: only a reviewed set of arguments is accepted — see below. Anything else is refused, and the download log names what it refused.
+- **Format Arguments**: `--format` can be overridden, but the quality selector already manages it for you
+- **Output Arguments**: the output template and the workspace belong to the application; `-o`, `--output` and `--paths` are refused
 - **Priority**: UI arguments override environment variables
+
+**🔒 Which arguments are accepted:**
+
+This field reaches yt-dlp's command line, and yt-dlp's own options include *run this program* (`--exec`, `--downloader`), *take your options from this file* (`--config-location`, `--plugin-dirs`) and *write here* (`-o`, `--paths`). HomeTube serves its interface with no authentication of its own, so the field accepts a closed list rather than trying to subtract the dangerous options one at a time:
+
+- **Network**: `--proxy`, `--user-agent`, `--referer`, `--geo-bypass-country`
+- **Throttling, retries and limits**: `--limit-rate`, `--max-filesize`, `--min-filesize`, `--retries`, `--retry-sleep`, `--fragment-retries`, `--socket-timeout`, `--sleep-requests`, `--concurrent-fragments`
+- **Format**: `-f` / `--format`, `--format-sort`, `--merge-output-format`, `--convert-thumbnails`
+- **Sidecar files, metadata and logging**: `--write-info-json`, `--write-description`, `--write-thumbnail`, `--write-subs`, `--embed-metadata`, `--embed-thumbnail`, `--embed-chapters`, `--ignore-errors`, `--force-overwrites`, `--newline`, `--verbose`, and their `--no-` counterparts
+
+Anything outside that list is refused, including an option a future yt-dlp release invents. If you need one that is missing, open an issue and say what for.
+
+For cookies, use the dedicated `YOUTUBE_COOKIES_FILE_PATH` and `COOKIES_FROM_BROWSER` settings rather than this field: `--cookies` and `--cookies-from-browser` are refused here.
+
+**🚨 Turning the allowlist off:**
+
+`YTDLP_UNSAFE_CUSTOM_ARGS=true` restores the old behaviour, where every argument is passed through unchecked. It is off by default, and it is the one setting in HomeTube that is genuinely dangerous: with it on, **anyone who can reach the web interface can run commands as the user the application runs as**, which means every mounted volume and whatever your network lets that container reach. Only enable it on an instance you alone can reach, and never on one exposed to the internet.
 
 **🔄 Argument Parsing:**
 
@@ -547,7 +565,7 @@ Arguments are parsed safely using shell-style parsing:
 
 - **Quoted Strings**: Use quotes for arguments with spaces: `--user-agent "Custom Agent 1.0"`
 - **Multiple Arguments**: Separate with spaces: `--retries 3 --max-filesize 100M`
-- **Complex Paths**: Quote paths with spaces: `--cookies "/path with spaces/cookies.txt"`
+- **Unbalanced quotes**: the whole field is ignored, and the download log says so instead of staying silent
 
 **📚 yt-dlp Examples:**
 
@@ -569,10 +587,10 @@ YTDLP_CUSTOM_ARGS=--limit-rate 1M --max-filesize 50M
 YTDLP_CUSTOM_ARGS=--write-info-json --write-description --write-thumbnail --write-sub
 ```
 
-*Development/Testing:*
+*Verbose logging:*
 
 ```bash
-YTDLP_CUSTOM_ARGS=--verbose --print-json --simulate
+YTDLP_CUSTOM_ARGS=--verbose
 ```
 
 #### 🔧 Usage Examples
