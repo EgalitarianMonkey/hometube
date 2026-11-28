@@ -8,6 +8,173 @@ from pathlib import Path
 
 from app.file_system_utils import is_valid_cookie_file
 
+# === CUSTOM yt-dlp ARGUMENTS: THE ALLOWLIST ===
+#
+# The "Custom yt-dlp arguments" field used to be a pass-through: whatever the
+# user typed was shlex-split and appended to yt-dlp's argv. yt-dlp's own CLI
+# contains "run this program" (--exec, --downloader), "take your options from
+# this file" (--config-location, --plugin-dirs) and "write here" (-o, --paths),
+# so the field handed anyone who could reach the interface the ability to run
+# commands as the process owner. The app serves 8501 with no authentication of
+# its own, which made it reachable pre-auth.
+#
+# A denylist cannot fix this. Blocking --exec leaves --downloader, and
+# --config-location re-opens --exec from any file an attacker can first write;
+# every yt-dlp release may add another. So the field is an allowlist: a closed
+# set, and anything not in it is refused. Adding an option here is a deliberate
+# act, which is the property that survives yt-dlp growing new options.
+#
+# What is in, and why: the two things the product already advertises as examples
+# (--proxy, --max-filesize), the throttling and retry knobs, the two request
+# headers, and the format selection the base command already sets — none of them
+# names a program, reads a file or writes to a path. Nothing here can execute
+# anything: HomeTube never invokes a shell (no shell=True anywhere), so these
+# values reach yt-dlp as argv elements and go no further.
+ALLOWED_ARGS_WITH_VALUES = frozenset(
+    {
+        # Format selection — the base command sets all of these itself
+        "-f",
+        "--format",
+        "--format-sort",
+        "--merge-output-format",
+        "--convert-thumbnails",
+        # Throttling, retries and timeouts
+        "--concurrent-fragments",
+        "--sleep-requests",
+        "--retries",
+        "--retry-sleep",
+        "--fragment-retries",
+        "--socket-timeout",
+        "--limit-rate",
+        "--max-filesize",
+        "--min-filesize",
+        # Network identity
+        "--proxy",
+        "--user-agent",
+        "--referer",
+        "--geo-bypass-country",
+    }
+)
+
+# Flags taking no value. These are the ones resolve_ytdlp_argument_conflicts()
+# already knew how to reconcile against the base command, plus the "write a
+# sidecar file" family and --verbose.
+#
+# The sidecar flags are in because the documentation already promises them —
+# .env.sample's own worked example of this field is
+# "--max-filesize 100M --write-info-json", and docs/usage.md offers
+# "--write-info-json --write-description --write-thumbnail --write-sub" as its
+# archival recipe. None takes a value, and with -o and --paths refused the file
+# each writes can only land in the workspace the app chose, so admitting them
+# costs nothing and refusing them would have broken the project's own examples.
+#
+# --simulate and --print-json were in that documentation too and are *not*
+# here: they are harmless but they make the download produce no file, so the
+# field would appear to work while the product silently stopped doing its job.
+# docs/usage.md no longer suggests them.
+ALLOWED_BOOLEAN_ARGS = frozenset(
+    {
+        "--embed-metadata",
+        "--no-embed-metadata",
+        "--embed-thumbnail",
+        "--no-embed-thumbnail",
+        "--write-thumbnail",
+        "--no-write-thumbnail",
+        "--embed-chapters",
+        "--no-embed-chapters",
+        "--ignore-errors",
+        "--no-ignore-errors",
+        "--force-overwrites",
+        "--no-force-overwrites",
+        "--newline",
+        "--no-newline",
+        "--write-info-json",
+        "--no-write-info-json",
+        "--write-description",
+        "--no-write-description",
+        "--write-subs",
+        "--write-sub",
+        "--no-write-subs",
+        "--verbose",
+    }
+)
+
+
+def _log_custom_args(message: str) -> None:
+    """Report a custom-argument decision to the user's download log.
+
+    Deferred import: app.logs_utils pulls in Streamlit, and this module is
+    imported by paths that do not need it. Same pattern as
+    app/file_system_utils.py.
+    """
+    from app.logs_utils import safe_push_log
+
+    safe_push_log(message)
+
+
+def unsafe_custom_args_enabled() -> bool:
+    """Whether the operator has turned the allowlist off.
+
+    ``YTDLP_UNSAFE_CUSTOM_ARGS=true`` restores the old pass-through. It exists
+    because people use --exec on purpose, and a fix that removes a capability
+    with no path back is one that gets worked around by pinning the old image.
+    It is off by default and it is not a grey area: enabling it gives anyone who
+    can reach the web interface the ability to run commands in the container.
+    """
+    from app.config import get_settings
+
+    return bool(get_settings().YTDLP_UNSAFE_CUSTOM_ARGS)
+
+
+def filter_allowed_ytdlp_args(tokens: list[str]) -> tuple[list[str], list[str]]:
+    """Split already-shlex-split custom arguments into (accepted, refused).
+
+    The default is refuse. A token is accepted only by being named in
+    ALLOWED_BOOLEAN_ARGS, or in ALLOWED_ARGS_WITH_VALUES and followed by a
+    value.
+
+    A value must not itself begin with "-". No option on the allowlist takes
+    one that does, and the rule removes a whole class of confusion: without it
+    ``--proxy --exec`` would be accepted, because yt-dlp would consume --exec as
+    the proxy's value. A bare token that is not consumed as a value is refused
+    too — to yt-dlp that would be a positional URL.
+
+    Args:
+        tokens: the user's arguments, as produced by shlex.split
+
+    Returns:
+        (accepted, refused), each in the order the user wrote them. ``accepted``
+        holds only allowlisted options and their values, by construction.
+    """
+    accepted: list[str] = []
+    refused: list[str] = []
+
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+
+        if token in ALLOWED_BOOLEAN_ARGS:
+            accepted.append(token)
+            index += 1
+            continue
+
+        if token in ALLOWED_ARGS_WITH_VALUES:
+            value = tokens[index + 1] if index + 1 < len(tokens) else None
+            if value is None or value.startswith("-"):
+                # A dangling option, or one whose value looks like another
+                # option: refuse it rather than guess what was meant.
+                refused.append(token)
+                index += 1
+                continue
+            accepted.extend([token, value])
+            index += 2
+            continue
+
+        refused.append(token)
+        index += 1
+
+    return accepted, refused
+
 
 def build_base_ytdlp_command(
     base_filename: str,
@@ -80,20 +247,50 @@ def build_base_ytdlp_command(
     else:
         base_cmd.append("--no-embed-chapters")
 
-    # Parse and resolve custom arguments if provided
+    # Parse, screen and resolve custom arguments if provided
     if custom_args and custom_args.strip():
         try:
             # Parse custom arguments safely using shlex
             parsed_custom_args = shlex.split(custom_args.strip())
-
-            # Resolve conflicts between base and custom arguments
-            final_cmd = resolve_ytdlp_argument_conflicts(base_cmd, parsed_custom_args)
-
-            return final_cmd
-
-        except ValueError:
-            # Invalid custom arguments format, return base command
+        except ValueError as error:
+            # An unbalanced quote used to drop the whole field in silence, which
+            # reads as "my flag does nothing" rather than as a typo.
+            _log_custom_args(
+                f"⚠️ Custom yt-dlp arguments ignored — they could not be parsed ({error}). "
+                "Check for an unbalanced quote."
+            )
             return base_cmd
+
+        if unsafe_custom_args_enabled():
+            # The operator has opted out. Say so on every download: this is the
+            # one state in which the field can run commands.
+            _log_custom_args(
+                "🚨 YTDLP_UNSAFE_CUSTOM_ARGS is enabled — custom yt-dlp arguments are "
+                "passed through unchecked. Anyone who can reach this interface can run "
+                "commands in the container."
+            )
+            return resolve_ytdlp_argument_conflicts(base_cmd, parsed_custom_args)
+
+        accepted_custom_args, refused_custom_args = filter_allowed_ytdlp_args(
+            parsed_custom_args
+        )
+
+        if refused_custom_args:
+            _log_custom_args(
+                "🚫 Refused custom yt-dlp arguments: "
+                f"{' '.join(refused_custom_args)}. Only a reviewed allowlist is "
+                "accepted, because options such as --exec, --downloader, "
+                "--config-location, -o and --paths can run programs or write "
+                "anywhere. Set YTDLP_UNSAFE_CUSTOM_ARGS=true to pass arguments "
+                "through unchecked, which gives anyone who can reach this interface "
+                "a shell in the container."
+            )
+
+        if not accepted_custom_args:
+            return base_cmd
+
+        # Resolve conflicts between base and custom arguments
+        return resolve_ytdlp_argument_conflicts(base_cmd, accepted_custom_args)
 
     return base_cmd
 
@@ -111,6 +308,13 @@ def resolve_ytdlp_argument_conflicts(
 
     Returns:
         List of resolved arguments with conflicts removed
+
+    Note:
+        Reached only with arguments that passed filter_allowed_ytdlp_args(), or
+        with the raw field when YTDLP_UNSAFE_CUSTOM_ARGS is on. The two sets
+        below decide which *base* argument a custom one replaces, so they still
+        name options the base command sets and the allowlist refuses (-o,
+        --paths): those entries are now unreachable from the field, and harmless.
     """
     if not custom_args:
         return base_args
@@ -134,6 +338,7 @@ def resolve_ytdlp_argument_conflicts(
         "--min-filesize",
         "--limit-rate",
         "--user-agent",
+        "--referer",
         "--cookies",
         "--fragment-retries",
         "--socket-timeout",
@@ -141,7 +346,6 @@ def resolve_ytdlp_argument_conflicts(
         "--output-template",
         "--batch-file",
         "--load-info-json",
-        "--write-info-json",
     }
 
     # Boolean/flag arguments that can conflict
@@ -160,6 +364,10 @@ def resolve_ytdlp_argument_conflicts(
         "--no-force-overwrites",
         "--newline",
         "--no-newline",
+        # --write-info-json takes no value; it sat in ARGS_WITH_VALUES above,
+        # which made it swallow whichever flag the user wrote after it.
+        "--write-info-json",
+        "--no-write-info-json",
     }
 
     # Extract custom argument names (with and without values)

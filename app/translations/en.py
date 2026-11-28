@@ -147,7 +147,7 @@ TRANSLATIONS = {
     "advanced_options": "⚙️ &nbsp; Advanced Options",
     "advanced_options_presentation": "Configure advanced yt-dlp parameters for specialized use cases.",
     "ytdlp_custom_args": "Custom yt-dlp arguments",
-    "ytdlp_custom_args_help": "Additional command-line arguments to pass to yt-dlp (e.g., --proxy socks5://127.0.0.1:1080, --max-filesize 500M)",
+    "ytdlp_custom_args_help": "Additional command-line arguments to pass to yt-dlp (e.g., --proxy socks5://127.0.0.1:1080, --max-filesize 500M). Only a reviewed allowlist is accepted — network, throttling, format and metadata options; a refused argument is named in the download log.",
     "ytdlp_custom_args_placeholder": "e.g., --proxy socks5://127.0.0.1:1080 --max-filesize 500M",
     # === TEMPORARY FILES MANAGEMENT ===
     "tmp_files_section_title": "Temporary Files Management",

@@ -160,7 +160,8 @@ The quality profile itself is not an environment variable: it is chosen in the i
 
 | Variable | Default Value | Description |
 |----------|---------------|-------------|
-| `YTDLP_CUSTOM_ARGS` | *(empty)* | Custom yt-dlp arguments |
+| `YTDLP_CUSTOM_ARGS` | *(empty)* | Custom yt-dlp arguments (reviewed allowlist — see [usage](usage.md#-custom-yt-dlp-arguments)) |
+| `YTDLP_UNSAFE_CUSTOM_ARGS` | `false` | 🚨 Accept **any** yt-dlp argument, allowlist off — gives anyone who can reach the interface a shell in the container |
 | `BROWSER_SELECT` | `chrome` | Default browser for cookie extraction |
 | `REMOVE_TMP_FILES_AFTER_DOWNLOAD` | `false` | Remove temporary files after successful download |
 | `NEW_DOWNLOAD_WITHOUT_TMP_FILES` | `false` | Clean tmp folder before each new download |

@@ -74,6 +74,11 @@ _DEFAULTS = {
     "ALLOW_OVERWRITE_EXISTING_VIDEO": "false",  # Prevent overwriting existing videos by default (set to true to allow overwrites)
     # === Advanced Options ===
     "YTDLP_CUSTOM_ARGS": "",
+    # Pass custom yt-dlp arguments through without the allowlist app/core.py
+    # applies. Off by default, and named for what it is: with it on, anyone who
+    # can reach the web interface can run commands as the process owner
+    # (--exec and friends).
+    "YTDLP_UNSAFE_CUSTOM_ARGS": "false",
     "CUTTING_MODE": "keyframes",  # keyframes or precise
     "BROWSER_SELECT": "chrome",  # Default browser for cookie extraction
     # === Playlist Options ===
@@ -145,6 +150,7 @@ class Settings:
     NEW_DOWNLOAD_WITHOUT_TMP_FILES: bool
     ALLOW_OVERWRITE_EXISTING_VIDEO: bool
     YTDLP_CUSTOM_ARGS: str
+    YTDLP_UNSAFE_CUSTOM_ARGS: bool
     CUTTING_MODE: str
     BROWSER_SELECT: str
     DEBUG: bool
@@ -235,6 +241,7 @@ def get_settings() -> Settings:
             config["ALLOW_OVERWRITE_EXISTING_VIDEO"], False
         ),
         YTDLP_CUSTOM_ARGS=config["YTDLP_CUSTOM_ARGS"],
+        YTDLP_UNSAFE_CUSTOM_ARGS=_to_bool(config["YTDLP_UNSAFE_CUSTOM_ARGS"], False),
         CUTTING_MODE=config["CUTTING_MODE"],
         BROWSER_SELECT=config["BROWSER_SELECT"],
         DEBUG=_to_bool(config["DEBUG"], False),
@@ -401,6 +408,11 @@ def print_config_summary() -> None:
     print(f"   Allow overwrite existing: {s.ALLOW_OVERWRITE_EXISTING_VIDEO}")
     if s.YTDLP_CUSTOM_ARGS:
         print(f"   Custom yt-dlp args: {s.YTDLP_CUSTOM_ARGS}")
+    if s.YTDLP_UNSAFE_CUSTOM_ARGS:
+        print(
+            "   🚨 Unsafe custom yt-dlp args: ON — anyone who can reach the "
+            "interface can run commands as this process"
+        )
 
     # Environment file (only in local mode)
     if not s.IN_CONTAINER:
